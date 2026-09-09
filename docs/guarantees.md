@@ -1,6 +1,6 @@
 # Guarantees and obligations
 
-`defineValue` certifies that a producer accepted a value under its grammar and normalization rules. `defineDerived` certifies that its producer ran on the supplied input and transferred ownership of its result. The API does not expose mutable access to that result when the producer meets the obligations below. Neither constructor certifies existence, membership, permission, currentness, storage success, or transaction state.
+`defineKind` certifies that a producer accepted a value under its grammar and normalization rules. `defineDerived` certifies that its producer ran on the supplied input and transferred ownership of its result. The API does not expose mutable access to that result when the producer meets the obligations below. Neither constructor certifies existence, membership, permission, currentness, storage success, or transaction state.
 
 ## What downstream functions can require
 
@@ -36,13 +36,13 @@ TypeScript uses an erased brand indexed by the literal kind. Definitions with th
 
 Renaming a kind breaks type identity. The package does not insert it into wire data, canonical data, or collection keys. A consumer makes kind data-bearing only by explicitly including it in an external representation; such a consumer must migrate that data when renaming the kind.
 
-At most one completed definition of a kind may exist in a JavaScript realm. A registry stored on `globalThis` under `Symbol.for('sealed-semantics/kinds')` rejects duplicates synchronously across installed package copies. It stores only names, not definitions or Parts. `.docs()` does not register another definition. Separate realms have separate registries; this rule does not claim source-tree uniqueness. Module reloads that complete the same definition again are duplicates. Compiling a file does not execute it; unused modules and separate test processes are not checked together. Collections use the supplied kind and require no shared indexer registry.
+At most one completed definition of a kind may exist in a JavaScript realm. A registry stored on `globalThis` under `Symbol.for('sealed-semantics/kinds')` rejects duplicates synchronously across installed package copies. It stores only names, not definitions or Parts. `.view()` and `.docs()` configure builders and do not register definitions. Calling `.seal()` again on the same builder returns the same kind; sealing a different builder with the same name fails. Separate realms have separate registries; this rule does not claim source-tree uniqueness. Module reloads that complete the same definition again are duplicates. Compiling a file does not execute it; unused modules and separate test processes are not checked together. Collections use the supplied kind and require no shared indexer registry.
 
 ## Producer obligations
 
 - `decode` and `derive` return a `Parts` graph for which the producer retains no mutable alias;
 - every callback that receives `Parts` treats it as immutable and must not mutate it or
-  anything reachable from it. This applies to `toWireShape`, custom `equals`, `canonical`,
+  anything reachable from it. This applies to `encode`, custom `equals`, `canonical`,
   every view projection, and `debug`;
 - `view` and `canonical` return primitives, sealed values, or fresh copies of anything
   mutable (`bytes.slice()`, `[...list]`, a domain-specific copy function, etc.);
@@ -63,9 +63,9 @@ Instances reject implicit string conversion, numeric conversion, and JSON serial
 
 ## Definition completion and configuration
 
-The staged builder is the inference-gate revision described in `viability.md`. Call `.with(...)` to complete a definition; only this step reserves the kind and creates its runtime identity. Projection names that conflict with kind operations, prototype behavior, or forbidden accessors are rejected. The runtime captures callbacks at definition time. Do not mutate the Zod schema or definition after setup.
+The staged builder is the inference-gate revision described in `viability.md`. Call `.seal()` to complete a definition; only this step reserves the kind and creates its runtime identity. Projection names that conflict with kind operations, prototype behavior, or forbidden accessors are rejected. Builders are immutable: `.view(...)` replaces the projection map in a new builder, and `.docs(...)` returns a new builder carrying metadata. Configure projections before documentation. Completed kinds expose no configuration methods. The runtime captures callbacks at definition time. Do not mutate the Zod schema or definition after setup.
 
-The physical source-line limit is removed. Source is formatted normally with Prettier and checked by `format:check`; no source-size gate rewards compressing statements. The README keeps its separate under-150-line requirement. Zod is the required runtime peer. fast-check ^4.9.0 is an optional peer used only by the public Node-only laws entry; ordinary main-entry consumers do not need it. Consumers of the law harness install it as a development dependency.
+The physical source-line limit is removed. Source is formatted normally with Prettier and checked by `format:check`; no source-size gate rewards compressing statements. The README checker verifies local links and code fences; it does not impose a line limit. Zod is the required runtime peer. fast-check ^4.9.0 is an optional peer used only by the public Node-only laws entry; ordinary main-entry consumers do not need it. Consumers of the law harness install it as a development dependency.
 
 Definition objects and options must use known, enumerable string data properties. The runtime checks required callbacks, configured optional callbacks, projection functions, and the wire schema before registering a kind. Unknown keys, malformed callbacks, symbols, hidden properties, and accessors fail with descriptive TypeErrors. This validates configuration shape, not callback behavior or whether a callback will throw for some future input.
 

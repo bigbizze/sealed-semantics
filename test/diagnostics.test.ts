@@ -14,7 +14,7 @@ test('compiler diagnostics name reserved view and explain the correction', () =>
         ['encode', 'canonical', 'view', 'get', 'parts']
           .map(
             (name) =>
-              `defineDerived({kind:'diagnostic/${name}',derive:(s:string)=>ok(s)}).with({view:{${name}:p=>p}});`,
+              `defineDerived({kind:'diagnostic/${name}',derive:(s:string)=>ok(s)}).view({${name}:p=>p}).seal();`,
           )
           .join('\n'),
     );
@@ -23,6 +23,9 @@ test('compiler diagnostics name reserved view and explain the correction', () =>
       [
         process.env.SEALED_TEST_TYPESCRIPT ??
           resolve('node_modules/typescript/bin/tsc'),
+        // These assertions parse diagnostics, so terminal styling must be disabled.
+        '--pretty',
+        'false',
         '--noEmit',
         '--strict',
         '--types',
@@ -57,7 +60,7 @@ test('compiler diagnostics name reserved view and explain the correction', () =>
   }
 });
 
-test('ValueOf explains missing .with without expanding the builder signature', () => {
+test('ValueOf explains missing .seal without expanding the builder signature', () => {
   const dir = mkdtempSync(join(tmpdir(), 'sealed-diagnostics-'));
   symlinkSync(resolve('node_modules'), join(dir, 'node_modules'), 'dir');
   try {
@@ -65,10 +68,10 @@ test('ValueOf explains missing .with without expanding the builder signature', (
     writeFileSync(
       file,
       `
-      import { defineValue, defineDerived, type ValueOf } from ${JSON.stringify(resolve('src/index.ts'))};
+      import { defineKind, defineDerived, type ValueOf } from ${JSON.stringify(resolve('src/index.ts'))};
       import { z } from 'zod';
       const ok = <T,>(value:T) => ({ok:true as const,value});
-      const Semantic = defineValue({ kind: 'diagnostic/semantic', wire: z.string(), decode: spelling => ok({ spelling }) });
+      const Semantic = defineKind({ kind: 'diagnostic/semantic', schema: z.string(), decode: spelling => ok({ spelling }), encode:p=>p.spelling });
       const Derived = defineDerived({ kind: 'diagnostic/derived', derive: (s: string) => ok(s) });
       type MissingSemantic = ValueOf<typeof Semantic>;
       type MissingDerived = ValueOf<typeof Derived>;
@@ -79,6 +82,9 @@ test('ValueOf explains missing .with without expanding the builder signature', (
       [
         process.env.SEALED_TEST_TYPESCRIPT ??
           resolve('node_modules/typescript/bin/tsc'),
+        // These assertions parse diagnostics, so terminal styling must be disabled.
+        '--pretty',
+        'false',
         '--noEmit',
         '--strict',
         '--types',
@@ -102,7 +108,7 @@ test('ValueOf explains missing .with without expanding the builder signature', (
     assert.equal(
       (
         output.match(
-          /ValueOf requires a completed kind\. Call \.with\(\.\.\.\) on the definition first\./g,
+          /ValueOf requires a completed kind\. Call \.seal\(\) on the definition first\./g,
         ) ?? []
       ).length,
       2,
@@ -119,68 +125,66 @@ test('ValueOf explains missing .with without expanding the builder signature', (
 test('configuration diagnostics explain missing prerequisites and forbidden options', () => {
   const cases: [string, string][] = [
     [
-      `Basic.docs({examples:[{input:'x',encoded:'x'}],views:{}});`,
+      `Builder.docs({examples:[{input:'x',encoded:'x'}],views:{}}).seal();`,
       'The docs.views property was renamed to view. Use .docs({ view: ... }).',
     ],
     [
-      `Basic.docs({examples:[{input:'x',encoded:'x',canonical:{type:'utf8',value:'x'}}]});`,
-      'Example canonical requires canonical in .with(...). Add canonical or remove the example canonical.',
+      `Builder.docs({examples:[{input:'x',encoded:'x',canonical:{type:'utf8',value:'x'}}]}).seal();`,
+      'Example canonical requires canonical in defineKind(...). Add canonical or remove the example canonical.',
     ],
     [
-      `Basic.docs({examples:[{input:'x',encoded:'x',canonical:'x'}]});`,
-      'Example canonical requires canonical in .with(...)',
+      `Builder.docs({examples:[{input:'x',encoded:'x',canonical:'x'}]}).seal();`,
+      'Example canonical requires canonical in defineKind(...)',
     ],
     [
-      `Basic.docs({examples:[{input:'x',encoded:'x'}],view:{suffix:{description:'Suffix'}}});`,
-      'docs.view requires declared projections. Add projections to .with({ view: ... }) first.',
+      `Builder.docs({examples:[{input:'x',encoded:'x'}],view:{suffix:{description:'Suffix'}}}).seal();`,
+      'docs.view requires declared projections. Add projections to .view({ ... }) first.',
     ],
     [
-      `Empty.docs({view:{suffix:{example:'x'}}});`,
+      `Empty.docs({view:{suffix:{example:'x'}}}).seal();`,
       'docs.view requires declared projections.',
     ],
     [
-      `Derived.docs({exampleWire:'x'});`,
+      `DerivedBuilder.docs({exampleWire:'x'}).seal();`,
       'Separate exampleWire/exampleCanonical fields were replaced by examples: [{ input, encoded, canonical }].',
     ],
     [
-      `Derived.docs({exampleCanonical:{type:'utf8',value:'x'}});`,
+      `DerivedBuilder.docs({exampleCanonical:{type:'utf8',value:'x'}}).seal();`,
       'Separate exampleWire/exampleCanonical fields were replaced by examples: [{ input, encoded, canonical }].',
     ],
     [
-      `Builder.with({toWireShape:(p:string)=>p,canoncal:()=>0});`,
-      'Unknown .with option',
+      `defineKind({kind:'diagnostic/typo',schema:z.string(),decode:(s:string)=>ok(s),encode:p=>p,canoncal:()=>0});`,
+      'Unknown definition option',
     ],
     [
-      `Builder.with({toWireShape:(p:string)=>p,fields:{}});`,
-      'The fields option was renamed to view. Configure projections under view.',
+      `defineKind({kind:'diagnostic/fields',schema:z.string(),decode:(s:string)=>ok(s),encode:p=>p,fields:{}});`,
+      'Use .view(...) for projections',
     ],
-    ...['canonical', 'allocate', 'toWireShape', 'equals'].map(
-      (name): [string, string] => [
-        `DerivedBuilder.with({${name}:()=>0});`,
-        `Derived definitions cannot configure ${name}. Only semantic definitions support this option.`,
-      ],
-    ),
+    ...['canonical', 'allocate', 'encode', 'equals'].map((name): [string, string] => [
+      `defineDerived({kind:'diagnostic/derived-option',derive:(s:string)=>ok(s),${name}:()=>0});`,
+      `Derived definitions cannot configure ${name}. Only semantic definitions support this option.`,
+    ]),
     [
-      `Builder.with({toWireShape:(p:string)=>p,[Symbol.iterator]:()=>0});`,
+      `defineKind({kind:'diagnostic/symbol',schema:z.string(),decode:(s:string)=>ok(s),encode:p=>p,[Symbol.iterator]:()=>0});`,
       'Symbol-named options are not supported.',
     ],
     [
-      `defineValue({kind:'diagnostic/any',wire:z.any(),decode:ok});`,
+      `defineKind({kind:'diagnostic/any',schema:z.any(),decode:value=>ok(value),encode:p=>p});`,
       'Wire schema input must not be any. Use a schema with a specific JSON input type.',
     ],
     ...['date()', 'unknown()', 'bigint()', 'string().optional()'].map(
       (schema): [string, string] => [
-        `defineValue({kind:'diagnostic/schema',wire:z.${schema},decode:ok});`,
+        `defineKind({kind:'diagnostic/schema',schema:z.${schema},decode:value=>ok(value),encode:()=>{throw new Error()}});`,
         'Wire schema input must be JSON-compatible.',
       ],
     ),
     [
-      `defineValue({kind:widened,wire:z.string(),decode:ok});`,
+      `defineKind({kind:widened,schema:z.string(),decode:(s:string)=>ok(s),encode:p=>p});`,
       'kind must be a string literal, not a widened string. Use a literal or as const.',
     ],
     [
       `assertValueLaws(Basic,{validWire:fc.string(),allocateArgs:fc.constant([])});`,
-      'allocateArgs requires an allocator in .with(...). Add allocate or remove allocateArgs.',
+      'allocateArgs requires an allocator in defineKind(...). Add allocate or remove allocateArgs.',
     ],
     [
       `assertValueLaws(Basic,{validWire:fc.string(),projectionMutators:{canonical:()=>{}}});`,
@@ -201,15 +205,15 @@ test('configuration diagnostics explain missing prerequisites and forbidden opti
     const file = join(dir, 'configuration.mts');
     const prelude = [
       `const ok = <T,>(value:T) => ({ok:true as const,value});`,
-      `import {defineValue,defineDerived} from ${JSON.stringify(resolve('src/index.ts'))};`,
+      `import {defineKind,defineDerived} from ${JSON.stringify(resolve('src/index.ts'))};`,
       `import {assertValueLaws,assertDerivedLaws} from ${JSON.stringify(resolve('src/laws.ts'))};`,
       `import {z} from 'zod';`,
       `import * as fc from 'fast-check';`,
-      `const Builder=defineValue({kind:'diagnostic/basic',wire:z.string(),decode:ok});`,
-      `const Basic=Builder.with({toWireShape:p=>p});`,
+      `const Builder=defineKind({kind:'diagnostic/basic',schema:z.string(),decode:value=>ok(value),encode:p=>p});`,
+      `const Basic=Builder.seal();`,
       `const DerivedBuilder=defineDerived({kind:'diagnostic/derived',derive:(s:string)=>ok(s)});`,
-      `const Derived=DerivedBuilder.with({});`,
-      `const Empty=DerivedBuilder.with({view:{}});`,
+      `const Derived=DerivedBuilder.seal();`,
+      `const Empty=DerivedBuilder.view({});`,
       `declare const widened:string;`,
     ];
     writeFileSync(file, [...prelude, ...cases.map(([code]) => code)].join('\n'));
@@ -218,6 +222,9 @@ test('configuration diagnostics explain missing prerequisites and forbidden opti
       [
         process.env.SEALED_TEST_TYPESCRIPT ??
           resolve('node_modules/typescript/bin/tsc'),
+        // These assertions parse diagnostics, so terminal styling must be disabled.
+        '--pretty',
+        'false',
         '--noEmit',
         '--strict',
         '--types',

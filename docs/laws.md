@@ -34,4 +34,4 @@ Common laws now also require frozen kinds, instances, and prototypes. Dedicated 
 
 Configure custom view mutators under `projectionMutators.view`. The harness reads each view getter again after mutation, so it checks fresh outputs against the earlier observations.
 
-Documentation validates linked input, encoded, and canonical examples and complete projection descriptions when `.docs()` is called. No separate docs harness is needed. See [executable documentation](documentation.md).
+Documentation validates linked input, encoded, and canonical examples and complete projection descriptions when `.seal()` is called. No separate docs harness is needed. See [executable documentation](documentation.md).

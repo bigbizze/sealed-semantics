@@ -25,7 +25,7 @@ sectionDescription(
 
 The suggested API for this is to just use zod schema parse though.
 For e.g. with a complete request or response, a Zod schema is more convenient: declare each
-field with its kind's wire schema, then decode the whole object in one call.
+field with its kind's codec, then decode the whole object in one call.
 Zod validates the object structure and produces the correctly typed sealed IDs,
 including values inside nested objects and arrays, without manual field mapping.
 
@@ -37,8 +37,8 @@ also requires less repetitive code. Both approaches below produce equal IDs.`,
 const { responseBody, next: httpRequestNext } = await runHttpRequestExample();
 
 export const postResponseSchema = z.object({
-  user_id: UserId.wire,
-  project_id: ProjectId.wire,
+  user_id: UserId.codec,
+  project_id: ProjectId.codec,
 });
 export type PostResponse = z.infer<typeof postResponseSchema>;
 

@@ -1,121 +1,190 @@
-import { ok, err } from './result.js';
+import { ok } from './result.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { defineValue, defineDerived } from '../src/index.js';
+import { defineKind, defineDerived } from '../src/index.js';
 
+const spec = (kind: string) => ({
+  kind,
+  schema: z.string(),
+  decode: (s: string) => ok(s),
+  encode: (s: string) => s,
+});
 test('invalid semantic options fail before a kind is reserved', () => {
-  const builder = () =>
-    defineValue({
-      kind: 'validation/semantic',
-      wire: z.string(),
-      decode: (w) => ok(w),
-    });
-  for (const options of [
-    null,
-    [],
-    {},
-    { toWireShape: 1 },
-    { toWireShape: undefined },
-    { toWireShape: (p: string) => p, canoncal: () => 1 },
-    { toWireShape: (p: string) => p, equals: false },
-    { toWireShape: (p: string) => p, allocate: 3 },
-    { toWireShape: (p: string) => p, canonical: null },
-    { toWireShape: (p: string) => p, debug: 'text' },
-    { toWireShape: (p: string) => p, view: null },
-    { toWireShape: (p: string) => p, view: { text: 1 } },
+  for (const extra of [
+    { encode: 1 },
+    { encode: undefined },
+    { canoncal: () => 1 },
+    { equals: false },
+    { allocate: 3 },
+    { canonical: null },
+    { debug: 'text' },
+    { view: {} },
+    { wire: z.string() },
+    { toWireShape: () => '' },
   ]) {
-    assert.throws(() => builder().with(options as any), TypeError);
+    assert.throws(
+      () => defineKind({ ...spec('validation/semantic'), ...extra } as any),
+      TypeError,
+    );
   }
-  assert.throws(
-    () => builder().with({ toWireShape: (p: string) => p, canoncal: () => 1 } as any),
-    /Unknown options property "canoncal"/,
+  assert(
+    defineKind({ ...spec('validation/semantic'), kind: 'validation/semantic' })
+      .seal()
+      .parse('x').ok,
   );
-  const K = builder().with({ toWireShape: (p) => p });
-  assert(K.parse('valid').ok);
 });
 test('invalid derived options fail before a kind is reserved', () => {
-  const builder = () =>
-    defineDerived({ kind: 'validation/derived', derive: (s: string) => ok(s) });
-  for (const options of [
-    null,
-    [],
+  for (const extra of [
     { canonical: () => 1 },
-    { wire: z.string() },
+    { schema: z.string() },
+    { encode: () => '' },
     { allocate: () => '' },
     { equals: () => true },
     { debug: undefined },
-    { view: { text: null } },
+    { view: {} },
     { typo: () => 0 },
   ]) {
-    assert.throws(() => builder().with(options as any), TypeError);
-  }
-  assert(builder().with({}).derive('valid').ok);
-});
-test('producer declarations require known keys, schemas, and callback types', () => {
-  const kind = 'validation/producer';
-  for (const spec of [
-    null,
-    [],
-    { kind, wire: z.string() },
-    { kind, wire: {}, decode: () => ok(1) },
-    { kind, wire: z.string(), decode: null },
-    { kind, wire: z.string(), decode: () => ok(1), extra: true },
-  ]) {
-    assert.throws(() => defineValue(spec as any), TypeError);
-  }
-  for (const spec of [
-    null,
-    [],
-    { kind },
-    { kind, derive: 42 },
-    { kind, derive: () => ok(1), wire: z.string() },
-  ]) {
-    assert.throws(() => defineDerived(spec as any), TypeError);
+    assert.throws(
+      () =>
+        defineDerived({
+          kind: 'validation/derived',
+          derive: (s: string) => ok(s),
+          ...extra,
+        } as any),
+      TypeError,
+    );
   }
   assert(
-    defineValue({ kind, wire: z.string(), decode: (w) => ok(w) })
-      .with({ toWireShape: (p) => p })
+    defineDerived({ kind: 'validation/derived', derive: (s: string) => ok(s) })
+      .seal()
+      .derive('x').ok,
+  );
+});
+test('producer declarations require known keys, schemas, and callback types', () => {
+  for (const input of [
+    null,
+    [],
+    {},
+    { kind: 'validation/producer' },
+    { ...spec('validation/producer'), schema: {} },
+    { ...spec('validation/producer'), decode: null },
+  ])
+    assert.throws(() => defineKind(input as any), TypeError);
+  for (const input of [
+    null,
+    [],
+    {},
+    { kind: 'validation/producer' },
+    { kind: 'validation/producer', derive: 42 },
+  ])
+    assert.throws(() => defineDerived(input as any), TypeError);
+  assert(
+    defineKind({ ...spec('validation/producer'), kind: 'validation/producer' })
+      .seal()
       .parse('x').ok,
   );
 });
 test('configuration accessors, hidden properties, and symbols are rejected without calling getters', () => {
-  const builder = () =>
-    defineValue({
-      kind: 'validation/descriptors',
-      wire: z.string(),
-      decode: (w) => ok(w),
-    });
-  let called = false;
+  let reads = 0;
   const accessor = {
-    toWireShape: (p: string) => p,
+    ...spec('validation/descriptors'),
     get canonical() {
-      called = true;
+      reads++;
       return () => 0;
     },
   };
-  const hidden = Object.defineProperty({ toWireShape: (p: string) => p }, 'canoncal', {
+  const hidden = Object.defineProperty(spec('validation/descriptors'), 'canoncal', {
     value: () => 0,
   });
-  for (const options of [
+  for (const input of [
     accessor,
     hidden,
-    { toWireShape: (p: string) => p, [Symbol('typo')]: () => 0 },
+    { ...spec('validation/descriptors'), [Symbol()]: true },
   ])
-    assert.throws(() => builder().with(options as any), TypeError);
-  assert.equal(called, false);
+    assert.throws(() => defineKind(input as any), TypeError);
+  const b = defineDerived({ kind: 'validation/descriptors', derive: () => ok(0) });
+  for (const view of [
+    null,
+    [],
+    { text: 1 },
+    {
+      get text() {
+        reads++;
+        return () => 0;
+      },
+    },
+    Object.defineProperty({}, 'text', { value: () => 0 }),
+    { [Symbol()]: () => 0 },
+  ])
+    assert.throws(() => b.view(view as any), TypeError);
+  assert.equal(reads, 0);
+  assert(b.seal().derive(undefined).ok);
+});
+test('the former fields option is rejected before kind registration', () => {
+  assert.throws(
+    () =>
+      defineDerived({
+        kind: 'validation/old-fields',
+        derive: () => ok(0),
+        fields: {},
+      } as any),
+    /Unknown definition property "fields"/,
+  );
   assert(
-    builder()
-      .with({ toWireShape: (p) => p })
-      .parse('x').ok,
+    Object.isFrozen(
+      defineDerived({ kind: 'validation/old-fields', derive: () => ok(0) })
+        .view({})
+        .seal(),
+    ),
   );
 });
-
-test('the former fields option is rejected before kind registration', () => {
-  const builder = defineDerived({ kind: 'validation/old-fields', derive: () => ok(0) });
+test('builders create no instances or registrations until seal and seal is stable', () => {
+  const base = defineKind({ ...spec('lifecycle/stable'), kind: 'lifecycle/stable' });
+  for (const name of ['parse', 'parseOrThrow', 'allocate', 'codec', 'is', 'map', 'set'])
+    assert(!(name in base));
+  const withView = base.view({ text: (p) => p });
+  const documented = withView.docs({
+    examples: [{ input: 'x', encoded: 'x' }],
+    view: { text: { description: 'Text' } },
+  });
+  const kind = documented.seal();
+  assert.equal(documented.seal(), kind);
+  assert.equal(kind.parseOrThrow('x').view.text, 'x');
+  for (const name of ['view', 'docs', 'seal', 'with']) assert(!(name in kind));
+  assert.throws(() => base.seal(), /Duplicate kind/);
   assert.throws(
-    () => builder.with({ fields: {} } as any),
-    /Unknown options property "fields"/,
+    () => defineDerived({ kind: 'lifecycle/stable', derive: () => ok(0) }).seal(),
+    /Duplicate kind/,
   );
-  assert(Object.isFrozen(builder.with({ view: {} })));
+});
+test('failed documentation does not reserve the kind and callbacks are captured', () => {
+  const definition = { ...spec('lifecycle/docs'), kind: 'lifecycle/docs' as const };
+  const base = defineKind(definition);
+  definition.decode = () => ok('changed');
+  const wrong = base.docs({ examples: [{ input: 'x', encoded: 'wrong' }] });
+  assert.throws(() => wrong.seal(), /encoded does not match/);
+  const kind = base.docs({ examples: [{ input: 'x', encoded: 'x' }] }).seal();
+  assert.equal(kind.parseOrThrow('x').encode(), 'x');
+});
+
+test('view configuration is captured and empty views add no instance member', () => {
+  const base = defineDerived({
+    kind: 'lifecycle/view',
+    derive: (text: string) => ok({ text }),
+  });
+  const projections = { text: (parts: { text: string }) => parts.text };
+  const configured = base.view(projections);
+  projections.text = () => 'changed';
+  const kind = configured.seal();
+  const result = kind.derive('original');
+  assert(result.ok);
+  assert.equal(result.value.view.text, 'original');
+  assert(Object.isFrozen(result.value.view));
+  const empty = defineDerived({ kind: 'lifecycle/no-view', derive: () => ok(0) })
+    .view({})
+    .seal();
+  const instance = empty.derive(undefined);
+  assert(instance.ok);
+  assert(!('view' in instance.value));
 });

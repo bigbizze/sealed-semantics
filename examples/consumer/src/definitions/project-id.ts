@@ -1,18 +1,16 @@
 import { z } from 'zod';
-import { defineValue, type ValueOf } from 'sealed-semantics';
+import { defineKind, type ValueOf } from 'sealed-semantics';
 
 /** A project identifier, distinct from a user identifier. */
-export const ProjectId = defineValue({
+export const ProjectId = defineKind({
   kind: 'sealed-semantics-test/project-id',
-  wire: z.string().regex(/^prj_[a-f0-9]{16,}$/),
+  schema: z.string().regex(/^prj_[a-f0-9]{16,}$/),
   decode: (spelling) => ({ ok: true, value: { spelling } }),
+  encode: (parts) => parts.spelling,
+  canonical: (parts) => ({ type: 'utf8' as const, value: parts.spelling }),
 })
-  .with({
-    toWireShape: (parts) => parts.spelling,
-    canonical: (parts) => ({ type: 'utf8' as const, value: parts.spelling }),
-    view: {
-      suffix: (parts) => parts.spelling.slice(-6),
-    },
+  .view({
+    suffix: (parts) => parts.spelling.slice(-6),
   })
   .docs({
     description: 'A project identifier.',
@@ -24,6 +22,7 @@ export const ProjectId = defineValue({
       },
     ],
     view: { suffix: { description: 'The final six characters.', example: '543210' } },
-  });
+  })
+  .seal();
 
 export type ProjectId = ValueOf<typeof ProjectId>;

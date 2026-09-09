@@ -28,13 +28,7 @@ export function documentedKind<T extends object>(
   shape: DocumentationShape,
   metadata?: Metadata,
 ): object {
-  const result = {
-    ...kind,
-    docs: (next: Metadata) => {
-      if (next === undefined) throw new TypeError('Documentation must be an object');
-      return documentedKind(kind, shape, next);
-    },
-  };
+  const result = { ...kind };
   if (metadata !== undefined) {
     validateDocumentation(
       { ...kind, documentation: metadata } as unknown as AnyKind,

@@ -46,6 +46,6 @@ Relative imports use `.ts`. The compiler rewrites them for built JavaScript; Nod
 
 ## When checks run
 
-`.docs()` validates while a definition module loads. A wrong example fails tests that import that definition and application startup. No separate documentation command is needed.
+`.seal()` validates any supplied `.docs()` examples while a definition module loads. A wrong example fails tests that import that definition and application startup. No separate documentation command is needed.
 
 Duplicate names fail when both definitions complete in the same realm. Compiling a file does not execute it, and an unused file is not automatically imported. Separate test processes have separate registries.

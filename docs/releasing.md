@@ -10,7 +10,7 @@ This repository builds an ESM npm package with declaration files. The package ex
 
 No npm publication, remote repository, or release tag is created by these checks. Repository, homepage, and issue links point to `bigbizze/sealed-semantics` on GitHub.
 
-The package smoke test installs the real tarball in a temporary consumer. It compiles and runs the README, checks invalid consumer configurations against the emitted declarations, imports the test-only harness, tests collections across two physical package copies, confirms private subpaths cannot be imported, checks cross-copy duplicate rejection and synchronous documentation validation, and verifies that no CLI or public docs checker is exported. Temporary consumer files are removed; the tarball remains in the repository directory.
+The package smoke test installs the real tarball in a temporary consumer. It compiles and runs the current standalone README walkthrough (starting at “You can decode individual fields, or a whole response”), checks invalid consumer configurations against the emitted declarations, imports the test-only harness, tests collections across two physical package copies, confirms private subpaths cannot be imported, checks cross-copy duplicate rejection and synchronous documentation validation, and verifies that no CLI or public docs checker is exported. Temporary consumer files are removed; the tarball remains in the repository directory.
 
 The checked-in CI configuration repeats checks on Node 22 and 24 with Zod 4.1.0 and current Zod 4. Local evidence does not imply that hosted CI has run. Breaking kind renames and canonical/wire changes need release notes and consumer compatibility review. Keep compatibility vectors with protocol owners.
 

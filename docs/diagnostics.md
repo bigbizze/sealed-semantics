@@ -1,15 +1,15 @@
 # Compiler diagnostics
 
-Allowed documentation and law-option types contain only capabilities present on the kind. Generic checks inspect keys actually supplied by the caller and attach an impossible `ConfigurationError<"explanation">` requirement when a prerequisite is absent. This preserves rejection and puts the reason and correction in the compiler message. TypeScript still supplies the error code and outer wording; object literals can report an unknown property before showing the explanation. No runtime properties or unsupported autocomplete suggestions are added. A language-service test checks the actual completion lists for semantic, derived, and projected kinds. TypeScript can still reduce intersections to `never`, for example when a forbidden `.with` option is explicitly assigned `undefined`; those assignments remain rejected.
+Allowed documentation and law-option types contain only capabilities present on the kind. Generic checks inspect keys actually supplied by the caller and attach an impossible `ConfigurationError<"explanation">` requirement when a prerequisite is absent. This preserves rejection and puts the reason and correction in the compiler message. TypeScript still supplies the error code and outer wording; object literals can report an unknown property before showing the explanation. No runtime properties or unsupported autocomplete suggestions are added. A language-service test checks the actual completion lists for semantic, derived, and projected kinds. TypeScript can still reduce intersections to `never`, for example when a forbidden definition option is explicitly assigned `undefined`; those assignments remain rejected.
 
 | Invalid configuration | Explanation now included |
 | --- | --- |
-| Example `canonical` without a configured canonical | Add `canonical` to `.with(...)` or remove the example property. |
-| `docs.view` without projections, including `view: {}` | Declare projections in `.with({ view: ... })` first. |
+| Example `canonical` without a configured canonical | Add `canonical` to `defineKind(...)` or remove the example property. |
+| `docs.view` without projections, including `view: {}` | Declare projections in `.view({ ... })` first. |
 | Derived `examples` | Derived definitions have no wire representation; remove the examples. |
-| Derived `canonical`, `allocate`, `toWireShape`, or `equals` | These options are available only on semantic definitions. |
+| Derived `canonical`, `allocate`, `encode`, or `equals` | These options are available only on semantic definitions. |
 | Old `fields` option | Rename it to `view`. |
-| Unknown `.with` option | Check its name; documentation belongs in `.docs(...)`. If inference falls back to the options constraint, TypeScript can instead report its normal unknown-property error. |
+| Unknown definition option | Check its name; documentation belongs in `.docs(...)`. If inference falls back to the options constraint, TypeScript can instead report its normal unknown-property error. |
 | Symbol-named options | Use a declared string option name. |
 | Non-JSON wire schema input | Encode dates, bigints, and other non-JSON data as JSON wire data. This also rejects unknown and optional input types. |
 | Wire schema with `any` input | Use a schema with a specific JSON input type. |
@@ -18,7 +18,7 @@ Allowed documentation and law-option types contain only capabilities present on 
 | Law encoder or canonical mutator without that operation | Remove the unsupported mutator. |
 | Law view mutators without projections | Declare projections or remove the mutators. |
 
-Previously improved cases remain covered: `ValueOf` on an unfinished builder explains that `.with(...)` must be called; reserved and symbol-named projections explain the restriction at the configured item.
+Previously improved cases remain covered: `ValueOf` on an unfinished builder explains that `.seal()` must be called; reserved and symbol-named projections explain the restriction at the configured item.
 
 Normal TypeScript messages remain for wrong sample shapes, unknown documentation/projection names, malformed callbacks, missing required callbacks, wrong allocator arguments, wrong collection keys or values, readonly assignments, and absent instance members. These errors identify the property or the expected type already. Law view mutators now also use the exact declared projection names and result types, instead of an unrestricted string map with `any` arguments.
 

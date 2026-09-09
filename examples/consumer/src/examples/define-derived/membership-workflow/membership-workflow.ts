@@ -25,8 +25,8 @@ export async function saveMembershipBatch(
 }
 
 const AddMembersRequest = z.object({
-  project_id: ProjectId.wire,
-  user_ids: z.array(UserId.wire),
+  project_id: ProjectId.codec,
+  user_ids: z.array(UserId.codec),
 });
 
 // Example application handler. The surrounding route handles authorization.

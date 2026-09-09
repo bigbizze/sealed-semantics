@@ -26,11 +26,9 @@ export const PreparedMembership = defineDerived({
     return { ok: true, value: { userId: input.userId, projectId: input.projectId } };
   },
 })
-  .with({
-    view: {
-      userId: (parts) => parts.userId,
-      projectId: (parts) => parts.projectId,
-    },
+  .view({
+    userId: (parts) => parts.userId,
+    projectId: (parts) => parts.projectId,
   })
   .docs({
     description: 'A local membership plan that retains both sealed identifiers.',
@@ -38,6 +36,7 @@ export const PreparedMembership = defineDerived({
       userId: { description: 'The user in this plan.' },
       projectId: { description: 'The project in this plan.' },
     },
-  });
+  })
+  .seal();
 
 export type PreparedMembership = ValueOf<typeof PreparedMembership>;

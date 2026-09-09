@@ -15,23 +15,30 @@ type Example<T, E = ValueError> =
 A producer can return objects directly, with contextual inference:
 
 ```ts
-import { defineValue } from 'sealed-semantics';
+import { defineKind } from 'sealed-semantics';
 import { z } from 'zod';
 
-const Label = defineValue({
+const Label = defineKind({
   kind: 'example/label',
-  wire: z.string(),
-  decode: spelling => spelling.length > 0
-    ? { ok: true, value: { spelling } }
-    : { ok: false, error: {
-        kind: 'example/label', reason: 'invalid_parts', issues: ['Empty label'],
-      } },
-}).with({ toWireShape: parts => parts.spelling });
+  schema: z.string(),
+  decode: (spelling) =>
+    spelling.length > 0
+      ? { ok: true, value: { spelling } }
+      : {
+          ok: false,
+          error: {
+            kind: 'example/label',
+            reason: 'invalid_parts',
+            issues: ['Empty label'],
+          },
+        },
+  encode: (parts) => parts.spelling,
+}).seal();
 ```
 
 Consumers can instead use their own helpers or a result implementation with compatible `ok`, `value`, and `error` properties. A separately declared helper must preserve the literal discriminant, for example `const succeed = <T>(value: T) => ({ ok: true as const, value })`. A promise, deferred computation, or result with a different discriminant is not compatible automatically. There is no global configuration or per-definition adapter.
 
-The package does not export runtime `ok` or `err` helpers, and the old `Result` type name is removed. The only runtime exports from the main entry are `defineValue` and `defineDerived`. Helpers in tests and reference examples belong to those callers.
+The package does not export runtime `ok` or `err` helpers, and the old `Result` type name is removed. The only runtime exports from the main entry are `defineKind` and `defineDerived`. Helpers in tests and reference examples belong to those callers.
 
 Input rejection remains explicit. A failed wire schema produces `invalid_wire`. A producer failure preserves its `ValueError` object through `parse` or `derive`; the Zod codec converts producer rejection into a custom issue. Thrown producer exceptions remain programming errors. Producer exceptions also propagate unchanged through `parseOrThrow`.
 
@@ -52,6 +59,6 @@ const label = Label.parseOrThrow('hello');
 | Inspect whole-object validation failure | `schema.safeParse(body)` or `z.safeDecode(schema, body)` | `{ success: false, error }` |
 | Produce a checked local value | `Kind.derive(input)` | `{ ok: false, error }` |
 
-Build complete schemas with properties such as `user_id: UserId.wire`. One decode then validates the object structure and supplies the sealed property types, including nested arrays and objects. `z.encode(schema, value)` converts the complete result back to raw data. This reduces repetitive manual parsing and makes boundary validation easier to adopt.
+Build complete schemas with properties such as `user_id: UserId.codec`. One decode then validates the object structure and supplies the sealed property types, including nested arrays and objects. `z.encode(schema, value)` converts the complete result back to raw data. This reduces repetitive manual parsing and makes boundary validation easier to adopt.
 
 `await response.json()` reads JSON but does not validate its shape. When manually parsing fields, each `parseOrThrow` validates only that field. Do not annotate raw JSON as the decoded type before validating it. The [consumer index](../examples/consumer/src/examples/index.ts) demonstrates both approaches and compares their outputs with `.equals()`.

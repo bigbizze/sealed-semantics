@@ -33,19 +33,9 @@ export type ValueOf<
   Kd extends
     | AnyKind
     | {
-        readonly 'ValueOf requires a completed kind. Call .with(...) on the definition first.': never;
+        readonly 'ValueOf requires a completed kind. Call .seal() on the definition first.': never;
       },
 > = Kd extends { is(x: unknown): x is infer V } ? V : never;
-export type ProjectionOptions<P> = {
-  view?: Record<string, (p: P) => unknown>;
-  debug?: (p: P) => string;
-};
-export type ValueOptions<W extends z.ZodType, P> = ProjectionOptions<P> & {
-  toWireShape: (p: P) => z.output<W>;
-  equals?: (a: P, b: P) => boolean;
-  allocate?: (...args: any[]) => z.input<W>;
-  canonical?: (p: P) => unknown;
-};
 type Views<O> = O extends { view: infer F }
   ? keyof F extends never
     ? {}
@@ -67,18 +57,12 @@ export type SemanticValue<K extends string, W extends z.ZodType, O> = Value<
 export type DerivedValue<K extends string, O> = Proof<K> & Views<O>;
 export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
   {
-    /** Attach typed documentation without changing the producer or its brand. */
-    docs<const D extends DocumentationInput<D, ValueDocumentation<W, O>>>(
-      metadata: CheckedDocumentation<D, ValueDocumentation<W, O>>,
-    ): ValueKind<K, W, O> & {
-      readonly documentation: ValueDocumentation<W, O>;
-    };
     readonly kind: K;
     is(x: unknown): x is SemanticValue<K, W, O>;
     parse(input: unknown): ProducerResult<SemanticValue<K, W, O>>;
     /** Return the sealed value, or throw a TypeError with the ValueError as cause. */
     parseOrThrow(input: unknown): SemanticValue<K, W, O>;
-    readonly wire: z.ZodCodec<
+    readonly codec: z.ZodCodec<
       W,
       z.ZodType<SemanticValue<K, W, O>, SemanticValue<K, W, O>>
     >;
@@ -89,12 +73,6 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
     : {})
 >;
 export type DerivedKind<K extends string, I, O> = Readonly<{
-  /** Attach documentation without changing the derivation or its brand. */
-  docs<const D extends DocumentationInput<D, DerivedDocumentation<O>>>(
-    metadata: CheckedDocumentation<D, DerivedDocumentation<O>>,
-  ): DerivedKind<K, I, O> & {
-    readonly documentation: DerivedDocumentation<O>;
-  };
   readonly kind: K;
   is(x: unknown): x is DerivedValue<K, O>;
   derive(input: I): ProducerResult<DerivedValue<K, O>>;
@@ -125,6 +103,9 @@ export type ReservedField =
   | 'parseOrThrow'
   | 'derive'
   | 'wire'
+  | 'schema'
+  | 'codec'
+  | 'seal'
   | 'allocate'
   | 'canonical'
   | 'encode'
@@ -142,33 +123,17 @@ export type ReservedField =
   | 'toJSON'
   | 'valueOf'
   | 'toString';
-export type CheckedOptions<O, Allowed> = O & {
-  [N in Exclude<keyof O, keyof Allowed>]: ConfigurationError<
-    N extends 'fields'
-      ? 'The fields option was renamed to view. Configure projections under view.'
-      : N extends 'canonical' | 'allocate' | 'toWireShape' | 'equals'
-        ? `Derived definitions cannot configure ${N}. Only semantic definitions support this option.`
-        : N extends string
-          ? `Unknown .with option "${N}". Check the option name; documentation belongs in .docs(...).`
-          : 'Symbol-named options are not supported. Use a declared string option name.'
-  >;
-} & (O extends { view: infer F }
-    ? {
-        view: F & {
-          [N in Extract<keyof F, ReservedField>]: {
-            readonly [
-              Message in `Field name "${N}" is reserved. Choose a different projection name.`
-            ]: never;
-          };
-        } & {
-          [N in Extract<keyof F, symbol>]: {
-            readonly 'Symbol-named projections are not supported. Use a string projection name.': never;
-          };
-        };
-      }
-    : unknown);
+export type CheckedView<F> = F & {
+  [
+    N in Extract<keyof F, ReservedField>
+  ]: ConfigurationError<`Field name "${N}" is reserved. Choose a different projection name.`>;
+} & {
+  [
+    N in Extract<keyof F, symbol>
+  ]: ConfigurationError<'Symbol-named projections are not supported. Use a string projection name.'>;
+};
 
-/** Examples are validated when .docs() is called; they do not configure the producer. */
+/** Examples are validated when .seal() is called; they do not configure the producer. */
 export type ProjectionDocumentation<O> = Readonly<{ description?: string }> &
   (O extends { view: infer F }
     ? keyof F extends never
@@ -200,7 +165,7 @@ type DocumentationMessage<N> = N extends 'exampleCanonical' | 'exampleWire'
   : N extends 'examples'
     ? 'Derived definitions have no wire examples. Remove examples.'
     : N extends 'view'
-      ? 'docs.view requires declared projections. Add projections to .with({ view: ... }) first.'
+      ? 'docs.view requires declared projections. Add projections to .view({ ... }) first.'
       : N extends 'views'
         ? 'The docs.views property was renamed to view. Use .docs({ view: ... }).'
         : N extends string
@@ -210,7 +175,7 @@ type ExampleAt<A> = A extends { readonly examples: readonly (infer E)[] } ? E : 
 type CheckedExample<P, A> = P & {
   [N in Exclude<keyof P, keyof A>]: ConfigurationError<
     N extends 'canonical'
-      ? 'Example canonical requires canonical in .with(...). Add canonical or remove the example canonical.'
+      ? 'Example canonical requires canonical in defineKind(...). Add canonical or remove the example canonical.'
       : 'Unknown example property. Use input, encoded, and canonical when configured.'
   >;
 };
@@ -229,7 +194,7 @@ export type CheckedDocumentation<Provided, Allowed> = Provided & {
           view: V & {
             [N in Exclude<keyof V, keyof A>]: ConfigurationError<
               N extends string
-                ? `Unknown documented projection "${N}". Declare it in .with({ view: ... }) first.`
+                ? `Unknown documented projection "${N}". Declare it in .view({ ... }) first.`
                 : 'Symbol-named documented projections are not supported.'
             >;
           };
@@ -242,15 +207,30 @@ export type CheckedDocumentation<Provided, Allowed> = Provided & {
       : unknown
     : unknown);
 
-/** An unfinished semantic definition. Call .with(...) to create its kind. */
-export interface ValueBuilder<K extends string, W extends z.ZodType, P> {
-  readonly with: <const O extends ValueOptions<W, P>>(
-    options: CheckedOptions<O, ValueOptions<W, P>>,
-  ) => ValueKind<K, W, O>;
+type Documented<T, D> = D extends undefined ? T : T & { readonly documentation: D };
+/** Configuration only. Call .seal() to create the completed kind. */
+export interface ValueBuilder<
+  K extends string,
+  W extends z.ZodType,
+  P,
+  O = {},
+  D = undefined,
+> {
+  readonly view: <const F extends Record<string, (parts: P) => unknown>>(
+    projections: CheckedView<F>,
+  ) => ValueBuilder<K, W, P, Omit<O, 'view'> & { view: F }>;
+  readonly docs: <const M extends DocumentationInput<M, ValueDocumentation<W, O>>>(
+    metadata: CheckedDocumentation<M, ValueDocumentation<W, O>>,
+  ) => Omit<ValueBuilder<K, W, P, O, ValueDocumentation<W, O>>, 'view'>;
+  readonly seal: () => Documented<ValueKind<K, W, O>, D>;
 }
-/** An unfinished derived definition. Call .with(...) to create its kind. */
-export interface DerivedBuilder<K extends string, I, P> {
-  readonly with: <const O extends ProjectionOptions<P> & Record<keyof O, unknown>>(
-    options: CheckedOptions<O, ProjectionOptions<P>>,
-  ) => DerivedKind<K, I, O>;
+/** Configuration only. Call .seal() to create the completed kind. */
+export interface DerivedBuilder<K extends string, I, P, O = {}, D = undefined> {
+  readonly view: <const F extends Record<string, (parts: P) => unknown>>(
+    projections: CheckedView<F>,
+  ) => DerivedBuilder<K, I, P, Omit<O, 'view'> & { view: F }>;
+  readonly docs: <const M extends DocumentationInput<M, DerivedDocumentation<O>>>(
+    metadata: CheckedDocumentation<M, DerivedDocumentation<O>>,
+  ) => Omit<DerivedBuilder<K, I, P, O, DerivedDocumentation<O>>, 'view'>;
+  readonly seal: () => Documented<DerivedKind<K, I, O>, D>;
 }

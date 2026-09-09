@@ -1,22 +1,20 @@
-// Consumer-owned helper with a structurally compatible result.
 const ok = <T>(value: T) => ({ ok: true as const, value });
 import { z } from 'zod';
 import * as fc from 'fast-check';
 import { assertValueLaws, assertDerivedLaws } from '../src/laws.js';
-import { defineValue, defineDerived } from '../src/index.js';
+import { defineKind, defineDerived } from '../src/index.js';
 import type { ValueOf } from '../src/types.js';
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Assert<T extends true> = T;
-const UserId = defineValue({
+const UserIdBuilder = defineKind({
   kind: 'example/user-id',
-  wire: z.string(),
+  schema: z.string(),
   decode: (w) => {
     type Input = Assert<Equal<typeof w, string>>;
     return ok({ spelling: w });
   },
-}).with({
-  toWireShape: (p) => {
+  encode: (p) => {
     type Parts = Assert<Equal<typeof p, { spelling: string }>>;
     return p.spelling;
   },
@@ -24,66 +22,66 @@ const UserId = defineValue({
   canonical: (p) => ({ type: 'utf8', value: p.spelling }),
   debug: (p) => p.spelling,
 });
-const Sha256Digest = defineValue({
+const UserId = UserIdBuilder.seal();
+const Sha256Digest = defineKind({
   kind: 'example/sha256',
-  wire: z.string(),
+  schema: z.string(),
   decode: (hex) => ok({ bytes: Uint8Array.from(hex, (c) => c.charCodeAt(0)) }),
-}).with({
-  toWireShape: (p) => String(p.bytes.length),
+  encode: (p) => String(p.bytes.length),
   equals: (a, b) => {
     type A = Assert<Equal<typeof a, { bytes: Uint8Array<ArrayBuffer> }>>;
     type B = Assert<Equal<typeof b, typeof a>>;
     return a.bytes.length === b.bytes.length;
   },
   canonical: (p) => ({ type: 'bytes', value: p.bytes.slice() }),
-});
-const NamespaceId = defineValue({
+}).seal();
+const NamespaceIdBuilder = defineKind({
   kind: 'example/namespace',
-  wire: z.string(),
+  schema: z.string(),
   decode: (w) => ok(w),
-}).with({ toWireShape: (p) => p });
-const ContentAddress = defineValue({
+  encode: (p) => p,
+});
+const NamespaceId = NamespaceIdBuilder.seal();
+const ContentAddressBuilder = defineKind({
   kind: 'example/content-address',
-  wire: z.object({
-    namespace_id: NamespaceId.wire,
+  schema: z.object({
+    namespace_id: NamespaceId.codec,
     content_class: z.enum(['primary', 'attachment']),
-    digest: Sha256Digest.wire,
+    digest: Sha256Digest.codec,
   }),
   decode: (w) => {
     type Nested = Assert<Equal<typeof w.digest, ValueOf<typeof Sha256Digest>>>;
     return ok(w);
   },
-}).with({
-  toWireShape: (p) => p,
-  view: {
-    namespace: (p) => p.namespace_id,
-    contentClass: (p) => p.content_class,
-    digest: (p) => p.digest,
-  },
+  encode: (p) => p,
+}).view({
+  namespace: (p) => p.namespace_id,
+  contentClass: (p) => p.content_class,
+  digest: (p) => p.digest,
 });
+const ContentAddress = ContentAddressBuilder.seal();
 interface PrepareInput {
   rows: string[];
   content: ValueOf<typeof ContentAddress>[];
 }
-const PreparedWrite = defineDerived({
+const PreparedWriteBuilder = defineDerived({
   kind: 'example/prepared-write',
   derive: (input: PrepareInput) =>
     ok({ rows: [...input.rows], contentToRetain: [...input.content] }),
-}).with({
-  view: {
-    rows: (p) => {
-      type Parts = Assert<
-        Equal<
-          typeof p,
-          { rows: string[]; contentToRetain: ValueOf<typeof ContentAddress>[] }
-        >
-      >;
-      return [...p.rows] as readonly string[];
-    },
-    contentToRetain: (p) =>
-      [...p.contentToRetain] as readonly ValueOf<typeof ContentAddress>[],
+}).view({
+  rows: (p) => {
+    type Parts = Assert<
+      Equal<
+        typeof p,
+        { rows: string[]; contentToRetain: ValueOf<typeof ContentAddress>[] }
+      >
+    >;
+    return [...p.rows] as readonly string[];
   },
+  contentToRetain: (p) =>
+    [...p.contentToRetain] as readonly ValueOf<typeof ContentAddress>[],
 });
+const PreparedWrite = PreparedWriteBuilder.seal();
 type Allocation = Assert<
   Equal<Parameters<typeof UserId.allocate>, [gen: () => string]>
 >;
@@ -104,7 +102,7 @@ type ReadonlyField = Assert<
 >;
 type Raw = Assert<
   Equal<
-    z.input<typeof ContentAddress.wire>,
+    z.input<typeof ContentAddress.codec>,
     { namespace_id: string; content_class: 'primary' | 'attachment'; digest: string }
   >
 >;
@@ -115,88 +113,92 @@ user.equals(digest);
 // @ts-expect-error distinct kind
 const wrong: ValueOf<typeof UserId> = digest;
 // @ts-expect-error non-JSON input
-defineValue({ kind: 'bad/date', wire: z.date(), decode: (w) => ok(w) });
+defineKind({ kind: 'bad/date', schema: z.date(), decode: (w) => ok(w) });
 // @ts-expect-error no representation access
 UserId.parts;
 // @ts-expect-error exact allocator parameters
 UserId.allocate(4);
 // @ts-expect-error derived values have no wire
-PreparedWrite.wire;
+PreparedWrite.codec;
 const Mutable = defineDerived({
   kind: 'example/mutable-type',
   derive: (s: string) => ok({ items: [s] }),
-}).with({ view: { items: (p) => [...p.items] } });
+})
+  .view({ items: (p) => [...p.items] })
+  .seal();
 type MutableField = Assert<Equal<ValueOf<typeof Mutable>['view']['items'], string[]>>;
 // Errors must appear at the configured item, without casts or manual generics.
-defineValue({
+defineKind({
   kind: 'invalid/output',
-  wire: z.string(),
+  schema: z.string(),
   decode: (w) => ok({ spelling: w }),
-}).with({
-  // @ts-expect-error decoded wire output is string
-  toWireShape: (p) => 42,
-});
-defineValue({
+  // @ts-expect-error encoder must return schema output
+  encode: (p) => 42,
+}).seal();
+defineKind({
   kind: 'invalid/parts-use',
-  wire: z.string(),
+  schema: z.string(),
   decode: (w) => ok({ spelling: w }),
-}).with({
-  toWireShape: (p) => p.spelling,
-  view: {
+  encode: (p) => p.spelling,
+})
+  .view({
     // @ts-expect-error field receives known Parts
     bad: (p) => p.missing,
-  },
-});
-defineValue({ kind: 'invalid/allocator', wire: z.string(), decode: (w) => ok(w) }).with(
-  {
-    toWireShape: (p) => p,
-    // @ts-expect-error allocator must return raw string
-    allocate: () => 42,
-  },
-);
-defineValue({
+  })
+  .seal();
+defineKind({
+  kind: 'invalid/allocator',
+  schema: z.string(),
+  decode: (w: string) => ok(w),
+  encode: (p) => p,
+  // @ts-expect-error allocator must return schema input
+  allocate: () => 42,
+}).seal();
+defineKind({
   kind: 'invalid/unknown-option',
-  wire: z.string(),
-  decode: (w) => ok(w),
-}).with({
-  toWireShape: (p) => p,
-  // @ts-expect-error reject misspelled option instead of silently ignoring it
-  canoncal: (p) => p,
-});
-defineDerived({ kind: 'invalid/derived-option', derive: (x: string) => ok(x) }).with({
-  // @ts-expect-error derived values cannot declare canonical
+  schema: z.string(),
+  decode: (w: string) => ok(w),
+  encode: (p) => p,
+  // @ts-expect-error unknown option
+  canoncal: (p: string) => p,
+}).seal();
+defineDerived({
+  kind: 'invalid/derived-option',
+  derive: (x: string) => ok(x),
+  // @ts-expect-error derived cannot encode canonical
   canonical: (p: string) => p,
-});
-defineDerived({ kind: 'invalid/reserved-field', derive: (x: string) => ok(x) }).with({
-  view: {
+}).seal();
+defineDerived({ kind: 'invalid/reserved-field', derive: (x: string) => ok(x) })
+  .view({
     // @ts-expect-error view cannot overwrite kind operations
     is: (p) => p,
-  },
-});
-defineValue({
+  })
+  .seal();
+defineKind({
   kind: 'invalid/error',
-  wire: z.string(),
+  schema: z.string(),
   // @ts-expect-error invalid producer error shape
   decode: (w) => ({ ok: false, error: 'bad' }),
 });
 // @ts-expect-error reject unknown JSON schema
-defineValue({ kind: 'invalid/unknown', wire: z.unknown(), decode: (w) => ok(w) });
+defineKind({ kind: 'invalid/unknown', schema: z.unknown(), decode: (w) => ok(w) });
 // @ts-expect-error reject bigint JSON schema
-defineValue({ kind: 'invalid/bigint', wire: z.bigint(), decode: (w) => ok(w) });
-defineValue({
+defineKind({ kind: 'invalid/bigint', schema: z.bigint(), decode: (w) => ok(w) });
+defineKind({
   kind: 'invalid/optional',
   // @ts-expect-error reject optional JSON boundary
-  wire: z.string().optional(),
+  schema: z.string().optional(),
   decode: (w) => ok(w),
 });
 declare const widenedKind: string;
 // @ts-expect-error literal kind is necessary for nominal identity
-defineValue({ kind: widenedKind, wire: z.string(), decode: (w) => ok(w) });
-const Same = defineValue({
+defineKind({ kind: widenedKind, schema: z.string(), decode: (w) => ok(w) });
+const Same = defineKind({
   kind: 'example/user-id',
-  wire: z.string(),
+  schema: z.string(),
   decode: (w) => ok(w),
-}).with({ toWireShape: (p) => p });
+  encode: (p) => p,
+}).seal();
 const sameBrand: ValueOf<typeof Same> = user; // Same brand; additional declared methods affect the complete surface.
 // @ts-expect-error values do not expose raw state
 user.raw;
@@ -223,15 +225,19 @@ const structural: ValueOf<typeof UserId> = {
   },
 };
 // Amended instance and kind surfaces must remain exact.
-const zero = defineValue({
+const zero = defineKind({
   kind: 'amendment/zero',
-  wire: z.string(),
+  schema: z.string(),
   decode: (w) => ok(w),
-}).with({ toWireShape: (p) => p, allocate: () => 'x' });
+  encode: (p) => p,
+  allocate: () => 'x',
+}).seal();
 type ZeroArgs = Assert<Equal<Parameters<typeof zero.allocate>, []>>;
-const empty = defineDerived({ kind: 'amendment/empty', derive: () => ok(0) }).with({
-  view: {},
-});
+const emptyBuilder = defineDerived({
+  kind: 'amendment/empty',
+  derive: () => ok(0),
+}).view({});
+const empty = emptyBuilder.seal();
 declare const emptyValue: ValueOf<typeof empty>;
 // @ts-expect-error no view means no view
 emptyValue.view;
@@ -256,19 +262,19 @@ users.set(user, 'wrong');
 users.set(digest, 1);
 // @ts-expect-error set key must have the supplied kind
 UserId.set().add(digest);
-defineDerived({ kind: 'amendment/bad-encode', derive: (s: string) => ok(s) }).with({
-  view: {
+defineDerived({ kind: 'amendment/bad-encode', derive: (s: string) => ok(s) })
+  .view({
     // @ts-expect-error descriptive reserved-name error on the configured field
     encode: (p) => p,
-  },
-});
+  })
+  .seal();
 
-defineDerived({ kind: 'amendment/symbol-type', derive: (s: string) => ok(s) }).with({
-  view: {
+defineDerived({ kind: 'amendment/symbol-type', derive: (s: string) => ok(s) })
+  .view({
     // @ts-expect-error view cannot declare symbol protocol methods
     [Symbol.toPrimitive]: (p: string) => p,
-  },
-});
+  })
+  .seal();
 // @ts-expect-error kind acquisition methods are readonly
 UserId.parse = UserId.parse;
 // @ts-expect-error kind predicates are readonly
@@ -284,9 +290,9 @@ const frozenBuilder = defineDerived({
   derive: (s: string) => ok(s),
 });
 // @ts-expect-error builder operation is readonly
-frozenBuilder.with = frozenBuilder.with;
+frozenBuilder.seal = frozenBuilder.seal;
 
-const DocumentedUser = UserId.docs({
+const DocumentedUser = UserIdBuilder.docs({
   description: 'A user identifier.',
   examples: [
     {
@@ -295,7 +301,7 @@ const DocumentedUser = UserId.docs({
       canonical: { type: 'utf8', value: 'usr_0123456789abcdef' },
     },
   ],
-});
+}).seal();
 type DocumentedValue = Assert<
   Equal<ValueOf<typeof DocumentedUser>, ValueOf<typeof UserId>>
 >;
@@ -303,50 +309,58 @@ DocumentedUser.allocate(() => 'usr_0123456789abcdef');
 // @ts-expect-error Metadata remains read-only.
 DocumentedUser.documentation.description = 'changed';
 // @ts-expect-error Examples are required once semantic documentation is supplied.
-NamespaceId.docs({ description: 'Namespace' });
+NamespaceIdBuilder.docs({ description: 'Namespace' }).seal();
 // @ts-expect-error At least one example is required.
-NamespaceId.docs({ examples: [] });
+NamespaceIdBuilder.docs({ examples: [] }).seal();
 // @ts-expect-error Both input and encoded are required.
-NamespaceId.docs({ examples: [{ input: 'ns:x' }] });
+NamespaceIdBuilder.docs({ examples: [{ input: 'ns:x' }] }).seal();
 // @ts-expect-error Input uses RawWire.
-NamespaceId.docs({ examples: [{ input: 1, encoded: 'ns:x' }] });
+NamespaceIdBuilder.docs({ examples: [{ input: 1, encoded: 'ns:x' }] }).seal();
 // @ts-expect-error Encoded also uses RawWire.
-NamespaceId.docs({ examples: [{ input: 'ns:x', encoded: 1 }] });
+NamespaceIdBuilder.docs({ examples: [{ input: 'ns:x', encoded: 1 }] }).seal();
 // @ts-expect-error Configured canonical must appear in every example.
-UserId.docs({ examples: [{ input: 'usr_x', encoded: 'usr_x' }] });
-UserId.docs({
+UserIdBuilder.docs({ examples: [{ input: 'usr_x', encoded: 'usr_x' }] }).seal();
+UserIdBuilder.docs({
   // @ts-expect-error Canonical has its exact result shape.
   examples: [{ input: 'usr_x', encoded: 'usr_x', canonical: { type: 'utf8' } }],
-});
-// @ts-expect-error Canonical is absent when not configured.
-NamespaceId.docs({ examples: [{ input: 'ns:x', encoded: 'ns:x', canonical: 'x' }] });
-// @ts-expect-error The independent fields have been removed.
-UserId.docs({ exampleWire: 'x', exampleCanonical: { type: 'utf8', value: 'x' } });
+}).seal();
+NamespaceIdBuilder.docs({
+  // @ts-expect-error Canonical is absent when not configured.
+  examples: [{ input: 'ns:x', encoded: 'ns:x', canonical: 'x' }],
+}).seal();
+UserIdBuilder.docs({
+  // @ts-expect-error The independent fields have been removed.
+  exampleWire: 'x',
+  // @ts-expect-error Separate canonical examples were removed.
+  exampleCanonical: { type: 'utf8', value: 'x' },
+}).seal();
 // @ts-expect-error All declared projections require documentation.
-PreparedWrite.docs({ description: 'Plan' });
-// @ts-expect-error A projection description is required.
-PreparedWrite.docs({ view: { rows: {}, contentToRetain: { description: 'Content' } } });
+PreparedWriteBuilder.docs({ description: 'Plan' }).seal();
+PreparedWriteBuilder.docs({
+  // @ts-expect-error A projection description is required.
+  view: { rows: {}, contentToRetain: { description: 'Content' } },
+}).seal();
 // @ts-expect-error Missing declared projection.
-PreparedWrite.docs({ view: { rows: { description: 'Rows' } } });
-PreparedWrite.docs({
+PreparedWriteBuilder.docs({ view: { rows: { description: 'Rows' } } }).seal();
+PreparedWriteBuilder.docs({
   view: {
     rows: { description: 'Rows' },
     contentToRetain: { description: 'Content' },
     // @ts-expect-error Unknown projection is rejected.
     extra: { description: 'Wrong' },
   },
-});
-PreparedWrite.docs({
+}).seal();
+PreparedWriteBuilder.docs({
   view: {
     // @ts-expect-error Example must have the projection result type.
     rows: { description: 'Rows', example: 42 },
     contentToRetain: { description: 'Content' },
   },
-});
+}).seal();
 // @ts-expect-error Derived definitions cannot have wire examples.
-empty.docs({ examples: [{ input: 'x', encoded: 'x' }] });
+emptyBuilder.docs({ examples: [{ input: 'x', encoded: 'x' }] }).seal();
 // @ts-expect-error Empty projections do not introduce view documentation.
-empty.docs({ view: { extra: { description: 'No projection' } } });
+emptyBuilder.docs({ view: { extra: { description: 'No projection' } } }).seal();
 const compositeWire = {
   namespace_id: 'ns:example',
   content_class: 'primary' as const,
@@ -360,25 +374,30 @@ const compositeDocs = {
     digest: { description: 'Digest' },
   },
 };
-ContentAddress.docs(compositeDocs);
-ContentAddress.docs({
+ContentAddressBuilder.docs(compositeDocs).seal();
+ContentAddressBuilder.docs({
   ...compositeDocs,
   examples: [
     // @ts-expect-error Nested documentation uses raw wire, not sealed children.
     { input: { ...compositeWire, namespace_id: user }, encoded: compositeWire },
   ],
-});
+}).seal();
 // @ts-expect-error View properties are readonly.
 address.view.contentClass = 'primary';
 // @ts-expect-error Projection values are not methods.
 address.view.contentClass();
-// @ts-expect-error Removed configuration spelling.
-defineDerived({ kind: 'invalid/old-fields', derive: () => ok(0) }).with({ fields: {} });
+defineDerived({
+  kind: 'invalid/old-fields',
+  derive: () => ok(0),
+  // @ts-expect-error Removed configuration spelling.
+  fields: {},
+}).seal();
 
-const unfinishedValue = defineValue({
+const unfinishedValue = defineKind({
   kind: 'diagnostic/unfinished-value',
-  wire: z.string(),
-  decode: ok,
+  schema: z.string(),
+  decode: (value) => ok(value),
+  encode: (p) => p,
 });
 const unfinishedDerived = defineDerived({
   kind: 'diagnostic/unfinished-derived',
@@ -391,8 +410,8 @@ type UnfinishedDerived = ValueOf<typeof unfinishedDerived>;
 // @ts-expect-error Arbitrary objects are still rejected, rather than silently becoming never.
 type NotAKind = ValueOf<{ value: string }>;
 // @ts-expect-error Named builders keep their frozen .with type.
-unfinishedValue.with = unfinishedValue.with;
-const finishedValue = unfinishedValue.with({ toWireShape: (p) => p });
+unfinishedValue.seal = unfinishedValue.seal;
+const finishedValue = unfinishedValue.seal();
 type FinishedEncoding = Assert<
   Equal<ReturnType<ValueOf<typeof finishedValue>['encode']>, string>
 >;
@@ -400,11 +419,15 @@ type FinishedEncoding = Assert<
 // Documentation prerequisites remain errors for variables as well as literals.
 const missingCanonical = { exampleCanonical: { type: 'utf8', value: 'x' } };
 // @ts-expect-error A message-bearing type must still reject unsupported examples.
-NamespaceId.docs(missingCanonical);
+NamespaceIdBuilder.docs(missingCanonical).seal();
 // @ts-expect-error Derived canonical documentation is prohibited.
-PreparedWrite.docs({ exampleCanonical: { type: 'utf8', value: 'x' } });
-// @ts-expect-error Any-input wire schemas remain prohibited.
-defineValue({ kind: 'diagnostic/any-input', wire: z.any(), decode: ok });
+PreparedWriteBuilder.docs({ exampleCanonical: { type: 'utf8', value: 'x' } }).seal();
+defineKind({
+  kind: 'diagnostic/any-input',
+  // @ts-expect-error Any-input wire schemas remain prohibited.
+  schema: z.any(),
+  decode: (value) => ok(value),
+});
 assertValueLaws(UserId, {
   validWire: fc.string(),
   projectionMutators: {
@@ -452,33 +475,41 @@ assertDerivedLaws(PreparedWrite, {
   projectionMutators: { view: { missing: () => {} } },
 });
 
-// @ts-expect-error Explicit undefined does not make a forbidden derived option valid.
-unfinishedDerived.with({ canonical: undefined });
-// @ts-expect-error Explicit undefined does not restore the old fields option.
-unfinishedDerived.with({ fields: undefined });
+defineDerived({
+  kind: 'invalid/undefined-canonical',
+  derive: () => ok(0),
+  // @ts-expect-error Explicit undefined does not make a forbidden derived option valid.
+  canonical: undefined,
+});
+defineDerived({
+  kind: 'invalid/undefined-fields',
+  derive: () => ok(0),
+  // @ts-expect-error Explicit undefined does not restore the old fields option.
+  fields: undefined,
+});
 interface NamedDerivedOptions {
   view: { length: (parts: string) => number };
 }
 const namedDerivedOptions: NamedDerivedOptions = { view: { length: (p) => p.length } };
-const namedDerived = unfinishedDerived.with(namedDerivedOptions);
+const namedDerived = unfinishedDerived.view(namedDerivedOptions.view).seal();
 type NamedProjection = Assert<
   Equal<ValueOf<typeof namedDerived>['view']['length'], number>
 >;
 
 // @ts-expect-error Documentation terminology matches the view definition and facade.
-ContentAddress.docs({ views: { contentClass: { example: 'primary' } } });
-const documentedDerived = PreparedWrite.docs({
+ContentAddressBuilder.docs({ views: { contentClass: { example: 'primary' } } }).seal();
+const documentedDerived = PreparedWriteBuilder.docs({
   view: { rows: { description: 'Rows' }, contentToRetain: { description: 'Content' } },
-});
+}).seal();
 type NoDerivedWireDocs = Assert<
   Equal<
     'examples' extends keyof typeof documentedDerived.documentation ? true : false,
     false
   >
 >;
-const basicDocumentation = NamespaceId.docs({
+const basicDocumentation = NamespaceIdBuilder.docs({
   examples: [{ input: 'ns:x', encoded: 'ns:x' }],
-});
+}).seal();
 type NoCanonicalDocs = Assert<
   Equal<
     'canonical' extends keyof (typeof basicDocumentation.documentation.examples)[0]
@@ -498,9 +529,9 @@ type NoViewDocs = Assert<
 import { ok as removedOk, err as removedErr } from '../src/index.js';
 // @ts-expect-error The structural contract is named ProducerResult.
 import type { Result } from '../src/index.js';
-const InlineResult = defineValue({
+const InlineResult = defineKind({
   kind: 'types/inline-result',
-  wire: z.string(),
+  schema: z.string(),
   decode: (spelling) =>
     spelling.length
       ? { ok: true, value: { spelling } }
@@ -512,12 +543,11 @@ const InlineResult = defineValue({
             issues: ['Empty'],
           },
         },
-}).with({
-  toWireShape: (parts) => {
+  encode: (parts) => {
     type InlineParts = Assert<Equal<typeof parts, { spelling: string }>>;
     return parts.spelling;
   },
-});
+}).seal();
 
 const directlyParsedUser = UserId.parseOrThrow('usr_0123456789abcdef');
 const directlyParsedUserType: ValueOf<typeof UserId> = directlyParsedUser;
@@ -525,3 +555,28 @@ const directlyParsedUserType: ValueOf<typeof UserId> = directlyParsedUser;
 const wrongDirectKind: ValueOf<typeof Sha256Digest> = directlyParsedUser;
 // @ts-expect-error Derived kinds have no wire parsing operation.
 PreparedWrite.parseOrThrow('x');
+
+// The builder exposes only configuration; the completed kind exposes acquisition.
+// @ts-expect-error Builders cannot parse before seal.
+unfinishedValue.parse('x');
+// @ts-expect-error Completed kinds cannot add projections.
+finishedValue.view({});
+const documentedBuilder = unfinishedValue.docs({
+  examples: [{ input: 'x', encoded: 'x' }],
+});
+// @ts-expect-error Configure views before documentation so its types describe the final view.
+documentedBuilder.view({ text: (p: string) => p });
+const ThrowingCanonical = defineKind({
+  kind: 'types/throwing-canonical',
+  schema: z.string(),
+  decode: (s) => ok(s),
+  encode: (p) => p,
+  canonical: () => {
+    throw new Error('Unavailable');
+  },
+}).seal();
+type NeverCanonical = Assert<
+  Equal<ReturnType<ValueOf<typeof ThrowingCanonical>['canonical']>, never>
+>;
+// @ts-expect-error The old factory name is no longer exported.
+import { defineValue } from '../src/index.js';

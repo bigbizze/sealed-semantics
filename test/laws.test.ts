@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import * as fc from 'fast-check';
 import { z } from 'zod';
 import { assertValueLaws, assertDerivedLaws } from '../src/laws.js';
-import { defineValue, defineDerived } from '../src/index.js';
+import { defineKind, defineDerived } from '../src/index.js';
 import {
   UserId,
   Sha256Digest,
@@ -66,16 +66,20 @@ test('law harness detects shallow-copy leaks and incorrect equality', () => {
   const Leak = defineDerived({
     kind: 'law/leak',
     derive: (x: number) => ok({ nested: { x } }),
-  }).with({ view: { bad: (p) => ({ nested: p.nested }) } });
+  })
+    .view({ bad: (p) => ({ nested: p.nested }) })
+    .seal();
   assert.throws(
     () => assertDerivedLaws(Leak, { validInput: fc.integer() }),
     (e: any) => /projection leaked/.test(String(e.cause)),
   );
-  const Wrong = defineValue({
+  const Wrong = defineKind({
     kind: 'law/wrong-equality',
-    wire: z.int(),
+    schema: z.int(),
     decode: (w) => ok(w),
-  }).with({ toWireShape: (p) => p, equals: () => true });
+    encode: (p) => p,
+    equals: () => true,
+  }).seal();
   assert.throws(
     () => assertValueLaws(Wrong, { validWire: fc.integer() }),
     (e: any) => /custom equality/.test(String(e.cause)),
@@ -85,7 +89,9 @@ test('custom mutable types require and support explicit mutators', () => {
   const Dates = defineDerived({
     kind: 'law/dates',
     derive: (x: number) => ok({ time: x }),
-  }).with({ view: { date: (p) => new Date(p.time) } });
+  })
+    .view({ date: (p) => new Date(p.time) })
+    .seal();
   assert.throws(
     () => assertDerivedLaws(Dates, { validInput: fc.integer() }),
     (e: any) => /projectionMutator/.test(String(e.cause)),
@@ -96,11 +102,12 @@ test('custom mutable types require and support explicit mutators', () => {
   });
 });
 test('law harness rejects non-finite wire numbers and preserves negative zero', () => {
-  const Numbers = defineValue({
+  const Numbers = defineKind({
     kind: 'law/numbers',
-    wire: z.custom<number>((x) => typeof x === 'number'),
+    schema: z.custom<number>((x) => typeof x === 'number'),
     decode: (w) => ok(w),
-  }).with({ toWireShape: (p) => p });
+    encode: (p) => p,
+  }).seal();
   assertValueLaws(Numbers, { validWire: fc.constantFrom(-0, 0, 1, -1) });
   for (const bad of [NaN, Infinity, -Infinity])
     assert.throws(
@@ -124,19 +131,19 @@ test('objects resembling sealed instances are not silently skipped', () => {
       this.#count++;
     }
   }
-  const K = defineDerived({
-    kind: 'law/lookalike',
-    derive: () => ok(new Lookalike()),
-  }).with({ view: { custom: (p) => p } });
+  const K = defineDerived({ kind: 'law/lookalike', derive: () => ok(new Lookalike()) })
+    .view({ custom: (p) => p })
+    .seal();
   assert.throws(
     () => assertDerivedLaws(K, { validInput: fc.constant(undefined) }),
     (e: any) => /projectionMutator/.test(String(e.cause)),
   );
 });
 test('sealed children require explicit private-brand predicates', () => {
-  const Child = defineDerived({ kind: 'law/child', derive: (n: number) => ok(n) }).with(
-    {},
-  );
+  const Child = defineDerived({
+    kind: 'law/child',
+    derive: (n: number) => ok(n),
+  }).seal();
   const Parent = defineDerived({
     kind: 'law/parent',
     derive: (n: number) => {
@@ -144,7 +151,9 @@ test('sealed children require explicit private-brand predicates', () => {
       if (!r.ok) throw Error();
       return ok({ child: r.value });
     },
-  }).with({ view: { child: (p) => p.child } });
+  })
+    .view({ child: (p) => p.child })
+    .seal();
   assert.throws(
     () => assertDerivedLaws(Parent, { validInput: fc.integer() }),
     (e: any) => /sealedKinds/.test(String(e.cause)),
@@ -152,21 +161,21 @@ test('sealed children require explicit private-brand predicates', () => {
   assertDerivedLaws(Parent, { validInput: fc.integer(), sealedKinds: [Child] });
 });
 test('frozen detached canonical objects and field containers satisfy mutation laws', () => {
-  const K = defineValue({
+  const K = defineKind({
     kind: 'law/frozen-canonical',
-    wire: z.string(),
+    schema: z.string(),
     decode: (w) => ok({ text: w }),
-  }).with({
-    toWireShape: (p) => p.text,
+    encode: (p) => p.text,
     canonical: (p) => Object.freeze({ type: 'utf8' as const, value: p.text }),
-    view: {
+  })
+    .view({
       list: (p) => Object.freeze([{ text: p.text }]),
       nested: (p) => Object.freeze({ child: { text: p.text } }),
       sealed: (p) => Object.seal([p.text]),
       fixedLength: (p) =>
         Object.defineProperty([p.text], 'length', { writable: false }),
-    },
-  });
+    })
+    .seal();
   assertValueLaws(K, { validWire: fc.string() });
 });
 test('frozen outer objects and arrays do not hide mutable child aliases', () => {
@@ -174,14 +183,14 @@ test('frozen outer objects and arrays do not hide mutable child aliases', () => 
     const K = defineDerived({
       kind: `law/frozen-leak-${shape}`,
       derive: (n: number) => ok({ child: { n } }),
-    }).with({
-      view: {
+    })
+      .view({
         leak: (p) =>
           shape === 'object'
             ? Object.freeze({ child: p.child })
             : Object.freeze([p.child]),
-      },
-    });
+      })
+      .seal();
     assert.throws(
       () => assertDerivedLaws(K, { validInput: fc.integer() }),
       (e: any) => /projection leaked/.test(String(e.cause)),
@@ -193,7 +202,9 @@ test('functions require mutators and function property aliases are observed', ()
   const Safe = defineDerived({
     kind: 'law/function-copy',
     derive: (n: number) => ok(n),
-  }).with({ view: { callback: (p) => makeFunction(p) } });
+  })
+    .view({ callback: (p) => makeFunction(p) })
+    .seal();
   assert.throws(
     () => assertDerivedLaws(Safe, { validInput: fc.integer() }),
     (e: any) => /Function-valued projections require/.test(String(e.cause)),
@@ -209,7 +220,9 @@ test('functions require mutators and function property aliases are observed', ()
   const Leak = defineDerived({
     kind: 'law/function-leak',
     derive: (n: number) => ok(makeFunction(n)),
-  }).with({ view: { callback: (p) => p } });
+  })
+    .view({ callback: (p) => p })
+    .seal();
   assert.throws(
     () =>
       assertDerivedLaws(Leak, {
@@ -221,7 +234,9 @@ test('functions require mutators and function property aliases are observed', ()
   const Nested = defineDerived({
     kind: 'law/function-nested',
     derive: (n: number) => ok(n),
-  }).with({ view: { callback: (p) => Object.freeze({ fn: makeFunction(p) }) } });
+  })
+    .view({ callback: (p) => Object.freeze({ fn: makeFunction(p) }) })
+    .seal();
   assert.throws(
     () => assertDerivedLaws(Nested, { validInput: fc.integer() }),
     (e: any) => /Function-valued projections require/.test(String(e.cause)),
@@ -233,8 +248,8 @@ test('accessor projections require a mutator before getters can run', () => {
   const K = defineDerived({
     kind: 'law/accessor-required',
     derive: (n: number) => ok({ child: { n } }),
-  }).with({
-    view: {
+  })
+    .view({
       child: (p) =>
         Object.freeze({
           get nested() {
@@ -242,8 +257,8 @@ test('accessor projections require a mutator before getters can run', () => {
             return p.child;
           },
         }),
-    },
-  });
+    })
+    .seal();
   assert.throws(
     () => assertDerivedLaws(K, { validInput: fc.integer() }),
     (e: any) =>
@@ -272,8 +287,8 @@ test('explicit accessor mutators support detached getters and nested accessor gr
   const Safe = defineDerived({
     kind: 'law/accessor-copy',
     derive: (n: number) => ok({ n }),
-  }).with({
-    view: {
+  })
+    .view({
       child: (p) => ({
         container: Object.freeze({
           get nested() {
@@ -281,8 +296,8 @@ test('explicit accessor mutators support detached getters and nested accessor gr
           },
         }),
       }),
-    },
-  });
+    })
+    .seal();
   assert.throws(
     () => assertDerivedLaws(Safe, { validInput: fc.integer() }),
     (e: any) => /Accessor-containing projections/.test(String(e.cause)),
@@ -300,9 +315,9 @@ test('explicit accessor mutators support detached getters and nested accessor gr
   const Setter = defineDerived({
     kind: 'law/setter-required',
     derive: (n: number) => ok(n),
-  }).with({
-    view: { child: () => Object.defineProperty({}, 'hidden', { set(_x: unknown) {} }) },
-  });
+  })
+    .view({ child: () => Object.defineProperty({}, 'hidden', { set(_x: unknown) {} }) })
+    .seal();
   assert.throws(
     () => assertDerivedLaws(Setter, { validInput: fc.integer() }),
     (e: any) => /Accessor-containing projections/.test(String(e.cause)),

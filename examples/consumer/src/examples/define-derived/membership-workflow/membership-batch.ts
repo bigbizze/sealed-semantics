@@ -42,12 +42,10 @@ export const MembershipBatch = defineDerived({
     return { ok: true, value: { projectId, plans: unique } };
   },
 })
-  .with({
-    view: {
-      projectId: (parts) => parts.projectId,
-      plans: (parts) => [...parts.plans],
-      count: (parts) => parts.plans.length,
-    },
+  .view({
+    projectId: (parts) => parts.projectId,
+    plans: (parts) => [...parts.plans],
+    count: (parts) => parts.plans.length,
   })
   .docs({
     description:
@@ -59,5 +57,6 @@ export const MembershipBatch = defineDerived({
       },
       count: { description: 'The number of distinct users in the batch.' },
     },
-  });
+  })
+  .seal();
 export type MembershipBatch = ValueOf<typeof MembershipBatch>;

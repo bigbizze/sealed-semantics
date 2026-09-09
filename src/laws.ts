@@ -9,7 +9,7 @@ type CollectionKind = AnyKind & {
 };
 type SemanticKind = CollectionKind & {
   parse(input: unknown): ProducerResult<any>;
-  wire: unknown;
+  codec: unknown;
 };
 type Derived = CollectionKind & { derive(input: any): ProducerResult<any> };
 type Return<K, N extends PropertyKey> =
@@ -78,7 +78,7 @@ type InferLawOptions<P, A> = A &
 type CheckedLawOptions<P, A> = P & {
   [N in Exclude<keyof P, keyof A | 'projectionMutators'>]: ConfigurationError<
     N extends 'allocateArgs'
-      ? 'allocateArgs requires an allocator in .with(...). Add allocate or remove allocateArgs.'
+      ? 'allocateArgs requires an allocator in defineKind(...). Add allocate or remove allocateArgs.'
       : 'Unknown law option. Use an option supported by this kind.'
   >;
 } & (P extends { projectionMutators: infer M }

@@ -3,7 +3,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 import * as api from '../src/index.js';
-import { defineValue, defineDerived, type ProducerResult } from '../src/index.js';
+import { defineKind, defineDerived, type ProducerResult } from '../src/index.js';
 import { stableWireKey } from '../src/keying.js';
 import {
   UserId,
@@ -22,8 +22,8 @@ test('private brand, prototype forgery, constructor recovery, and hidden state',
   assert(UserId.is(v));
   assert(!UserId.is(fake));
   assert(!UserId.is(new Proxy(v, {})));
-  assert(!z.safeEncode(UserId.wire, fake).success);
-  assert(!UserId.wire.out.safeParse(fake).success);
+  assert(!z.safeEncode(UserId.codec, fake).success);
+  assert(!UserId.codec.out.safeParse(fake).success);
   assert.throws(
     () =>
       new (Object.getPrototypeOf(v).constructor)(
@@ -36,7 +36,7 @@ test('private brand, prototype forgery, constructor recovery, and hidden state',
   assert.throws(() => v.equals(fake), TypeError);
   assert.throws(() => Object.getPrototypeOf(v).encode.call(fake), TypeError);
   assert.deepEqual(Reflect.ownKeys(v), []);
-  assert.deepEqual(Object.keys(api).sort(), ['defineDerived', 'defineValue']);
+  assert.deepEqual(Object.keys(api).sort(), ['defineDerived', 'defineKind']);
   for (const name of [
     'parts',
     'raw',
@@ -58,32 +58,35 @@ test('ProducerResult parse preserves producer error while codec emits a custom i
     reason: 'invalid_parts' as const,
     issues: ['producer detail'],
   };
-  const Reject = defineValue({
+  const Reject = defineKind({
     kind: 'test/reject',
-    wire: z.string(),
+    schema: z.string(),
     decode: () => err(error),
-  }).with({ toWireShape: () => '' });
+    encode: () => '',
+  }).seal();
   const r = Reject.parse('x');
   assert(!r.ok);
   assert.equal(r.error, error);
-  const c = z.safeDecode(Reject.wire, 'x');
+  const c = z.safeDecode(Reject.codec, 'x');
   assert(!c.success);
   assert.equal(c.error.issues[0]?.code, 'custom');
   assert.match(c.error.message, /producer detail/);
-  assert.throws(() => z.decode(Reject.wire, 'x'), z.ZodError);
+  assert.throws(() => z.decode(Reject.codec, 'x'), z.ZodError);
   const invalid = Reject.parse(5);
   assert(!invalid.ok);
   assert.equal(invalid.error.reason, 'invalid_wire');
-  const badAllocate = defineValue({
+  const badAllocate = defineKind({
     kind: 'test/bad-allocate',
-    wire: z.string().min(2),
+    schema: z.string().min(2),
     decode: (w) => ok(w),
-  }).with({ toWireShape: (p) => p, allocate: () => '' });
+    encode: (p) => p,
+    allocate: () => '',
+  }).seal();
   assert.equal(badAllocate.allocate().ok, false);
   const D = defineDerived({
     kind: 'test/derive-error',
     derive: (_: unknown) => err({ ...error, reason: 'invalid_input' as const }),
-  }).with({});
+  }).seal();
   assert.equal(D.derive(null).ok, false);
 });
 test('aliases and nested codecs encode the complete raw contract', () => {
@@ -100,11 +103,11 @@ test('aliases and nested codecs encode the complete raw contract', () => {
   const address = value(ContentAddress.parse(w));
   assert(Sha256Digest.is(address.view.digest));
   assert.deepEqual(address.encode(), w);
-  assert.deepEqual(z.encode(z.object({ address: ContentAddress.wire }), { address }), {
+  assert.deepEqual(z.encode(z.object({ address: ContentAddress.codec }), { address }), {
     address: w,
   });
-  assert(z.safeDecode(ContentAddress.wire, w).success);
-  assert.deepEqual(z.encode(ContentAddress.wire, address), w);
+  assert(z.safeDecode(ContentAddress.codec, w).success);
+  assert.deepEqual(z.encode(ContentAddress.codec, address), w);
 });
 test('semantic Map/Set behavior retains original keys without exposing internal strings', () => {
   const a = value(UserId.parse(raw)),
@@ -164,25 +167,26 @@ test('derived identity and producer copy obligations in reference example', () =
 test('duplicate definitions and invalid declarations fail', () => {
   assert.throws(
     () =>
-      defineValue({
+      defineKind({
         kind: 'example/user-id',
-        wire: z.string(),
+        schema: z.string(),
         decode: (w) => ok(w),
-      }).with({ toWireShape: (p) => p }),
+        encode: (p) => p,
+      }).seal(),
     /Duplicate kind/,
   );
   assert.throws(
-    () => defineDerived({ kind: 'example/user-id', derive: () => ok(1) }).with({}),
+    () => defineDerived({ kind: 'example/user-id', derive: () => ok(1) }).seal(),
     /Duplicate kind/,
   );
   assert.throws(
-    () => defineDerived({ kind: 'unqualified', derive: () => ok(1) }).with({}),
+    () => defineDerived({ kind: 'unqualified', derive: () => ok(1) }).seal(),
     /namespaced/,
   );
   assert.throws(
     () =>
-      defineDerived({ kind: 'test/reserved', derive: () => ok(1) }).with({
-        view: { is: (p: number) => p },
+      defineDerived({ kind: 'test/reserved', derive: () => ok(1) }).view({
+        is: (p: number) => p,
       } as any),
     /Field name "is" is reserved/,
   );
@@ -272,19 +276,19 @@ test('reference callbacks preserve observations across repeated calls', () => {
 });
 test('view is lazy, stable, frozen, read-only, and absent without declared view', () => {
   let calls = 0;
-  const K = defineValue({
+  const K = defineKind({
     kind: 'amendment/view',
-    wire: z.string(),
+    schema: z.string(),
     decode: (w) => ok({ text: w }),
-  }).with({
-    toWireShape: (p) => p.text,
-    view: {
+    encode: (p) => p.text,
+  })
+    .view({
       text: (p) => {
         calls++;
         return p.text;
       },
-    },
-  });
+    })
+    .seal();
   const a = value(K.parse('a')),
     b = value(K.parse('b'));
   const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(a), 'view')!;
@@ -325,17 +329,19 @@ test('view is lazy, stable, frozen, read-only, and absent without declared view'
   assert(!('text' in a));
   assert(!('canonical' in K));
   assert(!('view' in value(UserId.parse(raw)))); // canonical alone does not add view
-  const Empty = defineDerived({ kind: 'amendment/empty', derive: () => ok(0) }).with({
-    view: {},
-  });
+  const Empty = defineDerived({ kind: 'amendment/empty', derive: () => ok(0) })
+    .view({})
+    .seal();
   assert(!('view' in value(Empty.derive(undefined))));
 });
 test('zero-argument allocator still validates and normalizes its wire output', () => {
-  const K = defineValue({
+  const K = defineKind({
     kind: 'amendment/allocate',
-    wire: z.string().regex(/^user:|^usr_/),
+    schema: z.string().regex(/^user:|^usr_/),
     decode: (w) => ok(w.replace('user:', 'usr_')),
-  }).with({ toWireShape: (p) => p, allocate: () => 'user:abc' });
+    encode: (p) => p,
+    allocate: () => 'user:abc',
+  }).seal();
   const v = value(K.allocate());
   assert(K.is(v));
   assert.equal(v.encode(), 'usr_abc');
@@ -382,8 +388,8 @@ test('all reserved field names are rejected with a descriptive error', () => {
     const view = Object.fromEntries([[name, (p: number) => p]]);
     assert.throws(
       () =>
-        defineDerived({ kind: `amendment/reserved-${name}`, derive: () => ok(1) }).with(
-          { view } as any,
+        defineDerived({ kind: `amendment/reserved-${name}`, derive: () => ok(1) }).view(
+          view as any,
         ),
       {
         name: 'TypeError',
@@ -396,8 +402,8 @@ test('all reserved field names are rejected with a descriptive error', () => {
 test('view cannot introduce a Symbol.toPrimitive projection', () => {
   assert.throws(
     () =>
-      defineDerived({ kind: 'amendment/symbol', derive: () => ok(1) }).with({
-        view: { [Symbol.toPrimitive]: () => 1 },
+      defineDerived({ kind: 'amendment/symbol', derive: () => ok(1) }).view({
+        [Symbol.toPrimitive]: () => 1,
       } as any),
     /Symbol-named projections are not supported/,
   );
@@ -450,10 +456,12 @@ test('derived serialization errors do not recommend a nonexistent encoder', () =
   }
 });
 test('kinds and builders cannot have acquisition or collection operations replaced', () => {
-  const builder = defineValue({
+  const builder = defineKind({
     kind: 'hardening/frozen-kind',
-    wire: z.string(),
+    schema: z.string(),
     decode: (w) => ok(w),
+    encode: (p) => p,
+    allocate: () => 'allocated',
   });
   const derivedBuilder = defineDerived({
     kind: 'hardening/frozen-derived',
@@ -462,13 +470,13 @@ test('kinds and builders cannot have acquisition or collection operations replac
   for (const b of [builder, derivedBuilder]) {
     assert(Object.isFrozen(b));
     assert.equal(
-      Reflect.set(b, 'with', () => null),
+      Reflect.set(b, 'seal', () => null),
       false,
     );
     assert.throws(() => Object.setPrototypeOf(b, {}), TypeError);
   }
-  const K = builder.with({ toWireShape: (p) => p, allocate: () => 'allocated' });
-  const D = derivedBuilder.with({});
+  const K = builder.seal();
+  const D = derivedBuilder.seal();
   for (const kind of [K, D]) {
     assert(Object.isFrozen(kind));
     for (const key of Object.keys(kind)) {
@@ -515,14 +523,15 @@ test('parseOrThrow uses normal acquisition and preserves rejection details', () 
     issues: ['Rejected spelling'],
   };
   let calls = 0;
-  const Kind = defineValue({
+  const Kind = defineKind({
     kind: 'runtime/parse-or-throw',
-    wire: z.string(),
+    schema: z.string(),
     decode: (_input: string): ProducerResult<string> => {
       calls++;
       return err(rejected);
     },
-  }).with({ toWireShape: (p) => p });
+    encode: (p) => p,
+  }).seal();
   const detached = Kind.parseOrThrow;
   assert.throws(
     () => detached('x'),

@@ -51,20 +51,23 @@ try {
     [
       '--input-type=module',
       '-e',
-      "import {defineValue} from 'sealed-semantics'; import {z} from 'zod'; const K=defineValue({kind:'consumer/no-test-peer',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p}); if (!K.parse('x').ok) throw Error();",
+      "import {defineKind} from 'sealed-semantics'; import {z} from 'zod'; const K=defineKind({kind:'consumer/no-test-peer',\nschema:z.string(),\ndecode:w=>({ok:true,value:w}),\nencode:p=>p}).seal(); if (!K.parse('x').ok) throw Error();",
     ],
     temp,
   );
   // Documentation validation runs on import without fast-check.
   writeFileSync(
     join(temp, 'docs-good.mjs'),
-    `
-    import {defineValue,defineDerived} from 'sealed-semantics';
+    `import {defineKind,defineDerived} from 'sealed-semantics';
     import {z} from 'zod';
-    export const Id=defineValue({kind:'consumer/documented',wire:z.string(),decode:s=>({ok:true,value:s})})
-      .with({toWireShape:p=>p,canonical:p=>p})
-      .docs({examples:[{input:'x',encoded:'x',canonical:'x'}]});
-    export const Plan=defineDerived({kind:'consumer/documented-plan',derive:i=>({ok:true,value:i})}).with({}).docs({});
+    export const Id=defineKind({kind:'consumer/documented',
+schema:z.string(),
+decode:s=>({ok:true,value:s}),
+encode:p=>p,
+canonical:p=>p})
+      .docs({examples:[{input:'x',encoded:'x',canonical:'x'}]}).seal();
+    export const Plan=defineDerived({kind:'consumer/documented-plan',
+derive:i=>({ok:true,value:i})}).docs({}).seal();
   `,
   );
   run(process.execPath, ['docs-good.mjs'], temp);
@@ -75,10 +78,11 @@ try {
   assert.deepEqual(Object.keys(manifest.exports).sort(), ['.', './laws']);
   writeFileSync(
     join(temp, 'docs-bad.mjs'),
-    `
-    import {defineDerived} from 'sealed-semantics';
-    export const Missing=defineDerived({kind:'consumer/missing-docs',derive:i=>({ok:true,value:i})}).with({});
-    export const Incomplete=defineDerived({kind:'consumer/missing-view-docs',derive:i=>({ok:true,value:i})}).with({view:{text:p=>p}}).docs({view:{}});
+    `import {defineDerived} from 'sealed-semantics';
+    export const Missing=defineDerived({kind:'consumer/missing-docs',
+derive:i=>({ok:true,value:i})}).seal();
+    export const Incomplete=defineDerived({kind:'consumer/missing-view-docs',
+derive:i=>({ok:true,value:i})}).view({text:p=>p}).docs({view:{}}).seal();
   `,
   );
   assert.throws(
@@ -100,7 +104,12 @@ try {
     temp,
   );
   const readme = readFileSync(join(root, 'README.md'), 'utf8');
-  const code = [...readme.matchAll(/```ts\n([\s\S]*?)```/g)]
+  // The opening example is retained author text from the previous API.
+  // The current, standalone walkthrough starts at this heading.
+  const walkthrough = readme.slice(
+    readme.indexOf('## You can decode individual fields, or a whole response'),
+  );
+  const code = [...walkthrough.matchAll(/```ts\n([\s\S]*?)```/g)]
     .map((m) => m[1])
     .join('\n');
   writeFileSync(join(temp, 'readme.ts'), code);
@@ -145,40 +154,56 @@ try {
   });
   writeFileSync(
     join(temp, 'smoke.mjs'),
-    `
- import assert from 'node:assert/strict';
+    `import assert from 'node:assert/strict';
  import { z } from 'zod';
  import * as fc from 'fast-check';
  import * as a from 'sealed-semantics';
  import * as b from 'sealed-semantics-copy';
  import { assertValueLaws } from 'sealed-semantics/laws';
  const {z: foreignZod}=await import('zod-copy');
- const ForeignSchema=a.defineValue({kind:'consumer/foreign-schema',wire:foreignZod.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p});
+ assert.deepEqual(Object.keys(a).sort(), ['defineDerived','defineKind']);
+ const ForeignSchema=a.defineKind({kind:'consumer/foreign-schema',
+schema:foreignZod.string(),
+decode:w=>({ok:true,value:w}),
+encode:p=>p}).seal();
  assert(ForeignSchema.parse('x').ok);
- const A=a.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p});
- assert.throws(()=>b.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p}), /Duplicate kind/);
- assert.throws(()=>b.defineDerived({kind:'consumer/id',derive:i=>({ok:true,value:i})}).with({}), /Duplicate kind/);
- const B=b.defineValue({kind:'consumer/other-id',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p});
+ const ABuilder=a.defineKind({kind:'consumer/id',schema:z.string(),decode:w=>({ok:true,value:w}),encode:p=>p});
+ const A=ABuilder.seal();
+ assert.throws(()=>b.defineKind({kind:'consumer/id',
+schema:z.string(),
+decode:w=>({ok:true,value:w}),
+encode:p=>p}).seal(), /Duplicate kind/);
+ assert.throws(()=>b.defineDerived({kind:'consumer/id',
+derive:i=>({ok:true,value:i})}).seal(), /Duplicate kind/);
+ const B=b.defineKind({kind:'consumer/other-id',
+schema:z.string(),
+decode:w=>({ok:true,value:w}),
+encode:p=>p}).seal();
  const x=A.parse('x').value,y=A.parse('x').value;
  assert(!B.is(x)); assert(!A.is(B.parse('x').value));
  assert.equal(A.map().set(x,1).get(y),1);
  assert.equal(A.set().add(x).add(y).size,1);
- const D=a.defineDerived({kind:'consumer/proof',derive:i=>({ok:true,value:i})}).with({});
- assert.throws(()=>b.defineDerived({kind:'consumer/proof',derive:i=>({ok:true,value:i})}).with({}), /Duplicate kind/);
+ const D=a.defineDerived({kind:'consumer/proof',
+derive:i=>({ok:true,value:i})}).seal();
+ assert.throws(()=>b.defineDerived({kind:'consumer/proof',
+derive:i=>({ok:true,value:i})}).seal(), /Duplicate kind/);
  const p=D.derive(1).value,q=D.derive(1).value;
  assert.equal(D.set().add(p).add(q).size,2);
- const Composite=b.defineValue({kind:'consumer/composite',wire:z.object({id:A.wire}),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p,view:{id:p=>p.id}});
+ const Composite=b.defineKind({kind:'consumer/composite',
+schema:z.object({id:A.codec}),
+decode:w=>({ok:true,value:w}),
+encode:p=>p}).view({id:p=>p.id}).seal();
  const c=Composite.parse({id:'x'}).value,d=Composite.parse({id:'x'}).value;
  assert(A.is(c.view.id));assert.equal(Composite.map().set(c,1).get(d),1);
  assert(Object.isFrozen(c.view));assert.equal(Object.getPrototypeOf(c.view),null);
- assert.deepEqual(Object.keys(a).sort(),['defineDerived','defineValue']);
+ assert.deepEqual(Object.keys(a).sort(),['defineDerived','defineKind']);
  assert(!('IdMap' in a));assert(!('ValueMap' in a));
  // Internal cross-copy test: exported package paths remain blocked for consumers.
  const foreign=await import('./node_modules/sealed-semantics-copy/dist/collections.js');
  assert.equal(new foreign.ValueMap(A).set(x,1).get(y),1);
  assert.equal(new foreign.ValueSet(D).add(p).add(q).size,2);
- A.docs({examples:[{input:'x',encoded:'x'}]});
- assert.throws(()=>A.docs({examples:[{input:'x',encoded:'bad'}]}), /encoded does not match/);
+ assert.equal(ABuilder.seal(),A);
+ assert.throws(()=>ABuilder.docs({examples:[{input:'x',encoded:'bad'}]}).seal(), /encoded does not match/);
  assertValueLaws(A,{validWire:fc.string()});
  assertValueLaws(Composite,{validWire:fc.record({id:fc.string()}),sealedKinds:[A]});
  for (const path of ['zod-codec','docs','registry','documentation-equal','seal','definition','documentation','codec','keying','collections','dist/seal.js','src/seal.ts']) await assert.rejects(import('sealed-semantics/'+path),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});

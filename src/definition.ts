@@ -14,6 +14,9 @@ const reservedFields = new Set([
   'parseOrThrow',
   'derive',
   'wire',
+  'schema',
+  'codec',
+  'seal',
   'allocate',
   'canonical',
   'encode',
@@ -80,7 +83,22 @@ function callback(input: Record<string, unknown>, name: string, label: string): 
 
 export function validateDefinition(spec: unknown, semantic: boolean): void {
   const input = record(spec, 'definition');
-  keys(input, semantic ? ['kind', 'wire', 'decode'] : ['kind', 'derive'], 'definition');
+  keys(
+    input,
+    semantic
+      ? [
+          'kind',
+          'schema',
+          'decode',
+          'encode',
+          'canonical',
+          'allocate',
+          'equals',
+          'debug',
+        ]
+      : ['kind', 'derive', 'debug'],
+    'definition',
+  );
   if (
     !Object.hasOwn(input, 'kind') ||
     typeof input.kind !== 'string' ||
@@ -89,30 +107,23 @@ export function validateDefinition(spec: unknown, semantic: boolean): void {
     throw new TypeError('kind must be a namespaced string literal');
   }
   callback(input, semantic ? 'decode' : 'derive', 'definition');
-  if (semantic && (!Object.hasOwn(input, 'wire') || !isWireSchema(input.wire))) {
-    throw new TypeError('definition.wire must be a Zod schema');
+  if (semantic) callback(input, 'encode', 'definition');
+  for (const name of ['canonical', 'allocate', 'equals', 'debug']) {
+    if (Object.hasOwn(input, name)) callback(input, name, 'definition');
+  }
+  if (semantic && (!Object.hasOwn(input, 'schema') || !isWireSchema(input.schema))) {
+    throw new TypeError('definition.schema must be a Zod schema');
   }
 }
 
-export function validateOptions(options: unknown, semantic: boolean): void {
-  const input = record(options, 'options');
-  const callbacks = semantic
-    ? ['toWireShape', 'equals', 'allocate', 'canonical', 'debug']
-    : ['debug'];
-  keys(input, [...callbacks, 'view'], 'options');
-  if (semantic) callback(input, 'toWireShape', 'options');
-  for (const name of callbacks) {
-    if (Object.hasOwn(input, name)) callback(input, name, 'options');
-  }
-  if (Object.hasOwn(input, 'view')) {
-    const view = record(input.view, 'view');
-    for (const name of Object.keys(view)) {
-      if (reservedFields.has(name)) {
-        throw new TypeError(
-          `Field name "${name}" is reserved. Choose a different projection name.`,
-        );
-      }
-      callback(view, name, 'view');
+export function validateView(projections: unknown): void {
+  const view = record(projections, 'view');
+  for (const name of Object.keys(view)) {
+    if (reservedFields.has(name)) {
+      throw new TypeError(
+        `Field name "${name}" is reserved. Choose a different projection name.`,
+      );
     }
+    callback(view, name, 'view');
   }
 }

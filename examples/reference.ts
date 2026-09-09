@@ -1,8 +1,7 @@
-// These helpers belong to this example, not to sealed-semantics.
 const succeed = <T>(value: T) => ({ ok: true as const, value });
 const fail = <E>(error: E) => ({ ok: false as const, error });
 import { z } from 'zod';
-import { defineValue, defineDerived, type ValueOf } from '../src/index.js';
+import { defineKind, defineDerived, type ValueOf } from '../src/index.js';
 export const normalizeUserSpelling = (w: string) =>
   w.startsWith('user:') ? `usr_${w.slice(5).replaceAll('-', '')}` : w;
 export const hexToBytes = (hex: string) =>
@@ -15,9 +14,9 @@ export function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
   for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
   return diff === 0;
 }
-export const UserId = defineValue({
+export const UserId = defineKind({
   kind: 'example/user-id',
-  wire: z.string().regex(/^(usr_[a-f0-9]{16,}|user:[0-9a-f-]{36})$/),
+  schema: z.string().regex(/^(usr_[a-f0-9]{16,}|user:[0-9a-f-]{36})$/),
   decode: (w) => {
     const spelling = normalizeUserSpelling(w);
     return /^usr_[a-f0-9]{16,}$/.test(spelling)
@@ -28,13 +27,11 @@ export const UserId = defineValue({
           issues: ['Invalid alias'],
         } as const);
   },
+  encode: (p) => p.spelling,
+  allocate: (gen: () => string) => `user:${gen()}`,
+  canonical: (p) => ({ type: 'utf8', value: p.spelling }),
+  debug: (p) => `user(…${p.spelling.slice(-6)})`,
 })
-  .with({
-    toWireShape: (p) => p.spelling,
-    allocate: (gen: () => string) => `user:${gen()}`,
-    canonical: (p) => ({ type: 'utf8', value: p.spelling }),
-    debug: (p) => `user(…${p.spelling.slice(-6)})`,
-  })
   .docs({
     examples: [
       {
@@ -43,18 +40,17 @@ export const UserId = defineValue({
         canonical: { type: 'utf8', value: 'usr_550e8400e29b41d4a716446655440000' },
       },
     ],
-  });
-export type UserId = ValueOf<typeof UserId>;
-export const Sha256Digest = defineValue({
-  kind: 'example/sha256',
-  wire: z.string().regex(/^[a-f0-9]{64}$/),
-  decode: (hex) => succeed({ bytes: hexToBytes(hex) }),
-})
-  .with({
-    toWireShape: (p) => bytesToHex(p.bytes),
-    equals: (a, b) => constantTimeEqual(a.bytes, b.bytes),
-    canonical: (p) => ({ type: 'bytes', value: p.bytes.slice() }),
   })
+  .seal();
+export type UserId = ValueOf<typeof UserId>;
+export const Sha256Digest = defineKind({
+  kind: 'example/sha256',
+  schema: z.string().regex(/^[a-f0-9]{64}$/),
+  decode: (hex) => succeed({ bytes: hexToBytes(hex) }),
+  encode: (p) => bytesToHex(p.bytes),
+  equals: (a, b) => constantTimeEqual(a.bytes, b.bytes),
+  canonical: (p) => ({ type: 'bytes', value: p.bytes.slice() }),
+})
   .docs({
     examples: [
       {
@@ -63,30 +59,30 @@ export const Sha256Digest = defineValue({
         canonical: { type: 'bytes', value: new Uint8Array(32).fill(0xab) },
       },
     ],
-  });
-export const NamespaceId = defineValue({
+  })
+  .seal();
+export const NamespaceId = defineKind({
   kind: 'example/namespace-id',
-  wire: z.string().regex(/^ns:[a-z]+$/),
+  schema: z.string().regex(/^ns:[a-z]+$/),
   decode: (w) => succeed(w),
+  encode: (p) => p,
 })
-  .with({ toWireShape: (p) => p })
-  .docs({ examples: [{ input: 'ns:example', encoded: 'ns:example' }] });
-export const ContentAddress = defineValue({
+  .docs({ examples: [{ input: 'ns:example', encoded: 'ns:example' }] })
+  .seal();
+export const ContentAddress = defineKind({
   kind: 'example/content-address',
-  wire: z.object({
-    namespace_id: NamespaceId.wire,
+  schema: z.object({
+    namespace_id: NamespaceId.codec,
     content_class: z.enum(['primary', 'attachment']),
-    digest: Sha256Digest.wire,
+    digest: Sha256Digest.codec,
   }),
   decode: (w) => succeed(w),
+  encode: (p) => p,
 })
-  .with({
-    toWireShape: (p) => p,
-    view: {
-      namespace: (p) => p.namespace_id,
-      contentClass: (p) => p.content_class,
-      digest: (p) => p.digest,
-    },
+  .view({
+    namespace: (p) => p.namespace_id,
+    contentClass: (p) => p.content_class,
+    digest: (p) => p.digest,
   })
   .docs({
     examples: [
@@ -108,7 +104,8 @@ export const ContentAddress = defineValue({
       contentClass: { description: 'Content classification.' },
       digest: { description: 'SHA-256 content digest.' },
     },
-  });
+  })
+  .seal();
 export type ContentAddress = ValueOf<typeof ContentAddress>;
 export interface PrepareInput {
   rows: { id: string; content: ContentAddress }[];
@@ -133,16 +130,15 @@ export const PreparedWrite = defineDerived({
     });
   },
 })
-  .with({
-    view: {
-      rows: (p) => copyWriteRows(p.rows) as Readonly<WriteRows>,
-      contentToRetain: (p) => [...p.contentToRetain] as readonly ContentAddress[],
-    },
+  .view({
+    rows: (p) => copyWriteRows(p.rows) as Readonly<WriteRows>,
+    contentToRetain: (p) => [...p.contentToRetain] as readonly ContentAddress[],
   })
   .docs({
     view: {
       rows: { description: 'Detached rows to write.' },
       contentToRetain: { description: 'Sealed content addresses to retain.' },
     },
-  });
+  })
+  .seal();
 export const prepareWrite = PreparedWrite.derive;

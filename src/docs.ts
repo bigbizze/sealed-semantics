@@ -1,4 +1,4 @@
-// Internal, platform-independent validation performed by .docs().
+// Internal, platform-independent validation performed by .seal().
 import { documentationEqual } from './documentation-equal.js';
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new TypeError(message);
@@ -15,7 +15,7 @@ import type { AnyKind, ProducerResult } from './types.js';
 
 type Semantic = AnyKind & {
   parse(input: unknown): ProducerResult<any>;
-  wire: z.ZodType;
+  codec: z.ZodType;
 };
 function record(value: unknown, label: string): Record<string, any> {
   assert(
@@ -91,8 +91,8 @@ export function validateDocumentation(kind: AnyKind, shape: DocumentationShape):
     for (const key of ['input', 'encoded', ...(shape.canonical ? ['canonical'] : [])]) {
       assert(Object.hasOwn(example, key), `${label}.${key} is required`);
     }
-    const decoded = decodeWire(semantic.wire, example.input);
-    assert(decoded.success, `${label}.input was rejected by wire.safeDecode`);
+    const decoded = decodeWire(semantic.codec, example.input);
+    assert(decoded.success, `${label}.input was rejected by codec.safeDecode`);
     assert(kind.is(decoded.data), `${label}: codec returned an invalid brand`);
     const parsed = semantic.parse(example.input);
     assert(parsed.ok, `${label}.input was rejected by parse`);

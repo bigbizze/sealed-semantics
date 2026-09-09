@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { ProjectId, UserId } from '../../definitions/index.ts';
 
 const MembershipRequest = z.object({
-  user_id: UserId.wire,
-  project_id: ProjectId.wire,
+  user_id: UserId.codec,
+  project_id: ProjectId.codec,
 });
 
 // An HTTP handler accepts unknown JSON. After this check, its IDs have specific types.

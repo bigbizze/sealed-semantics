@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import { defineValue, type ValueOf } from 'sealed-semantics';
+import { defineKind, type ValueOf } from 'sealed-semantics';
 
-export const UserId = defineValue({
+export const UserId = defineKind({
   kind: 'sealed-semantics-test/user-id',
-  wire: z.string().regex(/^(usr_[a-f0-9]{16,}|user:[0-9a-f-]{36})$/),
+  schema: z.string().regex(/^(usr_[a-f0-9]{16,}|user:[0-9a-f-]{36})$/),
   decode: (wire) => {
     const spelling = wire.startsWith('user:')
       ? `usr_${wire.slice(5).replaceAll('-', '')}`
@@ -19,13 +19,11 @@ export const UserId = defineValue({
           },
         };
   },
+  encode: (parts) => parts.spelling,
+  canonical: (parts) => ({ type: 'utf8' as const, value: parts.spelling }),
 })
-  .with({
-    toWireShape: (parts) => parts.spelling,
-    canonical: (parts) => ({ type: 'utf8' as const, value: parts.spelling }),
-    view: {
-      suffix: (parts) => parts.spelling.slice(-6),
-    },
+  .view({
+    suffix: (parts) => parts.spelling.slice(-6),
   })
   .docs({
     description: 'A normalized user identifier.',
@@ -42,6 +40,7 @@ export const UserId = defineValue({
       },
     ],
     view: { suffix: { description: 'The final six characters.', example: 'abcdef' } },
-  });
+  })
+  .seal();
 
 export type UserId = ValueOf<typeof UserId>;

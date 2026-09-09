@@ -6,7 +6,7 @@ export class ValueMap<Kd extends AnyKind, V> implements Iterable<[ValueOf<Kd>, V
   #entries = new Map<unknown, [ValueOf<Kd>, V]>();
   constructor(kind: Kd) {
     this.#kind = kind;
-    this.#semantic = 'wire' in kind && 'parse' in kind;
+    this.#semantic = 'codec' in kind && 'parse' in kind;
   }
   #key(value: ValueOf<Kd>): unknown {
     if (!this.#kind.is(value))
