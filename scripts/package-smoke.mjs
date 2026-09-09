@@ -32,11 +32,20 @@ try {
  const B=b.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>b.ok(w)}).with({toWireShape:p=>p});
  const x=A.parse('x').value,y=A.parse('x').value;
  assert(!B.is(x)); assert(!A.is(B.parse('x').value));
- assert.equal(new b.IdMap(A).set(x,1).get(y),1);
- assert.equal(new b.IdSet(A).add(x).add(y).size,1);
+ assert.equal(A.map().set(x,1).get(y),1);
+ assert.equal(A.set().add(x).add(y).size,1);
  const D=a.defineDerived({kind:'consumer/proof',derive:i=>a.ok(i)}).with({});
  const p=D.derive(1).value,q=D.derive(1).value;
- assert.equal(new b.IdSet(D).add(p).add(q).size,2);
+ assert.equal(D.set().add(p).add(q).size,2);
+ const Composite=b.defineValue({kind:'consumer/composite',wire:z.object({id:A.wire}),decode:w=>b.ok(w)}).with({toWireShape:p=>p,fields:{id:p=>p.id}});
+ const c=Composite.parse({id:'x'}).value,d=Composite.parse({id:'x'}).value;
+ assert(A.is(c.view.id()));assert.equal(Composite.map().set(c,1).get(d),1);
+ assert(Object.isFrozen(c.view));assert.equal(Object.getPrototypeOf(c.view),null);
+ assert(!('IdMap' in a));assert(!('ValueMap' in a));
+ // Internal cross-copy test: exported package paths remain blocked for consumers.
+ const foreign=await import('./node_modules/canonical-type-copy/dist/collections.js');
+ assert.equal(new foreign.ValueMap(A).set(x,1).get(y),1);
+ assert.equal(new foreign.ValueSet(D).add(p).add(q).size,2);
  assertValueLaws(A,{validWire:fc.string()});
  for (const path of ['seal','codec','keying','collections','dist/seal.js','src/seal.ts']) await assert.rejects(import('canonical-type/'+path),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
  `);

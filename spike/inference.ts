@@ -25,9 +25,9 @@ const ContentAddress=defineValue({kind:'example/content-address',wire:z.object({
 interface PrepareInput { rows:string[]; content:ValueOf<typeof ContentAddress>[] }
 const PreparedWrite=defineDerived({kind:'example/prepared-write',derive:(input:PrepareInput)=>ok({rows:[...input.rows],contentToRetain:[...input.content]})}).with({fields:{rows:p=>{type Parts=Assert<Equal<typeof p,{rows:string[];contentToRetain:ValueOf<typeof ContentAddress>[]}>>;return [...p.rows] as readonly string[];},contentToRetain:p=>[...p.contentToRetain] as readonly ValueOf<typeof ContentAddress>[]}});
 type Allocation=Assert<Equal<Parameters<typeof UserId.allocate>,[gen:()=>string]>>;
-type Canonical=Assert<Equal<ReturnType<typeof UserId.canonical>,{type:string,value:string}>>;
-type Field=Assert<Equal<ReturnType<typeof ContentAddress.contentClass>,'primary'|'attachment'>>;
-type ReadonlyField=Assert<Equal<ReturnType<typeof PreparedWrite.rows>,readonly string[]>>;
+type Canonical=Assert<Equal<ReturnType<ValueOf<typeof UserId>['canonical']>,{type:string,value:string}>>;
+type Field=Assert<Equal<ReturnType<ValueOf<typeof ContentAddress>['view']['contentClass']>,'primary'|'attachment'>>;
+type ReadonlyField=Assert<Equal<ReturnType<ValueOf<typeof PreparedWrite>['view']['rows']>,readonly string[]>>;
 type Raw=Assert<Equal<z.input<typeof ContentAddress.wire>,{namespace_id:string,content_class:'primary'|'attachment',digest:string}>>;
 declare const user:ValueOf<typeof UserId>;
 declare const digest:ValueOf<typeof Sha256Digest>;
@@ -44,7 +44,7 @@ UserId.allocate(4);
 // @ts-expect-error derived values have no wire
 PreparedWrite.wire;
 const Mutable=defineDerived({kind:'example/mutable-type',derive:(s:string)=>ok({items:[s]})}).with({fields:{items:p=>[...p.items]}});
-type MutableField=Assert<Equal<ReturnType<typeof Mutable.items>,string[]>>;
+type MutableField=Assert<Equal<ReturnType<ValueOf<typeof Mutable>['view']['items']>,string[]>>;
 // Errors must appear at the configured item, without casts or manual generics.
 defineValue({kind:'invalid/output',wire:z.string(),decode:w=>ok({spelling:w})}).with({
  // @ts-expect-error decoded wire output is string
@@ -82,7 +82,7 @@ declare const widenedKind:string;
 // @ts-expect-error literal kind is necessary for nominal identity
  defineValue({kind:widenedKind,wire:z.string(),decode:w=>ok(w)});
 const Same=defineValue({kind:'example/user-id',wire:z.string(),decode:w=>ok(w)}).with({toWireShape:p=>p});
-type SameBrand=Assert<Equal<ValueOf<typeof Same>,ValueOf<typeof UserId>>>;
+const sameBrand:ValueOf<typeof Same>=user; // Same brand; additional declared methods affect the complete surface.
 // @ts-expect-error values do not expose raw state
 user.raw;
 // @ts-expect-error values do not expose collection keys
@@ -94,3 +94,39 @@ declare const prepared:ValueOf<typeof PreparedWrite>;
 prepared.encode();
 // @ts-expect-error unrelated structured data lacks the nominal brand
 const structural:ValueOf<typeof UserId>={encode:()=>'',equals:()=>true,debug:()=>'',toJSON:()=>{throw Error();},valueOf:()=>{throw Error();},[Symbol.toPrimitive]:()=>{throw Error();}};
+// Amended instance and kind surfaces must remain exact.
+const zero=defineValue({kind:'amendment/zero',wire:z.string(),decode:w=>ok(w)}).with({toWireShape:p=>p,allocate:()=> 'x'});
+type ZeroArgs=Assert<Equal<Parameters<typeof zero.allocate>,[]>>;
+const empty=defineDerived({kind:'amendment/empty',derive:()=>ok(0)}).with({fields:{}});
+declare const emptyValue:ValueOf<typeof empty>;
+// @ts-expect-error no fields means no view
+emptyValue.view;
+// @ts-expect-error canonical alone does not add view
+user.view;
+// @ts-expect-error moved to instance
+UserId.canonical(user);
+// @ts-expect-error moved to view
+ContentAddress.digest;
+// @ts-expect-error derived has no canonical
+prepared.canonical();
+declare const address:ValueOf<typeof ContentAddress>;
+// @ts-expect-error top-level standard method is not available inside view
+address.view.encode();
+// @ts-expect-error no generic Parts access
+address.view.parts();
+const users=UserId.map<number>();users.set(user,1);
+// @ts-expect-error map values preserve their chosen type
+users.set(user,'wrong');
+// @ts-expect-error map key must have the supplied kind
+users.set(digest,1);
+// @ts-expect-error set key must have the supplied kind
+UserId.set().add(digest);
+defineDerived({kind:'amendment/bad-encode',derive:(s:string)=>ok(s)}).with({fields:{
+ // @ts-expect-error descriptive reserved-name error on the configured field
+ encode:p=>p,
+}});
+
+defineDerived({kind:'amendment/symbol-type',derive:(s:string)=>ok(s)}).with({fields:{
+ // @ts-expect-error view cannot declare symbol protocol methods
+ [Symbol.toPrimitive]:(p:string)=>p,
+}});

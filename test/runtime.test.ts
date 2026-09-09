@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 import * as api from '../src/index.js';
-import { defineValue, defineDerived, ok, err, IdMap, IdSet, type Result } from '../src/index.js';
+import { defineValue, defineDerived, ok, err, type Result } from '../src/index.js';
 import { stableWireKey } from '../src/keying.js';
 import { UserId, Sha256Digest, ContentAddress, PreparedWrite } from '../examples/reference.js';
 function value<T>(r:Result<T>):T {if(!r.ok)throw Error(JSON.stringify(r.error));return r.value;}
@@ -13,11 +13,11 @@ test('private brand, prototype forgery, constructor recovery, and hidden state',
  assert(!z.safeEncode(UserId.wire,fake).success);
  assert(!UserId.wire.out.safeParse(fake).success);
  assert.throws(()=>new (Object.getPrototypeOf(v).constructor)(Symbol('canonical-type/construct'),{}),TypeError);
- assert.throws(()=>UserId.canonical(fake),TypeError);
+ assert.throws(()=>Object.getPrototypeOf(v).canonical.call(fake),TypeError);
  assert.throws(()=>v.equals(fake),TypeError);
  assert.throws(()=>Object.getPrototypeOf(v).encode.call(fake),TypeError);
  assert.deepEqual(Reflect.ownKeys(v),[]);
- assert.deepEqual(Object.keys(api).sort(),['IdMap','IdSet','defineDerived','defineValue','err','ok']);
+ assert.deepEqual(Object.keys(api).sort(),['defineDerived','defineValue','err','ok']);
  for(const name of ['parts','raw','unwrap','fromParts','indexKey','seal','hasBrand','unseal']) {assert(!(name in UserId));assert(!(name in v));}
  assert(!UserId.is(structuredClone(v)));
 });
@@ -39,7 +39,7 @@ test('aliases and nested codecs encode the complete raw contract',()=>{
  assert(a!==b);assert(a.equals(b));assert.deepEqual(a.encode(),b.encode());
  const w={namespace_id:'ns:hello',content_class:'primary' as const,digest:'ab'.repeat(32)};
  const address=value(ContentAddress.parse(w));
- assert(Sha256Digest.is(ContentAddress.digest(address)));
+ assert(Sha256Digest.is(address.view.digest()));
  assert.deepEqual(address.encode(),w);
  assert.deepEqual(z.encode(z.object({address:ContentAddress.wire}),{address}),{address:w});
  assert(z.safeDecode(ContentAddress.wire,w).success);
@@ -47,11 +47,11 @@ test('aliases and nested codecs encode the complete raw contract',()=>{
 });
 test('semantic Map/Set behavior retains original keys without exposing internal strings',()=>{
  const a=value(UserId.parse(raw)),b=value(UserId.parse(raw));
- const map=new IdMap<typeof UserId,number>(UserId).set(a,1).set(b,2);
+ const map=UserId.map<number>().set(a,1).set(b,2);
  assert.equal(map.size,1);assert.equal(map.get(b),2);assert.equal([...map.keys()][0],a);
  const entry=[...map][0]!;entry[1]=99;assert.equal(map.get(a),2);
  const context={called:0};map.forEach(function(this:typeof context,v,k,m){assert.equal(this,context);assert.equal(v,2);assert.equal(k,a);assert.equal(m,map);this.called++;},context);assert.equal(context.called,1);
- const set=new IdSet(UserId).add(a).add(b);assert.equal(set.size,1);assert.deepEqual([...set.entries()],[[a,a]]);
+ const set=UserId.set().add(a).add(b);assert.equal(set.size,1);assert.deepEqual([...set.entries()],[[a,a]]);
  assert.throws(()=>map.has(Object.create(Object.getPrototypeOf(a))),TypeError);
  assert.throws(()=>set.add(value(Sha256Digest.parse('ab'.repeat(32))) as any),TypeError);
  assert(map.delete(b));assert(!map.has(a));set.clear();assert.equal(set.size,0);
@@ -61,16 +61,16 @@ test('derived identity and producer copy obligations in reference example',()=>{
  const input={rows:[{id:'first',content:address}],content:[address]};
  const a=value(PreparedWrite.derive(input)),b=value(PreparedWrite.derive(input));
  input.rows[0]!.id='changed';input.content.length=0;
- assert.equal(PreparedWrite.rows(a)[0]!.id,'first');assert.equal(PreparedWrite.contentToRetain(a)[0],address);
+ assert.equal(a.view.rows()[0]!.id,'first');assert.equal(a.view.contentToRetain()[0],address);
  assert(!a.equals(b));assert(a.equals(a));
- const map=new IdMap<typeof PreparedWrite,number>(PreparedWrite).set(a,1).set(b,2);assert.equal(map.size,2);
- const digest=value(Sha256Digest.parse('ab'.repeat(32)));Sha256Digest.canonical(digest).value.fill(0);assert.equal(digest.encode(),'ab'.repeat(32));
+ const map=PreparedWrite.map<number>().set(a,1).set(b,2);assert.equal(map.size,2);
+ const digest=value(Sha256Digest.parse('ab'.repeat(32)));digest.canonical().value.fill(0);assert.equal(digest.encode(),'ab'.repeat(32));
 });
 test('duplicate definitions and invalid declarations fail',()=>{
  assert.throws(()=>defineValue({kind:'example/user-id',wire:z.string(),decode:w=>ok(w)}).with({toWireShape:p=>p}),/Duplicate kind/);
  assert.throws(()=>defineDerived({kind:'example/user-id',derive:()=>ok(1)}).with({}),/Duplicate kind/);
  assert.throws(()=>defineDerived({kind:'unqualified',derive:()=>ok(1)}).with({}),/namespaced/);
- assert.throws(()=>defineDerived({kind:'test/reserved',derive:()=>ok(1)}).with({fields:{is:(p:number)=>p}} as any),/Reserved field/);
+ assert.throws(()=>defineDerived({kind:'test/reserved',derive:()=>ok(1)}).with({fields:{is:(p:number)=>p}} as any),/Field name "is" is reserved/);
 });
 test('deterministic JSON validates the entire runtime domain and preserves -0',()=>{
  assert.equal(stableWireKey({z:1,a:[-0,'\n',true,null]}),'{"a":[-0,"\\n",true,null],"z":1}');
@@ -84,13 +84,49 @@ test('reference callbacks preserve observations across repeated calls',()=>{
  const user=value(UserId.parse(raw));
  const address=value(ContentAddress.parse({namespace_id:'ns:x',content_class:'primary',digest:'ab'.repeat(32)}));
  const plan=value(PreparedWrite.derive({rows:[{id:'row',content:address}],content:[address]}));
- const before={user:user.encode(),digest:digest.encode(),address:address.encode(),rows:PreparedWrite.rows(plan),content:PreparedWrite.contentToRetain(plan)};
+ const before={user:user.encode(),digest:digest.encode(),address:address.encode(),rows:plan.view.rows(),content:plan.view.contentToRetain()};
  for(let i=0;i<5;i++) {
-  UserId.canonical(user);user.debug();user.equals(value(UserId.parse(raw)));
-  Sha256Digest.canonical(digest);digest.debug();digest.equals(value(Sha256Digest.parse('ab'.repeat(32))));
-  ContentAddress.namespace(address);ContentAddress.contentClass(address);ContentAddress.digest(address);address.debug();
-  plan.debug();PreparedWrite.rows(plan);PreparedWrite.contentToRetain(plan);
+  user.canonical();user.debug();user.equals(value(UserId.parse(raw)));
+  digest.canonical();digest.debug();digest.equals(value(Sha256Digest.parse('ab'.repeat(32))));
+  address.view.namespace();address.view.contentClass();address.view.digest();address.debug();
+  plan.debug();plan.view.rows();plan.view.contentToRetain();
  }
- assert.deepEqual({user:user.encode(),digest:digest.encode(),address:address.encode(),rows:PreparedWrite.rows(plan),content:PreparedWrite.contentToRetain(plan)},before);
+ assert.deepEqual({user:user.encode(),digest:digest.encode(),address:address.encode(),rows:plan.view.rows(),content:plan.view.contentToRetain()},before);
  assert.equal(UserId.parse('user:'+'-'.repeat(36)).ok,false);
+});
+test('view is lazy, stable, frozen, bound, and absent without declared fields',()=>{
+ let calls=0;
+ const K=defineValue({kind:'amendment/view',wire:z.string(),decode:w=>ok({text:w})}).with({toWireShape:p=>p.text,fields:{text:p=>{calls++;return p.text;}}});
+ const a=value(K.parse('a')),b=value(K.parse('b'));
+ const descriptor=Object.getOwnPropertyDescriptor(Object.getPrototypeOf(a),'view')!;
+ assert.equal(descriptor.enumerable,false);assert.equal(descriptor.set,undefined);
+ assert.equal(calls,0);const view=a.view;assert.equal(calls,0);
+ assert.equal(view,a.view);assert.notEqual(view,b.view);
+ assert.equal(Object.getPrototypeOf(view),null);assert(Object.isFrozen(view));
+ assert.deepEqual(Reflect.ownKeys(view),['text']);assert.deepEqual(Reflect.ownKeys(a),[]);
+ assert.throws(()=>Object.defineProperty(view,'raw',{value:()=>0}),TypeError);
+ const detached=view.text;assert.equal(detached(),'a');assert.equal(detached.call(b),'a');
+ assert.throws(()=>descriptor.get!.call(Object.create(Object.getPrototypeOf(a))),TypeError);
+ assert.throws(()=>descriptor.get!.call(value(UserId.parse(raw))),TypeError);
+ assert.throws(()=>descriptor.get!.call(new Proxy(a,{})),TypeError);
+ assert.deepEqual({...a},{});assert.deepEqual(Object.keys(a),[]);assert(!K.is(structuredClone(a)));
+ assert(!('text' in K));assert(!('text' in a));assert(!('canonical' in K));
+ assert(!('view' in value(UserId.parse(raw)))); // canonical alone does not add view
+ const Empty=defineDerived({kind:'amendment/empty',derive:()=>ok(0)}).with({fields:{}});
+ assert(!('view' in value(Empty.derive(undefined))));
+});
+test('zero-argument allocator still validates and normalizes its wire output',()=>{
+ const K=defineValue({kind:'amendment/allocate',wire:z.string().regex(/^user:|^usr_/),decode:w=>ok(w.replace('user:','usr_'))}).with({toWireShape:p=>p,allocate:()=> 'user:abc'});
+ const v=value(K.allocate());assert(K.is(v));assert.equal(v.encode(),'usr_abc');
+ assert.equal(K.map<number>().set(v,1).get(value(K.parse('usr_abc'))),1);
+});
+test('all reserved field names are rejected with a descriptive error',()=>{
+ for(const name of ['view','map','set','get','value','kind','is','parse','derive','wire','allocate','canonical','encode','equals','debug','parts','raw','unwrap','fromParts','indexKey','__proto__','constructor','prototype','then','toJSON','valueOf','toString']) {
+  const fields=Object.fromEntries([[name,(p:number)=>p]]);
+  assert.throws(()=>defineDerived({kind:`amendment/reserved-${name}`,derive:()=>ok(1)}).with({fields} as any),{name:'TypeError',message:`Field name "${name}" is reserved. Choose a different projection name.`});
+ }
+});
+
+test('view cannot introduce a Symbol.toPrimitive projection',()=>{
+ assert.throws(()=>defineDerived({kind:'amendment/symbol',derive:()=>ok(1)}).with({fields:{[Symbol.toPrimitive]:()=>1}} as any),/Symbol-named fields are not supported/);
 });

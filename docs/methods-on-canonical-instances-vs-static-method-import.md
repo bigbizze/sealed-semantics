@@ -9,3 +9,5 @@ Every rendering still requires a named, deliberate call. Implicit coercion and g
 The RawWire/DecodedWire split gives `encode()` one precise meaning: the complete external representation, including backward encoding of nested sealed values. This supports placing that operation on the instance.
 
 Revisit a separate free-function entry only for a codebase with an enforceable render-free region. Do not add it speculatively.
+
+The accepted amendments also put optional canonical() on the instance and custom field observations under view. These operations travel with the value. Kinds produce and recognize values and provide typed collection factories. The view namespace makes custom observations identifiable without adding domain-specific names to the standard top-level method surface.

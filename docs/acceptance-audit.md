@@ -1,3 +1,5 @@
+> Historical baseline audit for commit cdf295e. For the current amended implementation, see [amendments.md](amendments.md) and run the current check and package scripts. Counts and API locations below describe the original baseline.
+
 # Revision 5 acceptance audit
 
 This audit maps the original specification to the implemented package. The API syntax change is the inference-gate revision authorized by sections 8.3 and 16.1, not a reduction of runtime scope.

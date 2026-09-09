@@ -1,4 +1,5 @@
 import type { z } from 'zod';
+import type { ValueMap, ValueSet } from './collections.js';
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 export type Result<T, E = ValueError> = { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: E };
 export interface ValueError { readonly kind: string; readonly reason: 'invalid_wire' | 'invalid_parts' | 'invalid_input'; readonly issues: readonly string[]; }
@@ -21,18 +22,25 @@ export type ValueOptions<W extends z.ZodType, P> = ProjectionOptions<P> & {
   allocate?: (...args: any[]) => z.input<W>;
   canonical?: (p: P) => unknown;
 };
-type Fields<O, V> = O extends { fields: infer F } ? { readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R ? (v: V) => R : never } : {};
+type Views<O> = O extends { fields: infer F } ? keyof F extends never ? {} : { readonly view: { readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R ? () => R : never } } : {};
+type Canonical<O> = O extends { canonical: (...args: any[]) => infer C } ? { canonical(): C } : {};
+export type SemanticValue<K extends string, W extends z.ZodType, O> = Value<K, z.input<W>> & Views<O> & Canonical<O>;
+export type DerivedValue<K extends string, O> = Proof<K> & Views<O>;
 export type ValueKind<K extends string, W extends z.ZodType, O> = {
   readonly kind: K;
-  is(x: unknown): x is Value<K, z.input<W>>;
-  parse(input: unknown): Result<Value<K, z.input<W>>>;
-  readonly wire: z.ZodCodec<W, z.ZodType<Value<K, z.input<W>>, Value<K, z.input<W>>>>;
-} & Fields<O, Value<K, z.input<W>>> & (O extends { allocate: (...args: infer A) => unknown } ? { allocate(...args: A): Result<Value<K, z.input<W>>> } : {}) &
-  (O extends { canonical: (...args: any[]) => infer C } ? { canonical(v: Value<K, z.input<W>>): C } : {});
-export type DerivedKind<K extends string, I, O> = { readonly kind: K; is(x: unknown): x is Proof<K>; derive(input: I): Result<Proof<K>> } & Fields<O, Proof<K>>;
+  is(x: unknown): x is SemanticValue<K, W, O>;
+  parse(input: unknown): Result<SemanticValue<K, W, O>>;
+  readonly wire: z.ZodCodec<W, z.ZodType<SemanticValue<K, W, O>, SemanticValue<K, W, O>>>;
+  map<V>(): ValueMap<ValueKind<K, W, O>, V>;
+  set(): ValueSet<ValueKind<K, W, O>>;
+} & (O extends { allocate: (...args: infer A) => unknown } ? { allocate(...args: A): Result<SemanticValue<K, W, O>> } : {});
+export type DerivedKind<K extends string, I, O> = {
+  readonly kind: K; is(x: unknown): x is DerivedValue<K, O>; derive(input: I): Result<DerivedValue<K, O>>;
+  map<V>(): ValueMap<DerivedKind<K, I, O>, V>; set(): ValueSet<DerivedKind<K, I, O>>;
+};
 export type JsonSchema<W extends z.ZodType> = 0 extends (1 & z.input<W>) ? never : [z.input<W>] extends [JsonValue] ? W : never;
 export type LiteralKind<K extends string> = string extends K ? never : K;
 
-export type ReservedField = 'kind' | 'is' | 'parse' | 'derive' | 'wire' | 'allocate' | 'canonical' | 'encode' | 'equals' | 'debug' | 'parts' | 'raw' | 'unwrap' | 'fromParts' | 'indexKey' | '__proto__' | 'constructor' | 'prototype' | 'then' | 'toJSON' | 'valueOf' | 'toString';
+export type ReservedField = 'view' | 'map' | 'set' | 'get' | 'value' | 'kind' | 'is' | 'parse' | 'derive' | 'wire' | 'allocate' | 'canonical' | 'encode' | 'equals' | 'debug' | 'parts' | 'raw' | 'unwrap' | 'fromParts' | 'indexKey' | '__proto__' | 'constructor' | 'prototype' | 'then' | 'toJSON' | 'valueOf' | 'toString';
 export type CheckedOptions<O, Allowed> = O & Record<Exclude<keyof O, keyof Allowed>, never> &
-  (O extends { fields: infer F } ? { fields: F & Record<Extract<keyof F, ReservedField>, never> } : unknown);
+  (O extends { fields: infer F } ? { fields: F & { [N in Extract<keyof F, ReservedField>]: { readonly [Message in `Field name "${N}" is reserved. Choose a different projection name.`]: never } } & { [N in Extract<keyof F, symbol>]: { readonly "Symbol-named fields are not supported. Use a string projection name.": never } } } : unknown);

@@ -1,16 +1,16 @@
 // Test-only entry point. Consumers install fast-check as a development dependency.
 import assert from 'node:assert/strict';
 import * as fc from 'fast-check';
-import { IdMap, IdSet } from './collections.js';
 import { stableWireKey } from './keying.js';
 import type { AnyKind, Result, ValueOf } from './types.js';
-type SemanticKind = AnyKind & { parse(input: unknown): Result<any>; wire: unknown };
-type Derived = AnyKind & { derive(input: any): Result<any> };
+type CollectionKind = AnyKind & { map<V>(): { set(k: any, v: V): any; get(k: any): V | undefined; size: number }; set(): { add(k: any): any; size: number } };
+type SemanticKind = CollectionKind & { parse(input: unknown): Result<any>; wire: unknown };
+type Derived = CollectionKind & { derive(input: any): Result<any> };
 type Return<K, N extends PropertyKey> = K extends Record<N, (...args: any[]) => infer R> ? R : never;
 type Mutator<T> = (value: T) => void;
 type Mutators<K extends AnyKind> = {
   encode?: Mutator<Return<ValueOf<K>, 'encode'>>;
-  canonical?: Mutator<Return<K, 'canonical'>>;
+  canonical?: Mutator<Return<ValueOf<K>, 'canonical'>>;
   fields?: Record<string, Mutator<any>>;
 };
 function acquire<T>(result: Result<T>): T { assert.equal(result.ok, true, 'generator must produce accepted inputs'); if (!result.ok) throw new Error('Rejected generated input'); return result.value; }
@@ -45,11 +45,8 @@ function mutate(x: any, seen = new Set<object>()): void {
 function projections(kind: AnyKind, value: any): Record<string, () => any> {
   const result: Record<string, () => any> = {};
   if ('encode' in value) result.encode = () => value.encode();
-  for (const name of Object.keys(kind)) {
-    if (['kind','is','parse','derive','wire','allocate'].includes(name)) continue;
-    const fn = (kind as any)[name];
-    if (typeof fn === 'function') result[name === 'canonical' ? name : `fields.${name}`] = () => fn(value);
-  }
+  if ('canonical' in value) result.canonical = () => value.canonical();
+  for (const name of Object.keys(value.view ?? {})) result[`fields.${name}`] = () => value.view[name]();
   return result;
 }
 function shared<K extends AnyKind>(kind: K, value: any, mutators: Mutators<K> = {}): void {
@@ -87,18 +84,18 @@ export function assertValueLaws<K extends SemanticKind>(kind: K, options: {
     assert(a.equals(a));
     assert.equal(a.equals(b), b.equals(a));
     if (a.equals(b) && b.equals(c)) assert(a.equals(c));
-    if (a.equals(b) && 'canonical' in kind) assert.deepEqual((kind as any).canonical(a), (kind as any).canonical(b));
+    if (a.equals(b) && 'canonical' in a) assert.deepEqual(a.canonical(), b.canonical());
     const copy = acquire(kind.parse(raw));
     assert(a.equals(copy));
-    if ('canonical' in kind) assert.deepEqual((kind as any).canonical(a), (kind as any).canonical(copy));
-    const map = new IdMap<K, number>(kind).set(a, 1);
+    if ('canonical' in a) assert.deepEqual(a.canonical(), copy.canonical());
+    const map = kind.map<number>().set(a, 1);
     assert.equal(map.get(copy), 1);
-    assert.equal(new IdSet(kind).add(a).add(copy).size, 1);
+    assert.equal(kind.set().add(a).add(copy).size, 1);
   }));
   if (options.equivalentAliases) fc.assert(fc.property(options.equivalentAliases, ([wa, wb]) => {
     const a = acquire(kind.parse(wa)), b = acquire(kind.parse(wb));
     assert(a.equals(b)); assert.deepEqual(a.encode(), b.encode());
-    if ('canonical' in kind) assert.deepEqual((kind as any).canonical(a), (kind as any).canonical(b));
+    if ('canonical' in a) assert.deepEqual(a.canonical(), b.canonical());
   }));
   if (options.allocateArgs) fc.assert(fc.property(options.allocateArgs, args => {
     assert('allocate' in kind, 'allocateArgs requires an allocator');
@@ -115,9 +112,9 @@ export function assertDerivedLaws<K extends Derived>(kind: K, options: {
     const a = acquire(kind.derive(input)), b = acquire(kind.derive(input));
     shared(kind, a, options.projectionMutators);
     assert(a.equals(a)); assert(!a.equals(b)); assert(!b.equals(a));
-    const map = new IdMap<K, number>(kind).set(a, 1).set(b, 2);
+    const map = kind.map<number>().set(a, 1).set(b, 2);
     assert.equal(map.size, 2); assert.equal(map.get(a), 1); assert.equal(map.get(b), 2);
-    assert.equal(new IdSet(kind).add(a).add(a).add(b).size, 2);
-    assert(!('encode' in a)); assert(!('canonical' in kind));
+    assert.equal(kind.set().add(a).add(a).add(b).size, 2);
+    assert(!('encode' in a)); assert(!('canonical' in a));
   }));
 }

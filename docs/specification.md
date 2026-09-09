@@ -1,3 +1,5 @@
+> Historical revision 5 baseline. The accepted changes and final decisions in [amendments.md](amendments.md) take precedence.
+
 # sealed-value — implementation specification (revision 5)
 
 Status: accepted design. Implementation begins with the mandatory type-inference spike in §8.3.

@@ -1,6 +1,6 @@
 import { stableWireKey } from './keying.js';
 import type { AnyKind, ValueOf } from './types.js';
-export class IdMap<Kd extends AnyKind, V> implements Iterable<[ValueOf<Kd>, V]> {
+export class ValueMap<Kd extends AnyKind, V> implements Iterable<[ValueOf<Kd>, V]> {
   #kind: Kd;
   #semantic: boolean;
   #entries = new Map<unknown, [ValueOf<Kd>, V]>();
@@ -26,11 +26,11 @@ export class IdMap<Kd extends AnyKind, V> implements Iterable<[ValueOf<Kd>, V]> 
   forEach(callback: (value: V, key: ValueOf<Kd>, map: this) => void, thisArg?: unknown): void {
     for (const [key, value] of this) callback.call(thisArg, value, key, this);
   }
-  get [Symbol.toStringTag](): string { return 'IdMap'; }
+  get [Symbol.toStringTag](): string { return 'ValueMap'; }
 }
-export class IdSet<Kd extends AnyKind> implements Iterable<ValueOf<Kd>> {
-  #map: IdMap<Kd, undefined>;
-  constructor(kind: Kd) { this.#map = new IdMap(kind); }
+export class ValueSet<Kd extends AnyKind> implements Iterable<ValueOf<Kd>> {
+  #map: ValueMap<Kd, undefined>;
+  constructor(kind: Kd) { this.#map = new ValueMap(kind); }
   get size(): number { return this.#map.size; }
   add(value: ValueOf<Kd>): this { this.#map.set(value, undefined); return this; }
   has(value: ValueOf<Kd>): boolean { return this.#map.has(value); }
@@ -43,5 +43,5 @@ export class IdSet<Kd extends AnyKind> implements Iterable<ValueOf<Kd>> {
   forEach(callback: (value: ValueOf<Kd>, key: ValueOf<Kd>, set: this) => void, thisArg?: unknown): void {
     for (const value of this) callback.call(thisArg, value, value, this);
   }
-  get [Symbol.toStringTag](): string { return 'IdSet'; }
+  get [Symbol.toStringTag](): string { return 'ValueSet'; }
 }

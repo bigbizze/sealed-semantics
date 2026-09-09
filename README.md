@@ -26,7 +26,7 @@ const UserId = defineValue({
   },
 }).with({
   toWireShape: p => p.spelling,
-  allocate: (gen: () => string) => `user:${gen()}`,
+  allocate: () => `user:${crypto.randomUUID()}`,
   canonical: p => ({ type: 'utf8', value: p.spelling }),
   debug: p => `user(…${p.spelling.slice(-6)})`,
 });
@@ -88,11 +88,16 @@ const PreparedWrite = defineDerived({
 export const prepareWrite = PreparedWrite.derive;
 type CommitIo = { write(rows: Readonly<WriteRows>): void };
 export function commitWrite(plan: ValueOf<typeof PreparedWrite>, io: CommitIo) {
-  io.write(PreparedWrite.rows(plan));
+  io.write(plan.view.rows());
 }
 const parsed = UserId.parse('usr_0123456789abcdef');
 if (parsed.ok) {
-  const raw = parsed.value.encode();
+  const userId = parsed.value;
+  const raw = userId.encode();
+  const canonical = userId.canonical();
+  const users = UserId.map<string>();
+  users.set(userId, "example");
+  const seen = UserId.set().add(userId);
   const ResponseSchema = z.object({ user_id: UserId.wire });
   const response = z.encode(ResponseSchema, { user_id: parsed.value });
 }
@@ -101,12 +106,17 @@ if (parsed.ok) {
 `parse`, `allocate`, and `derive` return `Result`. Producers reject inputs with `err`.
 Zod's `z.decode`, `z.encode`, `z.safeDecode`, and `z.safeEncode` work with `Kind.wire`.
 `JSON.stringify(value)`, implicit coercion, and recovered constructors throw.
-`IdMap(kind)` and `IdSet(kind)` compare semantic keys by normalized wire data and derived keys by identity.
+`Kind.map<V>()` and `Kind.set()` compare semantic keys by normalized wire data and derived keys by identity.
+Collections retain runtime kind validation. `ValueMap` and `ValueSet` are type-only exports.
+Declared fields are called through `value.view.*`; no standard methods live inside `view`.
+The facade is privately cached, frozen, and null-prototype; definitions without fields have no `view`.
+Reserved field names receive a descriptive compiler error. Canonical output is `value.canonical()`.
+Pass sealed values directly into derivations. Encode only when a boundary needs raw data.
 They provide get/set or add, has, delete, clear, size, iteration, and forEach as applicable.
 
 Producers must own Parts exclusively, never mutate them, and copy mutable projections.
 Neither constructor proves existence, permission, currentness, or storage success.
-See [guarantees](docs/guarantees.md), [laws](docs/laws.md), and [type viability](docs/viability.md).
+See [accepted amendments](docs/amendments.md), [guarantees](docs/guarantees.md), [laws](docs/laws.md), and [type viability](docs/viability.md).
 
 For consumer law tests, install `fast-check` as a dev dependency and import the harness from `canonical-type/laws`.
 Supply valid input generators, equivalent alias pairs, and mutators for custom mutable projections.

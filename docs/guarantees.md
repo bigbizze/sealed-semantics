@@ -6,7 +6,7 @@
 
 Each completed definition creates a class with an ES private field. A private token restricts construction. The class's static block creates private-field inspection closures. Those closures and the class are internal; no package export or kind property exposes them. Recovering the constructor from an instance does not reveal the token. A forged prototype does not pass `Kind.is` or the codec output schema. Prototype identity alone is not validity. Proxies do not inherit the private field.
 
-TypeScript uses an erased brand indexed by the literal kind. Definitions with the same kind and wire type have the same public value type, even though their runtime brands differ. A namespaced literal is required. This is per-kind nominality, not generative type identity. Type assertions, `any`, and JavaScript can bypass static checks; runtime brand checks still apply.
+TypeScript uses an erased brand indexed by the literal kind. Definitions with the same kind have the same erased brand, even though their runtime brands differ. Complete instance types also include wire, canonical, and view signatures; different configured surfaces can affect assignability. A namespaced literal is required. This is per-kind nominality, not generative type identity. Type assertions, `any`, and JavaScript can bypass static checks; runtime brand checks still apply.
 
 Renaming a kind breaks type identity. The package does not insert it into wire data, canonical data, or collection keys. A consumer makes kind data-bearing only by explicitly including it in an external representation; such a consumer must migrate that data when renaming the kind.
 
@@ -23,7 +23,7 @@ The duplicate-kind Set is a diagnostic within one installed copy. It stores only
 - any custom value returned by a projection that is mutable must likewise be a fresh value
   with no mutable alias back into `Parts`.
 
-Parts are private. A producer can still violate this contract by returning Parts, a mutable child, or a retained alias. The package cannot detect these violations in general. The runtime does not clone, freeze, or traverse Parts. Primitives and sealed children can be returned directly. Fresh outer containers must also avoid mutable aliases in their children. A domain copy function must preserve sealed children; `structuredClone` loses their private brands.
+Parts are private. A producer can still violate this contract by returning Parts, a mutable child, or a retained alias. The package cannot detect these violations in general. The runtime does not clone, freeze, or traverse Parts. It freezes only the library-created view facade, as required by the accepted amendments. Primitives and sealed children can be returned directly. Fresh outer containers must also avoid mutable aliases in their children. A domain copy function must preserve sealed children; `structuredClone` loses their private brands.
 
 Projection return types remain exactly as declared. A mutable copy stays mutable in TypeScript; a producer can explicitly declare a readonly return type. Canonical representations are caller-defined and need the same copy discipline. Protocol owners must maintain compatibility vectors and select canonical spellings for aliases. Custom equality must agree with encoded JSON key equality. The law harness checks samples; it cannot prove exclusive ownership or the absence of producer mutation for all inputs.
 
@@ -39,4 +39,10 @@ Instances reject implicit string conversion, numeric conversion, and JSON serial
 
 The staged builder is the inference-gate revision described in `viability.md`. Call `.with(...)` to complete a definition; only this step reserves the kind and creates its runtime identity. Projection names that conflict with kind operations, prototype behavior, or forbidden accessors are rejected. The runtime captures callbacks at definition time. Do not mutate the Zod schema or definition after setup.
 
-The source is below the 400-line limit, including declarations and the test-only law harness. The main entry has one runtime peer dependency, Zod. The separate Node-only `canonical-type/laws` entry requires consumers to install `fast-check` as a development dependency. It is never imported by the main entry.
+Size exception: the amended shipped sources may exceed 400 lines when type declarations, the law harness, and the CLI are included. The added lines implement the required private view cache, frozen facade, conditional instance types, and clear reserved-name diagnostics. Core runtime source remains below 400 lines; `check:size` verifies that count and reports the full count. The main entry has one runtime peer dependency, Zod. The separate Node-only `canonical-type/laws` entry requires consumers to install `fast-check` as a development dependency. It is never imported by the main entry.
+
+## Amended instance surface
+
+`canonical()` is an instance method only when configured. Declared `fields` become zero-argument functions under `value.view`. A non-enumerable prototype getter validates the actual private brand and lazily constructs a stable, frozen, null-prototype facade. Only declared string-named functions are exposed; each is bound to the originating sealed value. The cache is an ES private field, not an own public property. Empty or absent fields produce no view member. Canonical alone does not produce a view.
+
+All standard top-level API names and forbidden generic access names are reserved inside fields. Diagnostics name the invalid configured field and explain that another projection name is required. Old kind-level projections and canonical methods are removed. Both kinds expose map/set factories. Collection constructors are internal; consumers can import ValueMap and ValueSet only as types.

@@ -2,21 +2,23 @@ import { z } from 'zod';
 import { makeSeal } from './seal.js';
 import { makeCodec } from './codec.js';
 import { stableWireKey } from './keying.js';
-import type { Result, ValueOptions, ProjectionOptions, ValueKind, DerivedKind, JsonSchema, LiteralKind, CheckedOptions } from './types.js';
+import type { Result, ValueOptions, ProjectionOptions, ValueKind, DerivedKind, JsonSchema, LiteralKind, CheckedOptions, AnyKind } from './types.js';
 export type { Result, ValueError, ValueOf, JsonValue, AnyKind } from './types.js';
-export { IdMap, IdSet } from './collections.js';
+import { ValueMap, ValueSet } from './collections.js';
+export type { ValueMap, ValueSet } from './collections.js';
 export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
 export const err = <E>(error: E): Result<never, E> => ({ ok: false, error });
 const seen = new Set<string>();
-const reserved = new Set(['kind', 'is', 'parse', 'derive', 'wire', 'allocate', 'canonical', 'encode', 'equals', 'debug', 'parts', 'raw', 'unwrap', 'fromParts', 'indexKey', '__proto__', 'constructor', 'prototype', 'then', 'toJSON', 'valueOf', 'toString']);
+const reserved = new Set(['view', 'map', 'set', 'get', 'value', 'kind', 'is', 'parse', 'derive', 'wire', 'allocate', 'canonical', 'encode', 'equals', 'debug', 'parts', 'raw', 'unwrap', 'fromParts', 'indexKey', '__proto__', 'constructor', 'prototype', 'then', 'toJSON', 'valueOf', 'toString']);
 function register(kind: string, fields: object = {}) {
   if (typeof kind !== 'string' || !/^[^\s/]+\/\S+$/.test(kind)) throw new TypeError('kind must be a namespaced string literal');
   if (seen.has(kind)) throw new TypeError(`Duplicate kind: ${kind}`);
-  for (const name of Object.keys(fields)) if (reserved.has(name)) throw new TypeError(`Reserved field: ${name}`);
+  if (Object.getOwnPropertySymbols(fields).length) throw new TypeError("Symbol-named fields are not supported. Use a string projection name.");
+  for (const name of Object.keys(fields)) if (reserved.has(name)) throw new TypeError(`Field name "${name}" is reserved. Choose a different projection name.`);
   seen.add(kind);
 }
-function projections<P>(target: object, options: ProjectionOptions<P>, read: (v: unknown) => P) {
-  for (const [name, project] of Object.entries(options.fields ?? {})) Object.defineProperty(target, name, { enumerable: true, value: (v: unknown) => project(read(v)) });
+function collections<K extends AnyKind>(kind: K) {
+  return { map: <V>() => new ValueMap<K, V>(kind), set: () => new ValueSet(kind) };
 }
 export function defineValue<const K extends string, W extends z.ZodType, P>(spec: {
   kind: LiteralKind<K>; wire: W & JsonSchema<W>; decode: (w: z.output<W>) => Result<P>;
@@ -26,7 +28,7 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
     register(kind, options.fields);
     const { toWireShape, equals, debug, allocate, canonical } = options;
     const encode = (p: P) => z.encode(wire, toWireShape(p));
-    const bridge = makeSeal(kind, { encode, debug, equals: equals ?? ((a, b) => stableWireKey(encode(a)) === stableWireKey(encode(b))) });
+    const bridge = makeSeal(kind, { encode, debug, canonical, fields: options.fields, equals: equals ?? ((a, b) => stableWireKey(encode(a)) === stableWireKey(encode(b))) });
     const parse = (input: unknown) => {
       const parsed = wire.safeParse(input);
       if (!parsed.success) return err({ kind, reason: 'invalid_wire' as const, issues: parsed.error.issues.map(i => i.message) });
@@ -35,8 +37,7 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
     };
     const result = { kind, is: bridge.is, parse, wire: makeCodec(wire, kind, decode, bridge.seal, bridge.is, bridge.read, toWireShape) };
     if (allocate) Object.assign(result, { allocate: (...args: Parameters<typeof allocate>) => parse(allocate(...args)) });
-    if (canonical) Object.assign(result, { canonical: (v: unknown) => canonical(bridge.read(v)) });
-    projections(result, options, bridge.read);
+    Object.assign(result, collections(result as unknown as AnyKind));
     return result as unknown as ValueKind<K, W, O>;
   } };
 }
@@ -47,12 +48,12 @@ export function defineDerived<const K extends string, I, P>(spec: {
   return { with<const O extends ProjectionOptions<P>>(options: CheckedOptions<O, ProjectionOptions<P>>): DerivedKind<K, I, O> {
     for (const key of ['wire', 'allocate', 'canonical', 'equals']) if (key in spec || key in options) throw new TypeError(`Derived definitions cannot declare ${key}`);
     register(kind, options.fields);
-    const bridge = makeSeal<P>(kind, { debug: options.debug });
+    const bridge = makeSeal<P>(kind, { debug: options.debug, fields: options.fields });
     const result = { kind, is: bridge.is, derive: (input: I) => {
       const produced = derive(input);
       return produced.ok ? ok(bridge.seal(produced.value)) : produced;
     } };
-    projections(result, options, bridge.read);
+    Object.assign(result, collections(result as unknown as AnyKind));
     return result as unknown as DerivedKind<K, I, O>;
   } };
 }
