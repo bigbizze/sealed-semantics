@@ -21,8 +21,8 @@ test('invalid semantic options fail before a kind is reserved', () => {
     { toWireShape: (p: string) => p, allocate: 3 },
     { toWireShape: (p: string) => p, canonical: null },
     { toWireShape: (p: string) => p, debug: 'text' },
-    { toWireShape: (p: string) => p, fields: null },
-    { toWireShape: (p: string) => p, fields: { text: 1 } },
+    { toWireShape: (p: string) => p, view: null },
+    { toWireShape: (p: string) => p, view: { text: 1 } },
   ]) {
     assert.throws(() => builder().with(options as any), TypeError);
   }
@@ -44,7 +44,7 @@ test('invalid derived options fail before a kind is reserved', () => {
     { allocate: () => '' },
     { equals: () => true },
     { debug: undefined },
-    { fields: { text: null } },
+    { view: { text: null } },
     { typo: () => 0 },
   ]) {
     assert.throws(() => builder().with(options as any), TypeError);
@@ -108,4 +108,13 @@ test('configuration accessors, hidden properties, and symbols are rejected witho
       .with({ toWireShape: (p) => p })
       .parse('x').ok,
   );
+});
+
+test('the former fields option is rejected before kind registration', () => {
+  const builder = defineDerived({ kind: 'validation/old-fields', derive: () => ok(0) });
+  assert.throws(
+    () => builder.with({ fields: {} } as any),
+    /Unknown options property "fields"/,
+  );
+  assert(Object.isFrozen(builder.with({ view: {} })));
 });

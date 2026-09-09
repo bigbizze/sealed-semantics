@@ -116,7 +116,7 @@ try {
  import * as fc from 'fast-check';
  import * as a from 'sealed-semantics';
  import * as b from 'sealed-semantics-copy';
- import { assertValueLaws } from 'sealed-semantics/laws';
+ import { assertValueLaws, assertValueDocs } from 'sealed-semantics/laws';
  const {z: foreignZod}=await import('zod-copy');
  const ForeignSchema=a.defineValue({kind:'consumer/foreign-schema',wire:foreignZod.string(),decode:w=>a.ok(w)}).with({toWireShape:p=>p});
  assert(ForeignSchema.parse('x').ok);
@@ -129,18 +129,19 @@ try {
  const D=a.defineDerived({kind:'consumer/proof',derive:i=>a.ok(i)}).with({});
  const p=D.derive(1).value,q=D.derive(1).value;
  assert.equal(D.set().add(p).add(q).size,2);
- const Composite=b.defineValue({kind:'consumer/composite',wire:z.object({id:A.wire}),decode:w=>b.ok(w)}).with({toWireShape:p=>p,fields:{id:p=>p.id}});
+ const Composite=b.defineValue({kind:'consumer/composite',wire:z.object({id:A.wire}),decode:w=>b.ok(w)}).with({toWireShape:p=>p,view:{id:p=>p.id}});
  const c=Composite.parse({id:'x'}).value,d=Composite.parse({id:'x'}).value;
- assert(A.is(c.view.id()));assert.equal(Composite.map().set(c,1).get(d),1);
+ assert(A.is(c.view.id));assert.equal(Composite.map().set(c,1).get(d),1);
  assert(Object.isFrozen(c.view));assert.equal(Object.getPrototypeOf(c.view),null);
  assert(!('IdMap' in a));assert(!('ValueMap' in a));
  // Internal cross-copy test: exported package paths remain blocked for consumers.
  const foreign=await import('./node_modules/sealed-semantics-copy/dist/collections.js');
  assert.equal(new foreign.ValueMap(A).set(x,1).get(y),1);
  assert.equal(new foreign.ValueSet(D).add(p).add(q).size,2);
+ assertValueDocs(A.docs({exampleWire:'x'}));
  assertValueLaws(A,{validWire:fc.string()});
  assertValueLaws(Composite,{validWire:fc.record({id:fc.string()}),sealedKinds:[A]});
- for (const path of ['seal','definition','codec','keying','collections','dist/seal.js','src/seal.ts']) await assert.rejects(import('sealed-semantics/'+path),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
+ for (const path of ['seal','definition','documentation','codec','keying','collections','dist/seal.js','src/seal.ts']) await assert.rejects(import('sealed-semantics/'+path),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
  `,
   );
   run(process.execPath, ['smoke.mjs'], temp);

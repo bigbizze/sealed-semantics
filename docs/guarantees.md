@@ -18,7 +18,7 @@ The duplicate-kind Set is a diagnostic within one installed copy. It stores only
 - every callback that receives `Parts` treats it as immutable and must not mutate it or
   anything reachable from it. This applies to `toWireShape`, custom `equals`, `canonical`,
   every field projection, and `debug`;
-- `fields` and `canonical` return primitives, sealed values, or fresh copies of anything
+- `view` and `canonical` return primitives, sealed values, or fresh copies of anything
   mutable (`bytes.slice()`, `[...list]`, a domain-specific copy function, etc.);
 - any custom value returned by a projection that is mutable must likewise be a fresh value
   with no mutable alias back into `Parts`.
@@ -47,6 +47,8 @@ Semantic coercion errors recommend explicit encoding. Derived coercion errors sa
 
 ## Amended instance surface
 
-`canonical()` is an instance method only when configured. Declared `fields` become zero-argument functions under `value.view`. A non-enumerable prototype getter validates the actual private brand and lazily constructs a stable, frozen, null-prototype facade. Only declared string-named functions are exposed; each is bound to the originating sealed value. The cache is an ES private field, not an own public property. Empty or absent fields produce no view member. Canonical alone does not produce a view.
+`canonical()` is an instance method only when configured. Declared `view` projections become read-only getter properties under `value.view`. A non-enumerable prototype getter validates the actual private brand and lazily constructs a stable, frozen, null-prototype facade. Only declared string-named getters are exposed; each reads the originating sealed value. Each read invokes the projection again, allowing fresh copies. The cache is an ES private field, not an own public property. An empty or absent view produces no view member. Canonical alone does not produce a view.
 
-All standard top-level API names and forbidden generic access names are reserved inside fields. Diagnostics name the invalid configured field and explain that another projection name is required. Old kind-level projections and canonical methods are removed. Both kinds expose map/set factories. Collection constructors are internal; consumers can import ValueMap and ValueSet only as types.
+All standard top-level API names and forbidden generic access names are reserved inside view. Diagnostics name the invalid configured field and explain that another projection name is required. Old kind-level projections and canonical methods are removed. Both kinds expose map/set factories. Collection constructors are internal; consumers can import ValueMap and ValueSet only as types.
+
+View getters should perform cheap observations or copies. Getter results are not cached. Expensive computation should be an explicitly named operation outside the facade. Frozen facade descriptors do not imply frozen projection outputs.

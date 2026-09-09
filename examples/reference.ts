@@ -56,7 +56,7 @@ export const ContentAddress = defineValue({
   decode: (w) => ok(w),
 }).with({
   toWireShape: (p) => p,
-  fields: {
+  view: {
     namespace: (p) => p.namespace_id,
     contentClass: (p) => p.content_class,
     digest: (p) => p.digest,
@@ -83,7 +83,7 @@ export const PreparedWrite = defineDerived({
     return ok({ rows: copyWriteRows(input.rows), contentToRetain: [...input.content] });
   },
 }).with({
-  fields: {
+  view: {
     rows: (p) => copyWriteRows(p.rows) as Readonly<WriteRows>,
     contentToRetain: (p) => [...p.contentToRetain] as readonly ContentAddress[],
   },

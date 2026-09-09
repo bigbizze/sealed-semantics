@@ -51,7 +51,7 @@ const ContentAddress = defineValue({
   },
 }).with({
   toWireShape: (p) => p,
-  fields: {
+  view: {
     namespace: (p) => p.namespace_id,
     contentClass: (p) => p.content_class,
     digest: (p) => p.digest,
@@ -66,7 +66,7 @@ const PreparedWrite = defineDerived({
   derive: (input: PrepareInput) =>
     ok({ rows: [...input.rows], contentToRetain: [...input.content] }),
 }).with({
-  fields: {
+  view: {
     rows: (p) => {
       type Parts = Assert<
         Equal<
@@ -91,12 +91,12 @@ type Canonical = Assert<
 >;
 type Field = Assert<
   Equal<
-    ReturnType<ValueOf<typeof ContentAddress>['view']['contentClass']>,
+    ValueOf<typeof ContentAddress>['view']['contentClass'],
     'primary' | 'attachment'
   >
 >;
 type ReadonlyField = Assert<
-  Equal<ReturnType<ValueOf<typeof PreparedWrite>['view']['rows']>, readonly string[]>
+  Equal<ValueOf<typeof PreparedWrite>['view']['rows'], readonly string[]>
 >;
 type Raw = Assert<
   Equal<
@@ -121,10 +121,8 @@ PreparedWrite.wire;
 const Mutable = defineDerived({
   kind: 'example/mutable-type',
   derive: (s: string) => ok({ items: [s] }),
-}).with({ fields: { items: (p) => [...p.items] } });
-type MutableField = Assert<
-  Equal<ReturnType<ValueOf<typeof Mutable>['view']['items']>, string[]>
->;
+}).with({ view: { items: (p) => [...p.items] } });
+type MutableField = Assert<Equal<ValueOf<typeof Mutable>['view']['items'], string[]>>;
 // Errors must appear at the configured item, without casts or manual generics.
 defineValue({
   kind: 'invalid/output',
@@ -140,7 +138,7 @@ defineValue({
   decode: (w) => ok({ spelling: w }),
 }).with({
   toWireShape: (p) => p.spelling,
-  fields: {
+  view: {
     // @ts-expect-error field receives known Parts
     bad: (p) => p.missing,
   },
@@ -166,8 +164,8 @@ defineDerived({ kind: 'invalid/derived-option', derive: (x: string) => ok(x) }).
   canonical: (p: string) => p,
 });
 defineDerived({ kind: 'invalid/reserved-field', derive: (x: string) => ok(x) }).with({
-  fields: {
-    // @ts-expect-error fields cannot overwrite kind operations
+  view: {
+    // @ts-expect-error view cannot overwrite kind operations
     is: (p) => p,
   },
 });
@@ -228,10 +226,10 @@ const zero = defineValue({
 }).with({ toWireShape: (p) => p, allocate: () => 'x' });
 type ZeroArgs = Assert<Equal<Parameters<typeof zero.allocate>, []>>;
 const empty = defineDerived({ kind: 'amendment/empty', derive: () => ok(0) }).with({
-  fields: {},
+  view: {},
 });
 declare const emptyValue: ValueOf<typeof empty>;
-// @ts-expect-error no fields means no view
+// @ts-expect-error no view means no view
 emptyValue.view;
 // @ts-expect-error canonical alone does not add view
 user.view;
@@ -243,9 +241,9 @@ ContentAddress.digest;
 prepared.canonical();
 declare const address: ValueOf<typeof ContentAddress>;
 // @ts-expect-error top-level standard method is not available inside view
-address.view.encode();
+address.view.encode;
 // @ts-expect-error no generic Parts access
-address.view.parts();
+address.view.parts;
 const users = UserId.map<number>();
 users.set(user, 1);
 // @ts-expect-error map values preserve their chosen type
@@ -255,14 +253,14 @@ users.set(digest, 1);
 // @ts-expect-error set key must have the supplied kind
 UserId.set().add(digest);
 defineDerived({ kind: 'amendment/bad-encode', derive: (s: string) => ok(s) }).with({
-  fields: {
+  view: {
     // @ts-expect-error descriptive reserved-name error on the configured field
     encode: (p) => p,
   },
 });
 
 defineDerived({ kind: 'amendment/symbol-type', derive: (s: string) => ok(s) }).with({
-  fields: {
+  view: {
     // @ts-expect-error view cannot declare symbol protocol methods
     [Symbol.toPrimitive]: (p: string) => p,
   },
@@ -313,3 +311,23 @@ ContentAddress.docs({ views: { suffix: { example: 'abc' } } });
 PreparedWrite.docs({ description: 'Local write proof.' });
 // @ts-expect-error Derived kinds have no wire representation.
 PreparedWrite.docs({ exampleWire: 'anything' });
+// @ts-expect-error Projection properties are read-only.
+address.view.contentClass = 'primary';
+// @ts-expect-error A projection value is not a zero-argument method.
+address.view.contentClass();
+// @ts-expect-error Empty views do not accept projection documentation.
+empty.docs({ views: { missing: { example: 1 } } });
+
+ContentAddress.docs({
+  exampleWire: {
+    namespace_id: 'ns:example',
+    content_class: 'primary',
+    digest: 'abcdef',
+  },
+});
+ContentAddress.docs({
+  // @ts-expect-error Nested documentation uses raw wire, not a sealed child.
+  exampleWire: { namespace_id: user, content_class: 'primary', digest: 'abcdef' },
+});
+// @ts-expect-error The former fields option is no longer accepted.
+defineDerived({ kind: 'invalid/old-fields', derive: () => ok(0) }).with({ fields: {} });

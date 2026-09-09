@@ -4,7 +4,7 @@ export function makeSeal<P>(
   ops: {
     encode?: (parts: P) => unknown;
     canonical?: ((parts: P) => unknown) | undefined;
-    fields?: Record<string, (parts: P) => unknown> | undefined;
+    view?: Record<string, (parts: P) => unknown> | undefined;
     equals?: (a: P, b: P) => boolean;
     debug?: ((parts: P) => string) | undefined;
   },
@@ -13,7 +13,7 @@ export function makeSeal<P>(
   read: (x: unknown) => P;
   seal: (parts: P) => object;
 } {
-  const fields = Object.entries(ops.fields ?? {});
+  const view = Object.entries(ops.view ?? {});
   let hasBrand!: (x: unknown) => x is Sealed;
   let unseal!: (x: unknown) => P;
   const trap = (): never => {
@@ -25,7 +25,7 @@ export function makeSeal<P>(
   };
   class Sealed {
     #parts: P;
-    #view?: Readonly<Record<string, () => unknown>>;
+    #view?: Readonly<Record<string, unknown>>;
     constructor(token: typeof CONSTRUCT, parts: P) {
       if (token !== CONSTRUCT)
         throw new TypeError(`${kind} cannot be constructed directly`);
@@ -33,16 +33,16 @@ export function makeSeal<P>(
       Object.freeze(this);
     }
     static {
-      if (fields.length)
+      if (view.length)
         Object.defineProperty(this.prototype, 'view', {
           get: function (this: Sealed) {
             unseal(this);
             if (!this.#view) {
-              const facade = Object.create(null) as Record<string, () => unknown>;
-              for (const [name, project] of fields)
+              const facade = Object.create(null) as Record<string, unknown>;
+              for (const [name, project] of view)
                 Object.defineProperty(facade, name, {
                   enumerable: true,
-                  value: () => project(unseal(this)),
+                  get: () => project(unseal(this)),
                 });
               this.#view = Object.freeze(facade);
             }

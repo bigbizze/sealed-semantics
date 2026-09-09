@@ -44,8 +44,8 @@ function record(input: unknown, label: string): Record<string, unknown> {
   for (const key of Reflect.ownKeys(input)) {
     if (typeof key === 'symbol') {
       throw new TypeError(
-        label === 'fields'
-          ? 'Symbol-named fields are not supported. Use a string projection name.'
+        label === 'view'
+          ? 'Symbol-named projections are not supported. Use a string projection name.'
           : `${label} cannot contain symbol keys`,
       );
     }
@@ -102,20 +102,20 @@ export function validateOptions(options: unknown, semantic: boolean): void {
   const callbacks = semantic
     ? ['toWireShape', 'equals', 'allocate', 'canonical', 'debug']
     : ['debug'];
-  keys(input, [...callbacks, 'fields'], 'options');
+  keys(input, [...callbacks, 'view'], 'options');
   if (semantic) callback(input, 'toWireShape', 'options');
   for (const name of callbacks) {
     if (Object.hasOwn(input, name)) callback(input, name, 'options');
   }
-  if (Object.hasOwn(input, 'fields')) {
-    const fields = record(input.fields, 'fields');
-    for (const name of Object.keys(fields)) {
+  if (Object.hasOwn(input, 'view')) {
+    const view = record(input.view, 'view');
+    for (const name of Object.keys(view)) {
       if (reservedFields.has(name)) {
         throw new TypeError(
           `Field name "${name}" is reserved. Choose a different projection name.`,
         );
       }
-      callback(fields, name, 'fields');
+      callback(view, name, 'view');
     }
   }
 }

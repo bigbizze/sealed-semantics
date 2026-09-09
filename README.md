@@ -69,7 +69,7 @@ const ContentAddress = defineValue({
   decode: w => ok(w), // Nested values are already sealed.
 }).with({
   toWireShape: p => p, // Zod encodes nested values backward.
-  fields: {
+  view: {
     namespace: p => p.namespace_id,
     contentClass: p => p.content_class,
     digest: p => p.digest,
@@ -85,14 +85,14 @@ const PreparedWrite = defineDerived({
   derive: (input: PrepareInput) => ok({
     rows: copyWriteRows(input.rows), contentToRetain: [...input.content],
   }),
-}).with({ fields: {
+}).with({ view: {
   rows: p => copyWriteRows(p.rows) as Readonly<WriteRows>,
   contentToRetain: p => [...p.contentToRetain] as readonly ContentAddress[],
 } });
 export const prepareWrite = PreparedWrite.derive;
 type CommitIo = { write(rows: Readonly<WriteRows>): void };
 export function commitWrite(plan: ValueOf<typeof PreparedWrite>, io: CommitIo) {
-  io.write(plan.view.rows());
+  io.write(plan.view.rows);
 }
 const parsed = UserId.parse('usr_0123456789abcdef');
 if (parsed.ok) {
@@ -112,9 +112,9 @@ Zod's `z.decode`, `z.encode`, `z.safeDecode`, and `z.safeEncode` work with `Kind
 `JSON.stringify(value)`, implicit coercion, and recovered constructors throw.
 `Kind.map<V>()` and `Kind.set()` compare semantic keys by normalized wire data and derived keys by identity.
 Collections retain runtime kind validation. `ValueMap` and `ValueSet` are type-only exports.
-Declared fields are called through `value.view.*`; no standard methods live inside `view`.
+Declared projections are read through `value.view.*`; no standard methods live inside `view`.
 Kinds, builders, instances, prototypes, and view facades are frozen; Parts are not. View is privately cached and null-prototype.
-Definitions without fields have no `view`. Invalid configuration fails before registering its kind.
+Definitions without projections have no `view`. Invalid configuration fails before registering its kind.
 Reserved field names receive a descriptive compiler error. Canonical output is `value.canonical()`.
 Pass sealed values directly into derivations. Encode only when a boundary needs raw data.
 They provide get/set or add, has, delete, clear, size, iteration, and forEach as applicable.

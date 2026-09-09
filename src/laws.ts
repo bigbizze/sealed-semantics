@@ -18,7 +18,7 @@ type Mutator<T> = (value: T) => void;
 type Mutators<K extends AnyKind> = {
   encode?: Mutator<Return<ValueOf<K>, 'encode'>>;
   canonical?: Mutator<Return<ValueOf<K>, 'canonical'>>;
-  fields?: Record<string, Mutator<any>>;
+  view?: Record<string, Mutator<any>>;
 };
 function acquire<T>(result: Result<T>): T {
   assert.equal(result.ok, true, 'generator must produce accepted inputs');
@@ -102,7 +102,7 @@ function projections(value: any): Record<string, () => any> {
   if ('encode' in value) result.encode = () => value.encode();
   if ('canonical' in value) result.canonical = () => value.canonical();
   for (const name of Object.keys(value.view ?? {}))
-    result[`fields.${name}`] = () => value.view[name]();
+    result[`view.${name}`] = () => value.view[name];
   return result;
 }
 function shared<K extends AnyKind>(
@@ -144,8 +144,8 @@ function shared<K extends AnyKind>(
     );
   for (const [name, project] of Object.entries(all)) {
     const before = observe();
-    const custom = name.startsWith('fields.')
-      ? mutators.fields?.[name.slice(7)]
+    const custom = name.startsWith('view.')
+      ? mutators.view?.[name.slice(5)]
       : (mutators as any)[name];
     if (custom) custom(project());
     else mutate(project(), isSealed);

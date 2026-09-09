@@ -102,7 +102,7 @@ test('aliases and nested codecs encode the complete raw contract', () => {
     digest: 'ab'.repeat(32),
   };
   const address = value(ContentAddress.parse(w));
-  assert(Sha256Digest.is(address.view.digest()));
+  assert(Sha256Digest.is(address.view.digest));
   assert.deepEqual(address.encode(), w);
   assert.deepEqual(z.encode(z.object({ address: ContentAddress.wire }), { address }), {
     address: w,
@@ -155,8 +155,8 @@ test('derived identity and producer copy obligations in reference example', () =
     b = value(PreparedWrite.derive(input));
   input.rows[0]!.id = 'changed';
   input.content.length = 0;
-  assert.equal(a.view.rows()[0]!.id, 'first');
-  assert.equal(a.view.contentToRetain()[0], address);
+  assert.equal(a.view.rows[0]!.id, 'first');
+  assert.equal(a.view.contentToRetain[0], address);
   assert(!a.equals(b));
   assert(a.equals(a));
   const map = PreparedWrite.map<number>().set(a, 1).set(b, 2);
@@ -186,7 +186,7 @@ test('duplicate definitions and invalid declarations fail', () => {
   assert.throws(
     () =>
       defineDerived({ kind: 'test/reserved', derive: () => ok(1) }).with({
-        fields: { is: (p: number) => p },
+        view: { is: (p: number) => p },
       } as any),
     /Field name "is" is reserved/,
   );
@@ -244,8 +244,8 @@ test('reference callbacks preserve observations across repeated calls', () => {
     user: user.encode(),
     digest: digest.encode(),
     address: address.encode(),
-    rows: plan.view.rows(),
-    content: plan.view.contentToRetain(),
+    rows: plan.view.rows,
+    content: plan.view.contentToRetain,
   };
   for (let i = 0; i < 5; i++) {
     user.canonical();
@@ -254,27 +254,27 @@ test('reference callbacks preserve observations across repeated calls', () => {
     digest.canonical();
     digest.debug();
     digest.equals(value(Sha256Digest.parse('ab'.repeat(32))));
-    address.view.namespace();
-    address.view.contentClass();
-    address.view.digest();
+    address.view.namespace;
+    address.view.contentClass;
+    address.view.digest;
     address.debug();
     plan.debug();
-    plan.view.rows();
-    plan.view.contentToRetain();
+    plan.view.rows;
+    plan.view.contentToRetain;
   }
   assert.deepEqual(
     {
       user: user.encode(),
       digest: digest.encode(),
       address: address.encode(),
-      rows: plan.view.rows(),
-      content: plan.view.contentToRetain(),
+      rows: plan.view.rows,
+      content: plan.view.contentToRetain,
     },
     before,
   );
   assert.equal(UserId.parse('user:' + '-'.repeat(36)).ok, false);
 });
-test('view is lazy, stable, frozen, bound, and absent without declared fields', () => {
+test('view is lazy, stable, frozen, read-only, and absent without declared view', () => {
   let calls = 0;
   const K = defineValue({
     kind: 'amendment/view',
@@ -282,7 +282,7 @@ test('view is lazy, stable, frozen, bound, and absent without declared fields', 
     decode: (w) => ok({ text: w }),
   }).with({
     toWireShape: (p) => p.text,
-    fields: {
+    view: {
       text: (p) => {
         calls++;
         return p.text;
@@ -308,8 +308,14 @@ test('view is lazy, stable, frozen, bound, and absent without declared fields', 
     TypeError,
   );
   const detached = view.text;
-  assert.equal(detached(), 'a');
-  assert.equal(detached.call(b), 'a');
+  assert.equal(detached, 'a');
+  assert.equal(calls, 1);
+  assert.equal(view.text, 'a');
+  assert.equal(calls, 2);
+  const projection = Object.getOwnPropertyDescriptor(view, 'text')!;
+  assert.equal(projection.set, undefined);
+  assert.equal(projection.enumerable, true);
+  assert.equal(Reflect.set(view, 'text', 'changed'), false);
   assert.throws(
     () => descriptor.get!.call(Object.create(Object.getPrototypeOf(a))),
     TypeError,
@@ -324,7 +330,7 @@ test('view is lazy, stable, frozen, bound, and absent without declared fields', 
   assert(!('canonical' in K));
   assert(!('view' in value(UserId.parse(raw)))); // canonical alone does not add view
   const Empty = defineDerived({ kind: 'amendment/empty', derive: () => ok(0) }).with({
-    fields: {},
+    view: {},
   });
   assert(!('view' in value(Empty.derive(undefined))));
 });
@@ -346,6 +352,8 @@ test('zero-argument allocator still validates and normalizes its wire output', (
 });
 test('all reserved field names are rejected with a descriptive error', () => {
   for (const name of [
+    'docs',
+    'documentation',
     'view',
     'map',
     'set',
@@ -374,11 +382,11 @@ test('all reserved field names are rejected with a descriptive error', () => {
     'valueOf',
     'toString',
   ]) {
-    const fields = Object.fromEntries([[name, (p: number) => p]]);
+    const view = Object.fromEntries([[name, (p: number) => p]]);
     assert.throws(
       () =>
         defineDerived({ kind: `amendment/reserved-${name}`, derive: () => ok(1) }).with(
-          { fields } as any,
+          { view } as any,
         ),
       {
         name: 'TypeError',
@@ -392,9 +400,9 @@ test('view cannot introduce a Symbol.toPrimitive projection', () => {
   assert.throws(
     () =>
       defineDerived({ kind: 'amendment/symbol', derive: () => ok(1) }).with({
-        fields: { [Symbol.toPrimitive]: () => 1 },
+        view: { [Symbol.toPrimitive]: () => 1 },
       } as any),
-    /Symbol-named fields are not supported/,
+    /Symbol-named projections are not supported/,
   );
 });
 test('instances and their prototypes have immutable public surfaces', () => {
@@ -425,8 +433,8 @@ test('instances and their prototypes have immutable public surfaces', () => {
     assert(Object.isFrozen(facade));
     assert.deepEqual({ ...v }, {});
   }
-  assert.equal(semantic.view.contentClass(), 'primary');
-  assert.deepEqual(derived.view.rows(), []);
+  assert.equal(semantic.view.contentClass, 'primary');
+  assert.deepEqual(derived.view.rows, []);
 });
 test('derived serialization errors do not recommend a nonexistent encoder', () => {
   const plan = value(PreparedWrite.derive({ rows: [], content: [] }));

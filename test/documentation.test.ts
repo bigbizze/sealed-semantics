@@ -17,7 +17,7 @@ test('documentation preserves the producer, brand, collections, and frozen API',
     toWireShape: (p) => p.spelling,
     allocate: () => 'usr_abcdef',
     canonical: (p) => ({ type: 'utf8' as const, value: p.spelling }),
-    fields: { suffix: (p) => p.spelling.slice(-6) },
+    view: { suffix: (p) => p.spelling.slice(-6) },
   });
   const metadata = {
     description: 'User',
@@ -41,7 +41,7 @@ test('documentation preserves the producer, brand, collections, and frozen API',
   assert(parsed.ok);
   assert(Original.is(parsed.value));
   assert.equal(Kind.map<number>().set(parsed.value, 1).get(parsed.value), 1);
-  assert.equal(parsed.value.view.suffix(), 'abcdef');
+  assert.equal(parsed.value.view.suffix, 'abcdef');
   assertValueDocs(Kind);
   const replacement = Kind.docs({ description: 'Replacement' });
   assert.equal(replacement.documentation.description, 'Replacement');
@@ -76,7 +76,7 @@ test('derived documentation does not run the producer or freeze its examples', (
       calls++;
       return ok(input);
     },
-  }).with({ fields: { bytes: (p) => new TextEncoder().encode(p) } });
+  }).with({ view: { bytes: (p) => new TextEncoder().encode(p) } });
   const bytes = new Uint8Array([1]);
   const Kind = Base.docs({ views: { bytes: { example: bytes } } });
   assert.equal(calls, 0);

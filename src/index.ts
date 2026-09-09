@@ -59,7 +59,7 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
         encode,
         debug,
         canonical,
-        fields: options.fields,
+        view: options.view,
         equals:
           equals ?? ((a, b) => stableWireKey(encode(a)) === stableWireKey(encode(b))),
       });
@@ -115,7 +115,7 @@ export function defineDerived<const K extends string, I, P>(spec: {
       register(kind);
       const bridge = makeSeal<P>(kind, {
         debug: options.debug,
-        fields: options.fields,
+        view: options.view,
       });
       const result = {
         kind,

@@ -4,7 +4,7 @@ The mandatory compile-only gate ran before runtime implementation.
 
 `spike/initial.ts.txt` records the original `const S extends Base` test. TypeScript reported two unused `@ts-expect-error` directives: the decoded input and Parts parameters were `any`. That signature did not meet section 8.3.
 
-The revised API uses `defineValue({kind, wire, decode}).with({toWireShape, ...})` and `defineDerived({kind, derive}).with({fields, ...})`. The first stage infers the producer output. The second stage contextually types all projections using that established type. This is the builder revision expressly allowed by sections 8.3 and 16.1. Input parameter annotations on `derive` and `allocate` define their domains; projection parameters need no annotations.
+The revised API uses `defineValue({kind, wire, decode}).with({toWireShape, ...})` and `defineDerived({kind, derive}).with({view, ...})`. The first stage infers the producer output. The second stage contextually types all projections using that established type. This is the builder revision expressly allowed by sections 8.3 and 16.1. Input parameter annotations on `derive` and `allocate` define their domains; projection parameters need no annotations.
 
 `npx tsc --noEmit` passed with the four reference shapes in `spike/inference.ts`. The assertions detect `any`, verify exact allocator and field types, check raw versus decoded composite data, and reject cross-kind assignments, equality, and non-JSON inputs. `spike/api.ts` contains the historical pre-amendment declarations only. No runtime implementation existed at this gate.
 
@@ -27,4 +27,6 @@ The first two alternatives preserve the required runtime and type properties wit
 
 ## Accepted amendments
 
-The producer/.with inference stages are unchanged. Instance types now preserve optional canonical() and the exact zero-argument functions under view. Empty fields omit view. Kind types carry map/set factories with exact key and value constraints. Same-kind branding is unchanged; the complete structural instance surface also includes the configured projections. The test suite checks actual compiler output for reserved names instead of accepting an opaque never-type error.
+The producer/.with inference stages are unchanged. Instance types now preserve optional canonical() and the exact read-only property types under view. An empty view omits the instance member. Kind types carry map/set factories with exact key and value constraints. Same-kind branding is unchanged; the complete structural instance surface also includes the configured projections. The test suite checks actual compiler output for reserved names instead of accepting an opaque never-type error.
+
+The optional `.docs()` stage uses completed wire and projection types. Compile-only tests reject wrong samples, missing canonical support, unknown view names, and raw/decoded nested wire confusion. `ValueOf` and allocator inference remain unchanged after documentation is attached.

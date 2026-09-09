@@ -4,7 +4,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
-test('compiler diagnostics name reserved fields and explain the correction', () => {
+test('compiler diagnostics name reserved view and explain the correction', () => {
   const dir = mkdtempSync(join(tmpdir(), 'canonical-diagnostics-'));
   try {
     const file = join(dir, 'reserved.mts');
@@ -14,7 +14,7 @@ test('compiler diagnostics name reserved fields and explain the correction', () 
         ['encode', 'canonical', 'view', 'get', 'parts']
           .map(
             (name) =>
-              `defineDerived({kind:'diagnostic/${name}',derive:(s:string)=>ok(s)}).with({fields:{${name}:p=>p}});`,
+              `defineDerived({kind:'diagnostic/${name}',derive:(s:string)=>ok(s)}).with({view:{${name}:p=>p}});`,
           )
           .join('\n'),
     );

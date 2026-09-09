@@ -29,7 +29,7 @@ export type ValueOf<Kd extends AnyKind> = Kd extends { is(x: unknown): x is infe
   ? V
   : never;
 export type ProjectionOptions<P> = {
-  fields?: Record<string, (p: P) => unknown>;
+  view?: Record<string, (p: P) => unknown>;
   debug?: (p: P) => string;
 };
 export type ValueOptions<W extends z.ZodType, P> = ProjectionOptions<P> & {
@@ -38,14 +38,12 @@ export type ValueOptions<W extends z.ZodType, P> = ProjectionOptions<P> & {
   allocate?: (...args: any[]) => z.input<W>;
   canonical?: (p: P) => unknown;
 };
-type Views<O> = O extends { fields: infer F }
+type Views<O> = O extends { view: infer F }
   ? keyof F extends never
     ? {}
     : {
         readonly view: {
-          readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R
-            ? () => R
-            : never;
+          readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R ? R : never;
         };
       }
   : {};
@@ -128,9 +126,9 @@ export type ReservedField =
   | 'toString';
 export type CheckedOptions<O, Allowed> = O &
   Record<Exclude<keyof O, keyof Allowed>, never> &
-  (O extends { fields: infer F }
+  (O extends { view: infer F }
     ? {
-        fields: F & {
+        view: F & {
           [N in Extract<keyof F, ReservedField>]: {
             readonly [
               Message in `Field name "${N}" is reserved. Choose a different projection name.`
@@ -138,7 +136,7 @@ export type CheckedOptions<O, Allowed> = O &
           };
         } & {
           [N in Extract<keyof F, symbol>]: {
-            readonly 'Symbol-named fields are not supported. Use a string projection name.': never;
+            readonly 'Symbol-named projections are not supported. Use a string projection name.': never;
           };
         };
       }
@@ -147,13 +145,15 @@ export type CheckedOptions<O, Allowed> = O &
 /** Examples describe outputs; they do not configure or validate the producer. */
 export type ProjectionDocumentation<O> = Readonly<{
   description?: string;
-  views?: O extends { fields: infer F }
-    ? {
-        readonly [N in keyof F]?: Readonly<{
-          description?: string;
-          example?: F[N] extends (...args: any[]) => infer R ? R : never;
-        }>;
-      }
+  views?: O extends { view: infer F }
+    ? keyof F extends never
+      ? never
+      : {
+          readonly [N in keyof F]?: Readonly<{
+            description?: string;
+            example?: F[N] extends (...args: any[]) => infer R ? R : never;
+          }>;
+        }
     : never;
 }>;
 export type ValueDocumentation<W extends z.ZodType, O> = ProjectionDocumentation<O> &
