@@ -68,7 +68,7 @@ export type DerivedValue<K extends string, O> = Proof<K> & Views<O>;
 export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
   {
     /** Attach typed documentation without changing the producer or its brand. */
-    docs<const D extends ValueDocumentation<W, O> & Record<keyof D, unknown>>(
+    docs<const D extends DocumentationInput<D, ValueDocumentation<W, O>>>(
       metadata: CheckedDocumentation<D, ValueDocumentation<W, O>>,
     ): ValueKind<K, W, O> & {
       readonly documentation: ValueDocumentation<W, O>;
@@ -88,7 +88,7 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
 >;
 export type DerivedKind<K extends string, I, O> = Readonly<{
   /** Attach documentation without changing the derivation or its brand. */
-  docs<const D extends DerivedDocumentation<O> & Record<keyof D, unknown>>(
+  docs<const D extends DocumentationInput<D, DerivedDocumentation<O>>>(
     metadata: CheckedDocumentation<D, DerivedDocumentation<O>>,
   ): DerivedKind<K, I, O> & {
     readonly documentation: DerivedDocumentation<O>;
@@ -171,27 +171,31 @@ export type ProjectionDocumentation<O> = Readonly<{ description?: string }> &
     ? keyof F extends never
       ? {}
       : {
-          readonly view?: {
-            readonly [N in keyof F]?: Readonly<{
-              description?: string;
+          readonly view: {
+            readonly [N in keyof F]: Readonly<{
+              description: string;
               example?: F[N] extends (...args: any[]) => infer R ? R : never;
             }>;
           };
         }
     : {});
 export type DerivedDocumentation<O> = ProjectionDocumentation<O>;
-export type ValueDocumentation<W extends z.ZodType, O> = ProjectionDocumentation<O> &
-  Readonly<{ exampleWire?: z.input<W> }> &
+export type ValueExample<W extends z.ZodType, O> = Readonly<{
+  input: z.input<W>;
+  encoded: z.input<W>;
+}> &
   (O extends { canonical: (...args: any[]) => infer C }
-    ? Readonly<{ exampleCanonical?: C }>
+    ? Readonly<{ canonical: C }>
     : {});
+export type ValueDocumentation<W extends z.ZodType, O> = ProjectionDocumentation<O> &
+  Readonly<{
+    examples: readonly [ValueExample<W, O>, ...ValueExample<W, O>[]];
+  }>;
 
-type DocumentationMessage<N, Allowed> = N extends 'exampleCanonical'
-  ? 'exampleWire' extends keyof Allowed
-    ? 'exampleCanonical requires canonical in .with(...). Add canonical or remove exampleCanonical.'
-    : 'Derived definitions have no canonical representation. Remove exampleCanonical.'
-  : N extends 'exampleWire'
-    ? 'Derived definitions have no wire representation. Remove exampleWire.'
+type DocumentationMessage<N> = N extends 'exampleCanonical' | 'exampleWire'
+  ? 'Separate exampleWire/exampleCanonical fields were replaced by examples: [{ input, encoded, canonical }].'
+  : N extends 'examples'
+    ? 'Derived definitions have no wire examples. Remove examples.'
     : N extends 'view'
       ? 'docs.view requires declared projections. Add projections to .with({ view: ... }) first.'
       : N extends 'views'
@@ -199,12 +203,25 @@ type DocumentationMessage<N, Allowed> = N extends 'exampleCanonical'
         : N extends string
           ? `Unknown documentation property "${N}". Check the documentation property name.`
           : 'Symbol-named documentation properties are not supported.';
+type ExampleAt<A> = A extends { readonly examples: readonly (infer E)[] } ? E : {};
+type CheckedExample<P, A> = P & {
+  [N in Exclude<keyof P, keyof A>]: ConfigurationError<
+    N extends 'canonical'
+      ? 'Example canonical requires canonical in .with(...). Add canonical or remove the example canonical.'
+      : 'Unknown example property. Use input, encoded, and canonical when configured.'
+  >;
+};
+type DocumentationInput<P, A> = A &
+  Record<keyof P, unknown> &
+  ('examples' extends keyof A
+    ? { examples: readonly (ExampleAt<A> & Record<keyof ExampleAt<P>, unknown>)[] }
+    : unknown);
 export type CheckedDocumentation<Provided, Allowed> = Provided & {
   [N in Exclude<keyof Provided, keyof Allowed>]: ConfigurationError<
-    DocumentationMessage<N, Allowed>
+    DocumentationMessage<N>
   >;
 } & (Provided extends { view: infer V }
-    ? Allowed extends { readonly view?: infer A }
+    ? Allowed extends { readonly view: infer A }
       ? {
           view: V & {
             [N in Exclude<keyof V, keyof A>]: ConfigurationError<
@@ -214,6 +231,11 @@ export type CheckedDocumentation<Provided, Allowed> = Provided & {
             >;
           };
         }
+      : unknown
+    : unknown) &
+  (Provided extends { examples: infer E extends readonly unknown[] }
+    ? 'examples' extends keyof Allowed
+      ? { examples: { [I in keyof E]: CheckedExample<E[I], ExampleAt<Allowed>> } }
       : unknown
     : unknown);
 

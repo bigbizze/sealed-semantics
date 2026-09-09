@@ -31,8 +31,7 @@ const UserId = defineValue({
   debug: p => `user(…${p.spelling.slice(-6)})`,
 }).docs({
   description: 'A normalized user identifier.',
-  exampleWire: 'usr_0123456789abcdef',
-  exampleCanonical: { type: 'utf8', value: 'usr_0123456789abcdef' },
+  examples: [{ input: 'usr_0123456789abcdef', encoded: 'usr_0123456789abcdef', canonical: { type: 'utf8', value: 'usr_0123456789abcdef' } }],
 });
 type UserId = ValueOf<typeof UserId>;
 
@@ -134,7 +133,9 @@ Development: `npm ci`, then `npm run check`. See [release checks](docs/releasing
 
 Optional `.docs({...})` returns a frozen kind with the same producer and brand.
 Read metadata through `Kind.documentation`. Examples are checked against completed types.
-Use `assertValueDocs(Kind)` from `sealed-semantics/laws` in CI to check wire examples.
+Use `assertValueDocs(Kind)` from `sealed-semantics/docs` to check linked input, encoded, and canonical examples.
 Documentation does not run schemas or callbacks at startup. See [documentation metadata](docs/documentation.md).
 
 The only runtime exports are `defineValue` and `defineDerived`. Use [structurally compatible producer results](docs/producer-results.md); there are no public `ok` or `err` helpers.
+
+Require docs in CI with `sealed-semantics check-docs dist/definitions.js` (imports the selected module).

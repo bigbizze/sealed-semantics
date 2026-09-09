@@ -33,3 +33,5 @@ For projections containing sealed children of other kinds, pass `sealedKinds: [N
 Common laws now also require frozen kinds, instances, and prototypes. Dedicated tests attempt property addition, prototype replacement, method deletion, and method replacement, then confirm that lazy view caching and all projections still work.
 
 Configure custom view mutators under `projectionMutators.view`. The harness reads each view getter again after mutation, so it checks fresh outputs against the earlier observations.
+
+The deterministic documentation checks are available through `sealed-semantics/docs` without fast-check, and re-exported here. They verify linked input, encoded, and canonical examples and complete projection descriptions. See [executable documentation](documentation.md).

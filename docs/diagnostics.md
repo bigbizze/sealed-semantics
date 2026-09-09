@@ -4,9 +4,9 @@ Allowed documentation and law-option types contain only capabilities present on 
 
 | Invalid configuration | Explanation now included |
 | --- | --- |
-| `exampleCanonical` without `canonical` | Add `canonical` to `.with(...)` or remove `exampleCanonical`. |
+| Example `canonical` without a configured canonical | Add `canonical` to `.with(...)` or remove the example property. |
 | `docs.view` without projections, including `view: {}` | Declare projections in `.with({ view: ... })` first. |
-| Derived `exampleWire` or `exampleCanonical` | Derived definitions have no corresponding representation; remove that example. |
+| Derived `examples` | Derived definitions have no wire representation; remove the examples. |
 | Derived `canonical`, `allocate`, `toWireShape`, or `equals` | These options are available only on semantic definitions. |
 | Old `fields` option | Rename it to `view`. |
 | Unknown `.with` option | Check its name; documentation belongs in `.docs(...)`. If inference falls back to the options constraint, TypeScript can instead report its normal unknown-property error. |
@@ -25,3 +25,5 @@ Normal TypeScript messages remain for wrong sample shapes, unknown documentation
 Remaining uses of `never` are not opaque configuration bans: throwing coercion methods never return; internal success/failure helpers use impossible result branches; internal conditional types use `never` when extracting absent or non-callable members; empty-key checks remove absent views; and the explanatory error requirements themselves cannot be constructed. A producer callback explicitly returning `never` still has an impossible output type. The library does not convert that output into an error marker or weaken it.
 
 Compiler-output tests cover prerequisite failures for both object and scalar examples. Inference tests check that valid projection arguments, examples, allocator tuples, and completed value types remain precise. The package test compiles those constraints against emitted declarations. As elsewhere in TypeScript, caller-authored `any` and assertions can bypass static checks.
+
+Semantic docs now require non-empty linked examples with input and encoded, plus canonical when configured. Projection docs require every declared name and a description. Missing members use TypeScript’s required-property diagnostics; removed independent example fields receive a migration message.

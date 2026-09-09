@@ -20,6 +20,9 @@ test('autocomplete suggests only configured documentation and law capabilities',
     Derived.docs({ /*derived*/ });
     Viewed.docs({ /*viewed*/ });
     Full.docs({view:{ /*names*/ }});
+    Basic.docs({examples:[{ /*basicExample*/ }]});
+    Full.docs({examples:[{ /*fullExample*/ }],view:{suffix:{description:'Suffix'}}});
+    Full.docs({examples:[{input:'x',encoded:'x',canonical:{text:'x'}}],view:{suffix:{ /*projectionDoc*/ }}});
     assertValueLaws(Basic,{validWire:fc.string(), /*basicLaws*/ });
     assertValueLaws(Full,{validWire:fc.string(), /*fullLaws*/ });
     assertDerivedLaws(Derived,{validInput:fc.string(), /*derivedLaws*/ });
@@ -56,18 +59,23 @@ test('autocomplete suggests only configured documentation and law capabilities',
   };
   const service = ts.createLanguageService(host);
   try {
-    assert.deepEqual(
-      service
-        .getSemanticDiagnostics(filename)
-        .map((d) => ts.flattenDiagnosticMessageText(d.messageText, '\n')),
-      [],
-    );
+    // Empty editing positions deliberately omit required documentation. Errors
+    // may occur there, but never in the producer definitions or law calls.
+    for (const diagnostic of service.getSemanticDiagnostics(filename)) {
+      assert(
+        diagnostic.start! >= source.indexOf('Basic.docs('),
+        ts.flattenDiagnosticMessageText(diagnostic.messageText, '\n'),
+      );
+    }
     const expected: Record<string, string[]> = {
-      basic: ['description', 'exampleWire'],
-      full: ['description', 'exampleWire', 'exampleCanonical', 'view'],
+      basic: ['description', 'examples'],
+      full: ['description', 'examples', 'view'],
       derived: ['description'],
       viewed: ['description', 'view'],
       names: ['suffix'],
+      basicExample: ['input', 'encoded'],
+      fullExample: ['input', 'encoded', 'canonical'],
+      projectionDoc: ['description', 'example'],
       basicLaws: ['equivalentAliases', 'projectionMutators', 'sealedKinds'],
       fullLaws: [
         'equivalentAliases',

@@ -119,19 +119,19 @@ test('ValueOf explains missing .with without expanding the builder signature', (
 test('configuration diagnostics explain missing prerequisites and forbidden options', () => {
   const cases: [string, string][] = [
     [
-      `Basic.docs({views:{}});`,
+      `Basic.docs({examples:[{input:'x',encoded:'x'}],views:{}});`,
       'The docs.views property was renamed to view. Use .docs({ view: ... }).',
     ],
     [
-      `Basic.docs({exampleCanonical:{type:'utf8',value:'x'}});`,
-      'exampleCanonical requires canonical in .with(...). Add canonical or remove exampleCanonical.',
+      `Basic.docs({examples:[{input:'x',encoded:'x',canonical:{type:'utf8',value:'x'}}]});`,
+      'Example canonical requires canonical in .with(...). Add canonical or remove the example canonical.',
     ],
     [
-      `Basic.docs({exampleCanonical:'x'});`,
-      'exampleCanonical requires canonical in .with(...)',
+      `Basic.docs({examples:[{input:'x',encoded:'x',canonical:'x'}]});`,
+      'Example canonical requires canonical in .with(...)',
     ],
     [
-      `Basic.docs({view:{suffix:{example:'x'}}});`,
+      `Basic.docs({examples:[{input:'x',encoded:'x'}],view:{suffix:{description:'Suffix'}}});`,
       'docs.view requires declared projections. Add projections to .with({ view: ... }) first.',
     ],
     [
@@ -140,11 +140,11 @@ test('configuration diagnostics explain missing prerequisites and forbidden opti
     ],
     [
       `Derived.docs({exampleWire:'x'});`,
-      'Derived definitions have no wire representation. Remove exampleWire.',
+      'Separate exampleWire/exampleCanonical fields were replaced by examples: [{ input, encoded, canonical }].',
     ],
     [
       `Derived.docs({exampleCanonical:{type:'utf8',value:'x'}});`,
-      'Derived definitions have no canonical representation. Remove exampleCanonical.',
+      'Separate exampleWire/exampleCanonical fields were replaced by examples: [{ input, encoded, canonical }].',
     ],
     [
       `Builder.with({toWireShape:(p:string)=>p,canoncal:()=>0});`,

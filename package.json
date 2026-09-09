@@ -23,10 +23,15 @@
     "./laws": {
       "types": "./dist/laws.d.ts",
       "import": "./dist/laws.js"
+    },
+    "./docs": {
+      "types": "./dist/docs.d.ts",
+      "import": "./dist/docs.js"
     }
   },
   "bin": {
-    "check-kinds": "bin/check-kinds.mjs"
+    "check-kinds": "bin/check-kinds.mjs",
+    "sealed-semantics": "bin/sealed-semantics.mjs"
   },
   "scripts": {
     "build": "node node_modules/typescript/bin/tsc -p tsconfig.build.json",

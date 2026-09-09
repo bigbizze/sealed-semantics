@@ -16,6 +16,8 @@ const run = (cmd, args, cwd = root) =>
 const metadata = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json']))[0];
 assert(metadata.files.some((f) => f.path === 'dist/index.d.ts'));
 assert(metadata.files.some((f) => f.path === 'bin/check-kinds.mjs'));
+assert(metadata.files.some((f) => f.path === 'bin/sealed-semantics.mjs'));
+assert(metadata.files.some((f) => f.path === 'dist/docs.d.ts'));
 assert(
   !metadata.files.some(
     (f) => f.path.startsWith('test/') || f.path.startsWith('node_modules/'),
@@ -51,6 +53,35 @@ try {
       "import {defineValue} from 'sealed-semantics'; import {z} from 'zod'; const K=defineValue({kind:'consumer/no-test-peer',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p}); if (!K.parse('x').ok) throw Error();",
     ],
     temp,
+  );
+  // The deterministic docs entry and CLI must work without fast-check.
+  writeFileSync(
+    join(temp, 'docs-good.mjs'),
+    `
+    import {defineValue,defineDerived} from 'sealed-semantics';
+    import {z} from 'zod';
+    export const Id=defineValue({kind:'consumer/documented',wire:z.string(),decode:s=>({ok:true,value:s})})
+      .with({toWireShape:p=>p,canonical:p=>p})
+      .docs({examples:[{input:'x',encoded:'x',canonical:'x'}]});
+    export const Plan=defineDerived({kind:'consumer/documented-plan',derive:i=>({ok:true,value:i})}).with({}).docs({});
+  `,
+  );
+  const docsCli = join(temp, 'node_modules/sealed-semantics/bin/sealed-semantics.mjs');
+  run(process.execPath, [docsCli, 'check-docs', 'docs-good.mjs'], temp);
+  writeFileSync(
+    join(temp, 'docs-bad.mjs'),
+    `
+    import {defineDerived} from 'sealed-semantics';
+    export const Missing=defineDerived({kind:'consumer/missing-docs',derive:i=>({ok:true,value:i})}).with({});
+    export const Incomplete=defineDerived({kind:'consumer/missing-view-docs',derive:i=>({ok:true,value:i})}).with({view:{text:p=>p}}).docs({view:{}});
+  `,
+  );
+  assert.throws(
+    () => run(process.execPath, [docsCli, 'check-docs', 'docs-bad.mjs'], temp),
+    (error) =>
+      error.status === 1 &&
+      error.stderr.includes('missing .docs()') &&
+      error.stderr.includes('view.text missing description'),
   );
   run(
     'npm',
@@ -140,7 +171,7 @@ try {
  const foreign=await import('./node_modules/sealed-semantics-copy/dist/collections.js');
  assert.equal(new foreign.ValueMap(A).set(x,1).get(y),1);
  assert.equal(new foreign.ValueSet(D).add(p).add(q).size,2);
- assertValueDocs(A.docs({exampleWire:'x'}));
+ assertValueDocs(A.docs({examples:[{input:'x',encoded:'x'}]}));
  assertValueLaws(A,{validWire:fc.string()});
  assertValueLaws(Composite,{validWire:fc.record({id:fc.string()}),sealedKinds:[A]});
  for (const path of ['seal','definition','documentation','codec','keying','collections','dist/seal.js','src/seal.ts']) await assert.rejects(import('sealed-semantics/'+path),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});

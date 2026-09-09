@@ -34,3 +34,5 @@ Hardening verification: all 27 tests pass on Node 22.14.0 and 24.21.0. Type chec
 Optional `.docs(metadata)` returns a new frozen kind with the same producer and brand. Metadata is exposed as `Kind.documentation`; it does not configure semantics. See [documentation metadata](documentation.md) for typed samples and the explicit `assertValueDocs` check.
 
 The producer/result contract is named `ProducerResult<T, E = ValueError>`. Runtime `ok` and `err` exports are removed. Producers return the structural success/failure shape directly or use consumer-owned compatible helpers. This supersedes the historical specification’s result API; error preservation is unchanged. See [producer results](producer-results.md).
+
+Documentation uses non-empty linked `examples` with required raw `input` and normalized `encoded`, and required `canonical` iff configured. The independent example fields are removed. Every declared projection requires a description. `.docs()` remains optional; the explicit docs checker and CLI enforce project completeness and verify examples without adding validation to definition initialization.

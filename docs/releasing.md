@@ -1,6 +1,6 @@
 # Preparing a release
 
-This repository builds an ESM npm package with declaration files. The package exports the main API and the separate Node-only law harness. Internal modules are blocked by the package export map. The `check-kinds` executable is included. Zod is required; fast-check is an optional peer for the law harness. Main-only installation is verified without fast-check, followed by a separate installation for law tests.
+This repository builds an ESM npm package with declaration files. The package exports the main API, the Node-only law harness, and the deterministic Node-only docs checker. Internal modules are blocked by the package export map. The `check-kinds` and `sealed-semantics check-docs` executables are included. Zod is required; fast-check is an optional peer for the law harness. Main-only installation is verified without fast-check, followed by a separate installation for law tests.
 
 1. Run `npm ci` and `npm run check`.
 2. Run `npm run test:package` for the minimum Zod version, then `npm run test:package -- 4` for current Zod 4.

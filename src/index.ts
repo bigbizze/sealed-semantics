@@ -24,6 +24,7 @@ export type {
   JsonValue,
   AnyKind,
   ValueDocumentation,
+  ValueExample,
   ProjectionDocumentation,
   DerivedDocumentation,
 } from './types.js';
@@ -93,7 +94,11 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
           allocate: (...args: Parameters<typeof allocate>) => parse(allocate(...args)),
         });
       Object.assign(result, collections(result as unknown as AnyKind));
-      return documentedKind(result) as unknown as ValueKind<K, W, O>;
+      return documentedKind(result, {
+        semantic: true,
+        canonical: !!canonical,
+        view: Object.keys(options.view ?? {}),
+      }) as unknown as ValueKind<K, W, O>;
     },
   });
 }
@@ -122,7 +127,11 @@ export function defineDerived<const K extends string, I, P>(spec: {
         },
       };
       Object.assign(result, collections(result as unknown as AnyKind));
-      return documentedKind(result) as unknown as DerivedKind<K, I, O>;
+      return documentedKind(result, {
+        semantic: false,
+        canonical: false,
+        view: Object.keys(options.view ?? {}),
+      }) as unknown as DerivedKind<K, I, O>;
     },
   });
 }

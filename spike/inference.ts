@@ -288,52 +288,91 @@ frozenBuilder.with = frozenBuilder.with;
 
 const DocumentedUser = UserId.docs({
   description: 'A user identifier.',
-  exampleWire: 'usr_0123456789abcdef',
-  exampleCanonical: { type: 'utf8', value: 'usr_0123456789abcdef' },
+  examples: [
+    {
+      input: 'usr_0123456789abcdef',
+      encoded: 'usr_0123456789abcdef',
+      canonical: { type: 'utf8', value: 'usr_0123456789abcdef' },
+    },
+  ],
 });
 type DocumentedValue = Assert<
   Equal<ValueOf<typeof DocumentedUser>, ValueOf<typeof UserId>>
 >;
 DocumentedUser.allocate(() => 'usr_0123456789abcdef');
-// @ts-expect-error Documentation cannot change the inferred wire type.
-UserId.docs({ exampleWire: 123 });
-// @ts-expect-error Canonical examples must have the complete return shape.
-UserId.docs({ exampleCanonical: { type: 'utf8' } });
-// @ts-expect-error No canonical operation exists.
-NamespaceId.docs({ exampleCanonical: 'ns:x' });
-// @ts-expect-error No view exist.
-NamespaceId.docs({ view: { suffix: { example: 'abc' } } });
-// @ts-expect-error Documentation spelling is checked.
-UserId.docs({ descriptin: 'typo' });
-// @ts-expect-error Metadata container is readonly.
+// @ts-expect-error Metadata remains read-only.
 DocumentedUser.documentation.description = 'changed';
-ContentAddress.docs({ view: { contentClass: { example: 'primary' } } });
-// @ts-expect-error Projection example must match its inferred enum.
-ContentAddress.docs({ view: { contentClass: { example: 'invalid' } } });
-// @ts-expect-error Unknown projection name.
-ContentAddress.docs({ view: { suffix: { example: 'abc' } } });
-PreparedWrite.docs({ description: 'Local write proof.' });
-// @ts-expect-error Derived kinds have no wire representation.
-PreparedWrite.docs({ exampleWire: 'anything' });
-// @ts-expect-error Projection properties are read-only.
-address.view.contentClass = 'primary';
-// @ts-expect-error A projection value is not a zero-argument method.
-address.view.contentClass();
-// @ts-expect-error Empty view do not accept projection documentation.
-empty.docs({ view: { missing: { example: 1 } } });
-
-ContentAddress.docs({
-  exampleWire: {
-    namespace_id: 'ns:example',
-    content_class: 'primary',
-    digest: 'abcdef',
+// @ts-expect-error Examples are required once semantic documentation is supplied.
+NamespaceId.docs({ description: 'Namespace' });
+// @ts-expect-error At least one example is required.
+NamespaceId.docs({ examples: [] });
+// @ts-expect-error Both input and encoded are required.
+NamespaceId.docs({ examples: [{ input: 'ns:x' }] });
+// @ts-expect-error Input uses RawWire.
+NamespaceId.docs({ examples: [{ input: 1, encoded: 'ns:x' }] });
+// @ts-expect-error Encoded also uses RawWire.
+NamespaceId.docs({ examples: [{ input: 'ns:x', encoded: 1 }] });
+// @ts-expect-error Configured canonical must appear in every example.
+UserId.docs({ examples: [{ input: 'usr_x', encoded: 'usr_x' }] });
+UserId.docs({
+  // @ts-expect-error Canonical has its exact result shape.
+  examples: [{ input: 'usr_x', encoded: 'usr_x', canonical: { type: 'utf8' } }],
+});
+// @ts-expect-error Canonical is absent when not configured.
+NamespaceId.docs({ examples: [{ input: 'ns:x', encoded: 'ns:x', canonical: 'x' }] });
+// @ts-expect-error The independent fields have been removed.
+UserId.docs({ exampleWire: 'x', exampleCanonical: { type: 'utf8', value: 'x' } });
+// @ts-expect-error All declared projections require documentation.
+PreparedWrite.docs({ description: 'Plan' });
+// @ts-expect-error A projection description is required.
+PreparedWrite.docs({ view: { rows: {}, contentToRetain: { description: 'Content' } } });
+// @ts-expect-error Missing declared projection.
+PreparedWrite.docs({ view: { rows: { description: 'Rows' } } });
+PreparedWrite.docs({
+  view: {
+    rows: { description: 'Rows' },
+    contentToRetain: { description: 'Content' },
+    // @ts-expect-error Unknown projection is rejected.
+    extra: { description: 'Wrong' },
   },
 });
-ContentAddress.docs({
-  // @ts-expect-error Nested documentation uses raw wire, not a sealed child.
-  exampleWire: { namespace_id: user, content_class: 'primary', digest: 'abcdef' },
+PreparedWrite.docs({
+  view: {
+    // @ts-expect-error Example must have the projection result type.
+    rows: { description: 'Rows', example: 42 },
+    contentToRetain: { description: 'Content' },
+  },
 });
-// @ts-expect-error The former fields option is no longer accepted.
+// @ts-expect-error Derived definitions cannot have wire examples.
+empty.docs({ examples: [{ input: 'x', encoded: 'x' }] });
+// @ts-expect-error Empty projections do not introduce view documentation.
+empty.docs({ view: { extra: { description: 'No projection' } } });
+const compositeWire = {
+  namespace_id: 'ns:example',
+  content_class: 'primary' as const,
+  digest: 'abcdef',
+};
+const compositeDocs = {
+  examples: [{ input: compositeWire, encoded: compositeWire }] as const,
+  view: {
+    namespace: { description: 'Namespace' },
+    contentClass: { description: 'Class', example: 'primary' as const },
+    digest: { description: 'Digest' },
+  },
+};
+ContentAddress.docs(compositeDocs);
+ContentAddress.docs({
+  ...compositeDocs,
+  examples: [
+    // @ts-expect-error Nested documentation uses raw wire, not sealed children.
+    { input: { ...compositeWire, namespace_id: user }, encoded: compositeWire },
+  ],
+});
+// @ts-expect-error View properties are readonly.
+address.view.contentClass = 'primary';
+// @ts-expect-error Projection values are not methods.
+address.view.contentClass();
+// @ts-expect-error Removed configuration spelling.
 defineDerived({ kind: 'invalid/old-fields', derive: () => ok(0) }).with({ fields: {} });
 
 const unfinishedValue = defineValue({
@@ -428,17 +467,21 @@ type NamedProjection = Assert<
 
 // @ts-expect-error Documentation terminology matches the view definition and facade.
 ContentAddress.docs({ views: { contentClass: { example: 'primary' } } });
-const documentedDerived = PreparedWrite.docs({ description: 'Plan' });
+const documentedDerived = PreparedWrite.docs({
+  view: { rows: { description: 'Rows' }, contentToRetain: { description: 'Content' } },
+});
 type NoDerivedWireDocs = Assert<
   Equal<
-    'exampleWire' extends keyof typeof documentedDerived.documentation ? true : false,
+    'examples' extends keyof typeof documentedDerived.documentation ? true : false,
     false
   >
 >;
-const basicDocumentation = NamespaceId.docs({ description: 'Namespace' });
+const basicDocumentation = NamespaceId.docs({
+  examples: [{ input: 'ns:x', encoded: 'ns:x' }],
+});
 type NoCanonicalDocs = Assert<
   Equal<
-    'exampleCanonical' extends keyof typeof basicDocumentation.documentation
+    'canonical' extends keyof (typeof basicDocumentation.documentation.examples)[0]
       ? true
       : false,
     false

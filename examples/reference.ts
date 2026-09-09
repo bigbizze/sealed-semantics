@@ -28,27 +28,49 @@ export const UserId = defineValue({
           issues: ['Invalid alias'],
         } as const);
   },
-}).with({
-  toWireShape: (p) => p.spelling,
-  allocate: (gen: () => string) => `user:${gen()}`,
-  canonical: (p) => ({ type: 'utf8', value: p.spelling }),
-  debug: (p) => `user(…${p.spelling.slice(-6)})`,
-});
+})
+  .with({
+    toWireShape: (p) => p.spelling,
+    allocate: (gen: () => string) => `user:${gen()}`,
+    canonical: (p) => ({ type: 'utf8', value: p.spelling }),
+    debug: (p) => `user(…${p.spelling.slice(-6)})`,
+  })
+  .docs({
+    examples: [
+      {
+        input: 'user:550e8400-e29b-41d4-a716-446655440000',
+        encoded: 'usr_550e8400e29b41d4a716446655440000',
+        canonical: { type: 'utf8', value: 'usr_550e8400e29b41d4a716446655440000' },
+      },
+    ],
+  });
 export type UserId = ValueOf<typeof UserId>;
 export const Sha256Digest = defineValue({
   kind: 'example/sha256',
   wire: z.string().regex(/^[a-f0-9]{64}$/),
   decode: (hex) => succeed({ bytes: hexToBytes(hex) }),
-}).with({
-  toWireShape: (p) => bytesToHex(p.bytes),
-  equals: (a, b) => constantTimeEqual(a.bytes, b.bytes),
-  canonical: (p) => ({ type: 'bytes', value: p.bytes.slice() }),
-});
+})
+  .with({
+    toWireShape: (p) => bytesToHex(p.bytes),
+    equals: (a, b) => constantTimeEqual(a.bytes, b.bytes),
+    canonical: (p) => ({ type: 'bytes', value: p.bytes.slice() }),
+  })
+  .docs({
+    examples: [
+      {
+        input: 'ab'.repeat(32),
+        encoded: 'ab'.repeat(32),
+        canonical: { type: 'bytes', value: new Uint8Array(32).fill(0xab) },
+      },
+    ],
+  });
 export const NamespaceId = defineValue({
   kind: 'example/namespace-id',
   wire: z.string().regex(/^ns:[a-z]+$/),
   decode: (w) => succeed(w),
-}).with({ toWireShape: (p) => p });
+})
+  .with({ toWireShape: (p) => p })
+  .docs({ examples: [{ input: 'ns:example', encoded: 'ns:example' }] });
 export const ContentAddress = defineValue({
   kind: 'example/content-address',
   wire: z.object({
@@ -57,14 +79,36 @@ export const ContentAddress = defineValue({
     digest: Sha256Digest.wire,
   }),
   decode: (w) => succeed(w),
-}).with({
-  toWireShape: (p) => p,
-  view: {
-    namespace: (p) => p.namespace_id,
-    contentClass: (p) => p.content_class,
-    digest: (p) => p.digest,
-  },
-});
+})
+  .with({
+    toWireShape: (p) => p,
+    view: {
+      namespace: (p) => p.namespace_id,
+      contentClass: (p) => p.content_class,
+      digest: (p) => p.digest,
+    },
+  })
+  .docs({
+    examples: [
+      {
+        input: {
+          namespace_id: 'ns:example',
+          content_class: 'primary',
+          digest: 'ab'.repeat(32),
+        },
+        encoded: {
+          namespace_id: 'ns:example',
+          content_class: 'primary',
+          digest: 'ab'.repeat(32),
+        },
+      },
+    ],
+    view: {
+      namespace: { description: 'Owning namespace.' },
+      contentClass: { description: 'Content classification.' },
+      digest: { description: 'SHA-256 content digest.' },
+    },
+  });
 export type ContentAddress = ValueOf<typeof ContentAddress>;
 export interface PrepareInput {
   rows: { id: string; content: ContentAddress }[];
@@ -88,10 +132,17 @@ export const PreparedWrite = defineDerived({
       contentToRetain: [...input.content],
     });
   },
-}).with({
-  view: {
-    rows: (p) => copyWriteRows(p.rows) as Readonly<WriteRows>,
-    contentToRetain: (p) => [...p.contentToRetain] as readonly ContentAddress[],
-  },
-});
+})
+  .with({
+    view: {
+      rows: (p) => copyWriteRows(p.rows) as Readonly<WriteRows>,
+      contentToRetain: (p) => [...p.contentToRetain] as readonly ContentAddress[],
+    },
+  })
+  .docs({
+    view: {
+      rows: { description: 'Detached rows to write.' },
+      contentToRetain: { description: 'Sealed content addresses to retain.' },
+    },
+  });
 export const prepareWrite = PreparedWrite.derive;
