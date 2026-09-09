@@ -1,6 +1,8 @@
 type Metadata = {
   readonly description?: string;
-  readonly views?: Readonly<
+  readonly exampleWire?: unknown;
+  readonly exampleCanonical?: unknown;
+  readonly view?: Readonly<
     Record<string, { readonly description?: string; readonly example?: unknown }>
   >;
 };
@@ -11,10 +13,10 @@ export function documentedKind<T extends object>(kind: T, metadata?: Metadata): 
   const result = { ...kind, docs: (next: Metadata) => documentedKind(kind, next) };
   if (metadata !== undefined) {
     const documentation = { ...metadata };
-    if (metadata.views !== undefined) {
-      documentation.views = Object.freeze(
+    if (metadata.view !== undefined) {
+      documentation.view = Object.freeze(
         Object.fromEntries(
-          Object.entries(metadata.views).map(([name, view]) => [
+          Object.entries(metadata.view).map(([name, view]) => [
             name,
             Object.freeze({ ...view }),
           ]),

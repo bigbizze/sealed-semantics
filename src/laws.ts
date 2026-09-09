@@ -15,16 +15,82 @@ type Derived = CollectionKind & { derive(input: any): Result<any> };
 type Return<K, N extends PropertyKey> =
   K extends Record<N, (...args: any[]) => infer R> ? R : never;
 type Mutator<T> = (value: T) => void;
-type ProjectionMutator<V, N extends 'encode' | 'canonical'> =
-  V extends Record<N, (...args: any[]) => infer R>
-    ? Mutator<R>
-    : ConfigurationError<`projectionMutators.${N} requires a declared ${N} operation. Remove this mutator.`>;
 type Mutators<K extends AnyKind> = {
-  encode?: ProjectionMutator<ValueOf<K>, 'encode'>;
-  canonical?: ProjectionMutator<ValueOf<K>, 'canonical'>;
-  view?: ValueOf<K> extends { readonly view: infer V }
-    ? { [N in keyof V]?: Mutator<V[N]> }
-    : ConfigurationError<'projectionMutators.view requires declared view projections. Add projections or remove this mutator.'>;
+  [N in Extract<keyof ValueOf<K>, 'encode' | 'canonical'>]?: Mutator<
+    Return<ValueOf<K>, N>
+  >;
+} & (ValueOf<K> extends { readonly view: infer V }
+  ? { view?: { [N in keyof V]?: Mutator<V[N]> } }
+  : {});
+type CommonLawOptions<K extends AnyKind> = {
+  sealedKinds?: readonly AnyKind[];
+} & (keyof Mutators<K> extends never ? {} : { projectionMutators?: Mutators<K> });
+type ValueLawOptions<K extends SemanticKind> = CommonLawOptions<K> & {
+  validWire: fc.Arbitrary<Return<ValueOf<K>, 'encode'>>;
+  equivalentAliases?: fc.Arbitrary<
+    [Return<ValueOf<K>, 'encode'>, Return<ValueOf<K>, 'encode'>]
+  >;
+} & (K extends { allocate(...args: infer A): unknown }
+    ? { allocateArgs?: fc.Arbitrary<A> }
+    : {});
+type DerivedLawOptions<K extends Derived> = CommonLawOptions<K> & {
+  validInput: fc.Arbitrary<Parameters<K['derive']>[0]>;
+};
+type OptionAt<O, N extends PropertyKey> = N extends keyof O ? NonNullable<O[N]> : {};
+type CheckedMutators<P, A> = P & {
+  [N in Exclude<keyof P, keyof A>]: ConfigurationError<
+    N extends 'encode' | 'canonical'
+      ? `projectionMutators.${N} requires a declared ${N} operation. Remove this mutator.`
+      : N extends 'view'
+        ? 'projectionMutators.view requires declared view projections. Add projections or remove this mutator.'
+        : 'Unknown projection mutator. Use a declared operation or view projection.'
+  >;
+} & (P extends { view: infer V }
+    ? 'view' extends keyof A
+      ? {
+          view: V & {
+            [N in Exclude<keyof V, keyof OptionAt<A, 'view'>>]: ConfigurationError<
+              N extends string
+                ? `Unknown view mutator "${N}". Use a declared view projection.`
+                : 'Symbol-named view mutators are not supported.'
+            >;
+          };
+        }
+      : unknown
+    : unknown);
+type InferLawOptions<P, A> = A &
+  Record<keyof P, unknown> &
+  ('projectionMutators' extends keyof A
+    ? {
+        projectionMutators?: OptionAt<A, 'projectionMutators'> &
+          Record<keyof OptionAt<P, 'projectionMutators'>, unknown> &
+          ('view' extends keyof OptionAt<A, 'projectionMutators'>
+            ? {
+                view?: OptionAt<OptionAt<A, 'projectionMutators'>, 'view'> &
+                  Record<
+                    keyof OptionAt<OptionAt<P, 'projectionMutators'>, 'view'>,
+                    unknown
+                  >;
+              }
+            : unknown);
+      }
+    : unknown);
+type CheckedLawOptions<P, A> = P & {
+  [N in Exclude<keyof P, keyof A | 'projectionMutators'>]: ConfigurationError<
+    N extends 'allocateArgs'
+      ? 'allocateArgs requires an allocator in .with(...). Add allocate or remove allocateArgs.'
+      : 'Unknown law option. Use an option supported by this kind.'
+  >;
+} & (P extends { projectionMutators: infer M }
+    ? {
+        projectionMutators: CheckedMutators<M, OptionAt<A, 'projectionMutators'>>;
+      }
+    : unknown);
+// Runtime access is broader than any one kind's capability-specific public type.
+type RuntimeMutators = {
+  encode?: Mutator<any>;
+  canonical?: Mutator<any>;
+  view?: Record<string, Mutator<any>>;
 };
 function acquire<T>(result: Result<T>): T {
   assert.equal(result.ok, true, 'generator must produce accepted inputs');
@@ -34,6 +100,7 @@ function acquire<T>(result: Result<T>): T {
 function snapshot(
   x: any,
   isSealed: (value: unknown) => boolean,
+  allowAccessors = false,
   seen = new Map<object, any>(),
 ): any {
   if (x === null || (typeof x !== 'object' && typeof x !== 'function') || isSealed(x))
@@ -49,15 +116,32 @@ function snapshot(
   seen.set(x, out);
   if (x instanceof Map)
     out.entries = [...x].map(([k, v]) => [
-      snapshot(k, isSealed, seen),
-      snapshot(v, isSealed, seen),
+      snapshot(k, isSealed, allowAccessors, seen),
+      snapshot(v, isSealed, allowAccessors, seen),
     ]);
-  if (x instanceof Set) out.entries = [...x].map((v) => snapshot(v, isSealed, seen));
+  if (x instanceof Set)
+    out.entries = [...x].map((v) => snapshot(v, isSealed, allowAccessors, seen));
   for (const key of Reflect.ownKeys(x)) {
     const descriptor = Object.getOwnPropertyDescriptor(x, key)!;
     if ('value' in descriptor)
-      out.properties.push([key, snapshot(descriptor.value, isSealed, seen)]);
-    else out.properties.push([key, { get: descriptor.get, set: descriptor.set }]);
+      out.properties.push([
+        key,
+        snapshot(descriptor.value, isSealed, allowAccessors, seen),
+      ]);
+    else {
+      if (!allowAccessors)
+        throw new TypeError(
+          'Accessor-containing projections require an explicit projectionMutator',
+        );
+      out.properties.push([
+        key,
+        {
+          getter: descriptor.get !== undefined,
+          setter: descriptor.set !== undefined,
+          value: snapshot(Reflect.get(x, key), isSealed, allowAccessors, seen),
+        },
+      ]);
+    }
   }
   return out;
 }
@@ -72,6 +156,14 @@ function mutate(
     );
   if (x === null || typeof x !== 'object' || isSealed(x) || seen.has(x)) return;
   seen.add(x);
+  if (
+    Reflect.ownKeys(x).some(
+      (key) => !('value' in Object.getOwnPropertyDescriptor(x, key)!),
+    )
+  )
+    throw new TypeError(
+      'Accessor-containing projections require an explicit projectionMutator',
+    );
   if (ArrayBuffer.isView(x)) {
     const bytes = new Uint8Array(x.buffer, x.byteOffset, x.byteLength);
     for (let i = 0; i < bytes.length; i++) bytes[i] = bytes[i]! ^ 255;
@@ -114,7 +206,7 @@ function projections(value: any): Record<string, () => any> {
 function shared<K extends AnyKind>(
   kind: K,
   value: any,
-  mutators: Mutators<K> = {},
+  mutators: RuntimeMutators = {},
   sealedKinds: readonly AnyKind[] = [],
 ): void {
   const isSealed = (x: unknown) => kind.is(x) || sealedKinds.some((k) => k.is(x));
@@ -140,43 +232,35 @@ function shared<K extends AnyKind>(
   assert.deepEqual({ ...value }, {});
   assert.deepEqual(Object.keys(value), []);
   assert(!kind.is(structuredClone(value)));
-  const runtimeMutators = mutators as {
-    encode?: Mutator<any>;
-    canonical?: Mutator<any>;
-    view?: Record<string, Mutator<any>>;
-  };
+  const runtimeMutators = mutators;
   const all = projections(value);
+  const customFor = (name: string): Mutator<any> | undefined =>
+    name.startsWith('view.')
+      ? runtimeMutators.view?.[name.slice(5)]
+      : (runtimeMutators as any)[name];
   const observe = () =>
     Object.fromEntries(
       Object.entries(all).map(([name, project]) => [
         name,
-        snapshot(project(), isSealed),
+        snapshot(project(), isSealed, customFor(name) !== undefined),
       ]),
     );
   for (const [name, project] of Object.entries(all)) {
     const before = observe();
-    const custom = name.startsWith('view.')
-      ? runtimeMutators.view?.[name.slice(5)]
-      : (runtimeMutators as any)[name];
+    const custom = customFor(name);
     if (custom) custom(project());
     else mutate(project(), isSealed);
     assert.deepEqual(observe(), before, `projection leaked mutable Parts: ${name}`);
   }
 }
-export function assertValueLaws<K extends SemanticKind>(
-  kind: K,
-  options: {
-    validWire: fc.Arbitrary<Return<ValueOf<K>, 'encode'>>;
-    equivalentAliases?: fc.Arbitrary<
-      [Return<ValueOf<K>, 'encode'>, Return<ValueOf<K>, 'encode'>]
-    >;
-    allocateArgs?: K extends { allocate(...args: infer A): unknown }
-      ? fc.Arbitrary<A>
-      : ConfigurationError<'allocateArgs requires an allocator in .with(...). Add allocate or remove allocateArgs.'>;
-    projectionMutators?: Mutators<K>;
-    sealedKinds?: readonly AnyKind[];
-  },
-): void {
+export function assertValueLaws<
+  K extends SemanticKind,
+  const O extends InferLawOptions<O, ValueLawOptions<NoInfer<K>>>,
+>(kind: K, checked: CheckedLawOptions<O, ValueLawOptions<K>>): void {
+  const options = checked as ValueLawOptions<K> & {
+    allocateArgs?: fc.Arbitrary<any[]>;
+    projectionMutators?: RuntimeMutators;
+  };
   fc.assert(
     fc.property(
       options.validWire,
@@ -232,14 +316,13 @@ export function assertValueLaws<K extends SemanticKind>(
       }),
     );
 }
-export function assertDerivedLaws<K extends Derived>(
-  kind: K,
-  options: {
-    validInput: fc.Arbitrary<Parameters<K['derive']>[0]>;
-    projectionMutators?: Mutators<K>;
-    sealedKinds?: readonly AnyKind[];
-  },
-): void {
+export function assertDerivedLaws<
+  K extends Derived,
+  const O extends InferLawOptions<O, DerivedLawOptions<NoInfer<K>>>,
+>(kind: K, checked: CheckedLawOptions<O, DerivedLawOptions<K>>): void {
+  const options = checked as DerivedLawOptions<K> & {
+    projectionMutators?: RuntimeMutators;
+  };
   fc.assert(
     fc.property(options.validInput, (input) => {
       const a = acquire(kind.derive(input)),

@@ -68,7 +68,9 @@ export type DerivedValue<K extends string, O> = Proof<K> & Views<O>;
 export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
   {
     /** Attach typed documentation without changing the producer or its brand. */
-    docs(metadata: ValueDocumentation<W, O>): ValueKind<K, W, O> & {
+    docs<const D extends ValueDocumentation<W, O> & Record<keyof D, unknown>>(
+      metadata: CheckedDocumentation<D, ValueDocumentation<W, O>>,
+    ): ValueKind<K, W, O> & {
       readonly documentation: ValueDocumentation<W, O>;
     };
     readonly kind: K;
@@ -86,7 +88,9 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
 >;
 export type DerivedKind<K extends string, I, O> = Readonly<{
   /** Attach documentation without changing the derivation or its brand. */
-  docs(metadata: DerivedDocumentation<O>): DerivedKind<K, I, O> & {
+  docs<const D extends DerivedDocumentation<O> & Record<keyof D, unknown>>(
+    metadata: CheckedDocumentation<D, DerivedDocumentation<O>>,
+  ): DerivedKind<K, I, O> & {
     readonly documentation: DerivedDocumentation<O>;
   };
   readonly kind: K;
@@ -162,31 +166,56 @@ export type CheckedOptions<O, Allowed> = O & {
     : unknown);
 
 /** Examples describe outputs; they do not configure or validate the producer. */
-export type ProjectionDocumentation<O> = Readonly<{
-  description?: string;
-  views?: O extends { view: infer F }
+export type ProjectionDocumentation<O> = Readonly<{ description?: string }> &
+  (O extends { view: infer F }
     ? keyof F extends never
-      ? ConfigurationError<'docs.views requires declared projections. Add projections to .with({ view: ... }) first.'>
+      ? {}
       : {
-          readonly [N in keyof F]?: Readonly<{
-            description?: string;
-            example?: F[N] extends (...args: any[]) => infer R ? R : never;
-          }>;
+          readonly view?: {
+            readonly [N in keyof F]?: Readonly<{
+              description?: string;
+              example?: F[N] extends (...args: any[]) => infer R ? R : never;
+            }>;
+          };
         }
-    : ConfigurationError<'docs.views requires declared projections. Add projections to .with({ view: ... }) first.'>;
-}>;
-export type DerivedDocumentation<O> = ProjectionDocumentation<O> &
-  Readonly<{
-    exampleWire?: ConfigurationError<'Derived definitions have no wire representation. Remove exampleWire.'>;
-    exampleCanonical?: ConfigurationError<'Derived definitions have no canonical representation. Remove exampleCanonical.'>;
-  }>;
+    : {});
+export type DerivedDocumentation<O> = ProjectionDocumentation<O>;
 export type ValueDocumentation<W extends z.ZodType, O> = ProjectionDocumentation<O> &
-  Readonly<{
-    exampleWire?: z.input<W>;
-    exampleCanonical?: O extends { canonical: (...args: any[]) => infer C }
-      ? C
-      : ConfigurationError<'exampleCanonical requires canonical in .with(...). Add canonical or remove exampleCanonical.'>;
-  }>;
+  Readonly<{ exampleWire?: z.input<W> }> &
+  (O extends { canonical: (...args: any[]) => infer C }
+    ? Readonly<{ exampleCanonical?: C }>
+    : {});
+
+type DocumentationMessage<N, Allowed> = N extends 'exampleCanonical'
+  ? 'exampleWire' extends keyof Allowed
+    ? 'exampleCanonical requires canonical in .with(...). Add canonical or remove exampleCanonical.'
+    : 'Derived definitions have no canonical representation. Remove exampleCanonical.'
+  : N extends 'exampleWire'
+    ? 'Derived definitions have no wire representation. Remove exampleWire.'
+    : N extends 'view'
+      ? 'docs.view requires declared projections. Add projections to .with({ view: ... }) first.'
+      : N extends 'views'
+        ? 'The docs.views property was renamed to view. Use .docs({ view: ... }).'
+        : N extends string
+          ? `Unknown documentation property "${N}". Check the documentation property name.`
+          : 'Symbol-named documentation properties are not supported.';
+export type CheckedDocumentation<Provided, Allowed> = Provided & {
+  [N in Exclude<keyof Provided, keyof Allowed>]: ConfigurationError<
+    DocumentationMessage<N, Allowed>
+  >;
+} & (Provided extends { view: infer V }
+    ? Allowed extends { readonly view?: infer A }
+      ? {
+          view: V & {
+            [N in Exclude<keyof V, keyof A>]: ConfigurationError<
+              N extends string
+                ? `Unknown documented projection "${N}". Declare it in .with({ view: ... }) first.`
+                : 'Symbol-named documented projections are not supported.'
+            >;
+          };
+        }
+      : unknown
+    : unknown);
 
 /** An unfinished semantic definition. Call .with(...) to create its kind. */
 export interface ValueBuilder<K extends string, W extends z.ZodType, P> {

@@ -23,17 +23,17 @@ test('documentation preserves the producer, brand, collections, and frozen API',
     description: 'User',
     exampleWire: 'usr_abcdef',
     exampleCanonical: { type: 'utf8' as const, value: 'usr_abcdef' },
-    views: { suffix: { description: 'Suffix', example: 'abcdef' } },
+    view: { suffix: { description: 'Suffix', example: 'abcdef' } },
   };
   const Kind = Original.docs(metadata);
   assert.equal(calls, 0);
   assert(!('documentation' in Original));
   assert(Object.isFrozen(Kind));
   assert(Object.isFrozen(Kind.documentation));
-  assert(Object.isFrozen(Kind.documentation.views));
-  assert(Object.isFrozen(Kind.documentation.views!.suffix));
-  metadata.views.suffix.description = 'Changed';
-  assert.equal(Kind.documentation.views!.suffix!.description, 'Suffix');
+  assert(Object.isFrozen(Kind.documentation.view));
+  assert(Object.isFrozen(Kind.documentation.view!.suffix));
+  metadata.view.suffix.description = 'Changed';
+  assert.equal(Kind.documentation.view!.suffix!.description, 'Suffix');
   assert.equal(Kind.parse, Original.parse);
   assert.equal(Kind.wire, Original.wire);
   assert.equal(Kind.is, Original.is);
@@ -78,10 +78,10 @@ test('derived documentation does not run the producer or freeze its examples', (
     },
   }).with({ view: { bytes: (p) => new TextEncoder().encode(p) } });
   const bytes = new Uint8Array([1]);
-  const Kind = Base.docs({ views: { bytes: { example: bytes } } });
+  const Kind = Base.docs({ view: { bytes: { example: bytes } } });
   assert.equal(calls, 0);
   assert.equal(Kind.derive, Base.derive);
   bytes[0] = 2;
-  assert.equal(Kind.documentation.views!.bytes!.example![0], 2);
+  assert.equal(Kind.documentation.view!.bytes!.example![0], 2);
   assert(Object.isFrozen(Kind));
 });

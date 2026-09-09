@@ -299,17 +299,17 @@ UserId.docs({ exampleWire: 123 });
 UserId.docs({ exampleCanonical: { type: 'utf8' } });
 // @ts-expect-error No canonical operation exists.
 NamespaceId.docs({ exampleCanonical: 'ns:x' });
-// @ts-expect-error No views exist.
-NamespaceId.docs({ views: { suffix: { example: 'abc' } } });
+// @ts-expect-error No view exist.
+NamespaceId.docs({ view: { suffix: { example: 'abc' } } });
 // @ts-expect-error Documentation spelling is checked.
 UserId.docs({ descriptin: 'typo' });
 // @ts-expect-error Metadata container is readonly.
 DocumentedUser.documentation.description = 'changed';
-ContentAddress.docs({ views: { contentClass: { example: 'primary' } } });
+ContentAddress.docs({ view: { contentClass: { example: 'primary' } } });
 // @ts-expect-error Projection example must match its inferred enum.
-ContentAddress.docs({ views: { contentClass: { example: 'invalid' } } });
+ContentAddress.docs({ view: { contentClass: { example: 'invalid' } } });
 // @ts-expect-error Unknown projection name.
-ContentAddress.docs({ views: { suffix: { example: 'abc' } } });
+ContentAddress.docs({ view: { suffix: { example: 'abc' } } });
 PreparedWrite.docs({ description: 'Local write proof.' });
 // @ts-expect-error Derived kinds have no wire representation.
 PreparedWrite.docs({ exampleWire: 'anything' });
@@ -317,8 +317,8 @@ PreparedWrite.docs({ exampleWire: 'anything' });
 address.view.contentClass = 'primary';
 // @ts-expect-error A projection value is not a zero-argument method.
 address.view.contentClass();
-// @ts-expect-error Empty views do not accept projection documentation.
-empty.docs({ views: { missing: { example: 1 } } });
+// @ts-expect-error Empty view do not accept projection documentation.
+empty.docs({ view: { missing: { example: 1 } } });
 
 ContentAddress.docs({
   exampleWire: {
@@ -422,4 +422,29 @@ const namedDerivedOptions: NamedDerivedOptions = { view: { length: (p) => p.leng
 const namedDerived = unfinishedDerived.with(namedDerivedOptions);
 type NamedProjection = Assert<
   Equal<ValueOf<typeof namedDerived>['view']['length'], number>
+>;
+
+// @ts-expect-error Documentation terminology matches the view definition and facade.
+ContentAddress.docs({ views: { contentClass: { example: 'primary' } } });
+const documentedDerived = PreparedWrite.docs({ description: 'Plan' });
+type NoDerivedWireDocs = Assert<
+  Equal<
+    'exampleWire' extends keyof typeof documentedDerived.documentation ? true : false,
+    false
+  >
+>;
+const basicDocumentation = NamespaceId.docs({ description: 'Namespace' });
+type NoCanonicalDocs = Assert<
+  Equal<
+    'exampleCanonical' extends keyof typeof basicDocumentation.documentation
+      ? true
+      : false,
+    false
+  >
+>;
+type NoViewDocs = Assert<
+  Equal<
+    'view' extends keyof typeof basicDocumentation.documentation ? true : false,
+    false
+  >
 >;

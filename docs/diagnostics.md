@@ -1,11 +1,11 @@
 # Compiler diagnostics
 
-The configuration types include an impossible `ConfigurationError<"explanation">` requirement when a prerequisite is absent. This preserves rejection and puts the reason and correction in the compiler message. TypeScript still supplies the error code and outer wording; object literals can report an unknown property before showing the explanation. No runtime properties are added. TypeScript can still reduce intersections to `never`, for example when a forbidden `.with` option is explicitly assigned `undefined`; those assignments remain rejected.
+Allowed documentation and law-option types contain only capabilities present on the kind. Generic checks inspect keys actually supplied by the caller and attach an impossible `ConfigurationError<"explanation">` requirement when a prerequisite is absent. This preserves rejection and puts the reason and correction in the compiler message. TypeScript still supplies the error code and outer wording; object literals can report an unknown property before showing the explanation. No runtime properties or unsupported autocomplete suggestions are added. A language-service test checks the actual completion lists for semantic, derived, and projected kinds. TypeScript can still reduce intersections to `never`, for example when a forbidden `.with` option is explicitly assigned `undefined`; those assignments remain rejected.
 
 | Invalid configuration | Explanation now included |
 | --- | --- |
 | `exampleCanonical` without `canonical` | Add `canonical` to `.with(...)` or remove `exampleCanonical`. |
-| `docs.views` without projections, including `view: {}` | Declare projections in `.with({ view: ... })` first. |
+| `docs.view` without projections, including `view: {}` | Declare projections in `.with({ view: ... })` first. |
 | Derived `exampleWire` or `exampleCanonical` | Derived definitions have no corresponding representation; remove that example. |
 | Derived `canonical`, `allocate`, `toWireShape`, or `equals` | These options are available only on semantic definitions. |
 | Old `fields` option | Rename it to `view`. |

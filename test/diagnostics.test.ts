@@ -118,6 +118,10 @@ test('ValueOf explains missing .with without expanding the builder signature', (
 test('configuration diagnostics explain missing prerequisites and forbidden options', () => {
   const cases: [string, string][] = [
     [
+      `Basic.docs({views:{}});`,
+      'The docs.views property was renamed to view. Use .docs({ view: ... }).',
+    ],
+    [
       `Basic.docs({exampleCanonical:{type:'utf8',value:'x'}});`,
       'exampleCanonical requires canonical in .with(...). Add canonical or remove exampleCanonical.',
     ],
@@ -126,12 +130,12 @@ test('configuration diagnostics explain missing prerequisites and forbidden opti
       'exampleCanonical requires canonical in .with(...)',
     ],
     [
-      `Basic.docs({views:{suffix:{example:'x'}}});`,
-      'docs.views requires declared projections. Add projections to .with({ view: ... }) first.',
+      `Basic.docs({view:{suffix:{example:'x'}}});`,
+      'docs.view requires declared projections. Add projections to .with({ view: ... }) first.',
     ],
     [
-      `Empty.docs({views:{suffix:{example:'x'}}});`,
-      'docs.views requires declared projections.',
+      `Empty.docs({view:{suffix:{example:'x'}}});`,
+      'docs.view requires declared projections.',
     ],
     [
       `Derived.docs({exampleWire:'x'});`,

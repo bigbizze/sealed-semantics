@@ -226,3 +226,84 @@ test('functions require mutators and function property aliases are observed', ()
     (e: any) => /Function-valued projections require/.test(String(e.cause)),
   );
 });
+
+test('accessor projections require a mutator before getters can run', () => {
+  let reads = 0;
+  const K = defineDerived({
+    kind: 'law/accessor-required',
+    derive: (n: number) => ok({ child: { n } }),
+  }).with({
+    view: {
+      child: (p) =>
+        Object.freeze({
+          get nested() {
+            reads++;
+            return p.child;
+          },
+        }),
+    },
+  });
+  assert.throws(
+    () => assertDerivedLaws(K, { validInput: fc.integer() }),
+    (e: any) =>
+      /Accessor-containing projections require an explicit projectionMutator/.test(
+        String(e.cause),
+      ),
+  );
+  assert.equal(reads, 0);
+  assert.throws(
+    () =>
+      assertDerivedLaws(K, {
+        validInput: fc.integer(),
+        projectionMutators: {
+          view: {
+            child: (v) => {
+              v.nested.n++;
+            },
+          },
+        },
+      }),
+    (e: any) => /projection leaked mutable Parts/.test(String(e.cause)),
+  );
+});
+
+test('explicit accessor mutators support detached getters and nested accessor graphs', () => {
+  const Safe = defineDerived({
+    kind: 'law/accessor-copy',
+    derive: (n: number) => ok({ n }),
+  }).with({
+    view: {
+      child: (p) => ({
+        container: Object.freeze({
+          get nested() {
+            return { n: p.n };
+          },
+        }),
+      }),
+    },
+  });
+  assert.throws(
+    () => assertDerivedLaws(Safe, { validInput: fc.integer() }),
+    (e: any) => /Accessor-containing projections/.test(String(e.cause)),
+  );
+  assertDerivedLaws(Safe, {
+    validInput: fc.integer(),
+    projectionMutators: {
+      view: {
+        child: (v) => {
+          v.container.nested.n++;
+        },
+      },
+    },
+  });
+  const Setter = defineDerived({
+    kind: 'law/setter-required',
+    derive: (n: number) => ok(n),
+  }).with({
+    view: { child: () => Object.defineProperty({}, 'hidden', { set(_x: unknown) {} }) },
+  });
+  assert.throws(
+    () => assertDerivedLaws(Setter, { validInput: fc.integer() }),
+    (e: any) => /Accessor-containing projections/.test(String(e.cause)),
+  );
+});
