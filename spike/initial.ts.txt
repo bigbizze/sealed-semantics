@@ -1,0 +1,14 @@
+import { z } from 'zod';
+type Result<T> = {ok:true,value:T} | {ok:false,error:string};
+declare function ok<T>(value:T):Result<T>;
+interface Base { kind:string; wire:z.ZodType; decode:(w:any)=>Result<any>; toWireShape:(p:any)=>unknown; fields?:Record<string,(p:any)=>unknown>; }
+declare function defineValue<const S extends Base>(s:S):S;
+const x=defineValue({kind:'spike/test',wire:z.string(),decode:w=>{
+ // @ts-expect-error decoded input must not be any
+ w.notAStringMember();
+ return ok({spelling:w});
+},toWireShape:p=>{
+ // @ts-expect-error Parts must not be any
+ p.missing;
+ return p.spelling;
+}});

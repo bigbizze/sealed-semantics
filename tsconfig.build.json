@@ -1,0 +1,1 @@
+{"extends":"./tsconfig.json","compilerOptions":{"rootDir":"src","sourceMap":true,"declarationMap":true},"include":["src"],"exclude":["test","spike","examples"]}
