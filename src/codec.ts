@@ -1,9 +1,9 @@
 import { z } from 'zod';
-import type { Result } from './types.js';
+import type { ProducerResult } from './types.js';
 export function makeCodec<W extends z.ZodType, P, V>(
   wire: W,
   kind: string,
-  decode: (w: z.output<W>) => Result<P>,
+  decode: (w: z.output<W>) => ProducerResult<P>,
   seal: (p: P) => V,
   is: (x: unknown) => boolean,
   read: (x: V) => P,

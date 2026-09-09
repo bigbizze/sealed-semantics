@@ -1,7 +1,9 @@
+// Consumer-owned helper with a structurally compatible result.
+const ok = <T>(value: T) => ({ ok: true as const, value });
 import { z } from 'zod';
 import * as fc from 'fast-check';
 import { assertValueLaws, assertDerivedLaws } from '../src/laws.js';
-import { defineValue, defineDerived, ok } from '../src/index.js';
+import { defineValue, defineDerived } from '../src/index.js';
 import type { ValueOf } from '../src/types.js';
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
@@ -448,3 +450,28 @@ type NoViewDocs = Assert<
     false
   >
 >;
+
+// @ts-expect-error Runtime result helpers are not part of the library API.
+import { ok as removedOk, err as removedErr } from '../src/index.js';
+// @ts-expect-error The structural contract is named ProducerResult.
+import type { Result } from '../src/index.js';
+const InlineResult = defineValue({
+  kind: 'types/inline-result',
+  wire: z.string(),
+  decode: (spelling) =>
+    spelling.length
+      ? { ok: true, value: { spelling } }
+      : {
+          ok: false,
+          error: {
+            kind: 'types/inline-result',
+            reason: 'invalid_parts',
+            issues: ['Empty'],
+          },
+        },
+}).with({
+  toWireShape: (parts) => {
+    type InlineParts = Assert<Equal<typeof parts, { spelling: string }>>;
+    return parts.spelling;
+  },
+});

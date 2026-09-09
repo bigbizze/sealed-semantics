@@ -1,5 +1,8 @@
+// These helpers belong to this example, not to sealed-semantics.
+const succeed = <T>(value: T) => ({ ok: true as const, value });
+const fail = <E>(error: E) => ({ ok: false as const, error });
 import { z } from 'zod';
-import { defineValue, defineDerived, ok, err, type ValueOf } from '../src/index.js';
+import { defineValue, defineDerived, type ValueOf } from '../src/index.js';
 export const normalizeUserSpelling = (w: string) =>
   w.startsWith('user:') ? `usr_${w.slice(5).replaceAll('-', '')}` : w;
 export const hexToBytes = (hex: string) =>
@@ -18,8 +21,8 @@ export const UserId = defineValue({
   decode: (w) => {
     const spelling = normalizeUserSpelling(w);
     return /^usr_[a-f0-9]{16,}$/.test(spelling)
-      ? ok({ spelling })
-      : err({
+      ? succeed({ spelling })
+      : fail({
           kind: 'example/user-id',
           reason: 'invalid_parts',
           issues: ['Invalid alias'],
@@ -35,7 +38,7 @@ export type UserId = ValueOf<typeof UserId>;
 export const Sha256Digest = defineValue({
   kind: 'example/sha256',
   wire: z.string().regex(/^[a-f0-9]{64}$/),
-  decode: (hex) => ok({ bytes: hexToBytes(hex) }),
+  decode: (hex) => succeed({ bytes: hexToBytes(hex) }),
 }).with({
   toWireShape: (p) => bytesToHex(p.bytes),
   equals: (a, b) => constantTimeEqual(a.bytes, b.bytes),
@@ -44,7 +47,7 @@ export const Sha256Digest = defineValue({
 export const NamespaceId = defineValue({
   kind: 'example/namespace-id',
   wire: z.string().regex(/^ns:[a-z]+$/),
-  decode: (w) => ok(w),
+  decode: (w) => succeed(w),
 }).with({ toWireShape: (p) => p });
 export const ContentAddress = defineValue({
   kind: 'example/content-address',
@@ -53,7 +56,7 @@ export const ContentAddress = defineValue({
     content_class: z.enum(['primary', 'attachment']),
     digest: Sha256Digest.wire,
   }),
-  decode: (w) => ok(w),
+  decode: (w) => succeed(w),
 }).with({
   toWireShape: (p) => p,
   view: {
@@ -75,12 +78,15 @@ export const PreparedWrite = defineDerived({
   kind: 'example/prepared-write',
   derive: (input: PrepareInput) => {
     if (!input || !Array.isArray(input.rows) || !Array.isArray(input.content))
-      return err({
+      return fail({
         kind: 'example/prepared-write',
         reason: 'invalid_input' as const,
         issues: ['rows and content arrays required'],
       });
-    return ok({ rows: copyWriteRows(input.rows), contentToRetain: [...input.content] });
+    return succeed({
+      rows: copyWriteRows(input.rows),
+      contentToRetain: [...input.content],
+    });
   },
 }).with({
   view: {

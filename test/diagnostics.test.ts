@@ -10,7 +10,7 @@ test('compiler diagnostics name reserved view and explain the correction', () =>
     const file = join(dir, 'reserved.mts');
     writeFileSync(
       file,
-      `import {defineDerived,ok} from ${JSON.stringify(resolve('src/index.ts'))};\n` +
+      `import {defineDerived} from ${JSON.stringify(resolve('src/index.ts'))};\nconst ok = <T,>(value:T) => ({ok:true as const,value});\n` +
         ['encode', 'canonical', 'view', 'get', 'parts']
           .map(
             (name) =>
@@ -65,8 +65,9 @@ test('ValueOf explains missing .with without expanding the builder signature', (
     writeFileSync(
       file,
       `
-      import { defineValue, defineDerived, ok, type ValueOf } from ${JSON.stringify(resolve('src/index.ts'))};
+      import { defineValue, defineDerived, type ValueOf } from ${JSON.stringify(resolve('src/index.ts'))};
       import { z } from 'zod';
+      const ok = <T,>(value:T) => ({ok:true as const,value});
       const Semantic = defineValue({ kind: 'diagnostic/semantic', wire: z.string(), decode: spelling => ok({ spelling }) });
       const Derived = defineDerived({ kind: 'diagnostic/derived', derive: (s: string) => ok(s) });
       type MissingSemantic = ValueOf<typeof Semantic>;
@@ -199,7 +200,8 @@ test('configuration diagnostics explain missing prerequisites and forbidden opti
   try {
     const file = join(dir, 'configuration.mts');
     const prelude = [
-      `import {defineValue,defineDerived,ok} from ${JSON.stringify(resolve('src/index.ts'))};`,
+      `const ok = <T,>(value:T) => ({ok:true as const,value});`,
+      `import {defineValue,defineDerived} from ${JSON.stringify(resolve('src/index.ts'))};`,
       `import {assertValueLaws,assertDerivedLaws} from ${JSON.stringify(resolve('src/laws.ts'))};`,
       `import {z} from 'zod';`,
       `import * as fc from 'fast-check';`,

@@ -48,7 +48,7 @@ try {
     [
       '--input-type=module',
       '-e',
-      "import {defineValue,ok} from 'sealed-semantics'; import {z} from 'zod'; const K=defineValue({kind:'consumer/no-test-peer',wire:z.string(),decode:w=>ok(w)}).with({toWireShape:p=>p}); if (!K.parse('x').ok) throw Error();",
+      "import {defineValue} from 'sealed-semantics'; import {z} from 'zod'; const K=defineValue({kind:'consumer/no-test-peer',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p}); if (!K.parse('x').ok) throw Error();",
     ],
     temp,
   );
@@ -119,21 +119,22 @@ try {
  import * as b from 'sealed-semantics-copy';
  import { assertValueLaws, assertValueDocs } from 'sealed-semantics/laws';
  const {z: foreignZod}=await import('zod-copy');
- const ForeignSchema=a.defineValue({kind:'consumer/foreign-schema',wire:foreignZod.string(),decode:w=>a.ok(w)}).with({toWireShape:p=>p});
+ const ForeignSchema=a.defineValue({kind:'consumer/foreign-schema',wire:foreignZod.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p});
  assert(ForeignSchema.parse('x').ok);
- const A=a.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>a.ok(w)}).with({toWireShape:p=>p});
- const B=b.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>b.ok(w)}).with({toWireShape:p=>p});
+ const A=a.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p});
+ const B=b.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p});
  const x=A.parse('x').value,y=A.parse('x').value;
  assert(!B.is(x)); assert(!A.is(B.parse('x').value));
  assert.equal(A.map().set(x,1).get(y),1);
  assert.equal(A.set().add(x).add(y).size,1);
- const D=a.defineDerived({kind:'consumer/proof',derive:i=>a.ok(i)}).with({});
+ const D=a.defineDerived({kind:'consumer/proof',derive:i=>({ok:true,value:i})}).with({});
  const p=D.derive(1).value,q=D.derive(1).value;
  assert.equal(D.set().add(p).add(q).size,2);
- const Composite=b.defineValue({kind:'consumer/composite',wire:z.object({id:A.wire}),decode:w=>b.ok(w)}).with({toWireShape:p=>p,view:{id:p=>p.id}});
+ const Composite=b.defineValue({kind:'consumer/composite',wire:z.object({id:A.wire}),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p,view:{id:p=>p.id}});
  const c=Composite.parse({id:'x'}).value,d=Composite.parse({id:'x'}).value;
  assert(A.is(c.view.id));assert.equal(Composite.map().set(c,1).get(d),1);
  assert(Object.isFrozen(c.view));assert.equal(Object.getPrototypeOf(c.view),null);
+ assert.deepEqual(Object.keys(a).sort(),['defineDerived','defineValue']);
  assert(!('IdMap' in a));assert(!('ValueMap' in a));
  // Internal cross-copy test: exported package paths remain blocked for consumers.
  const foreign=await import('./node_modules/sealed-semantics-copy/dist/collections.js');

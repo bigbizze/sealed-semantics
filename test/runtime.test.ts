@@ -1,8 +1,9 @@
+import { ok, err } from './result.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 import * as api from '../src/index.js';
-import { defineValue, defineDerived, ok, err, type Result } from '../src/index.js';
+import { defineValue, defineDerived, type ProducerResult } from '../src/index.js';
 import { stableWireKey } from '../src/keying.js';
 import {
   UserId,
@@ -10,7 +11,7 @@ import {
   ContentAddress,
   PreparedWrite,
 } from '../examples/reference.js';
-function value<T>(r: Result<T>): T {
+function value<T>(r: ProducerResult<T>): T {
   if (!r.ok) throw Error(JSON.stringify(r.error));
   return r.value;
 }
@@ -35,12 +36,7 @@ test('private brand, prototype forgery, constructor recovery, and hidden state',
   assert.throws(() => v.equals(fake), TypeError);
   assert.throws(() => Object.getPrototypeOf(v).encode.call(fake), TypeError);
   assert.deepEqual(Reflect.ownKeys(v), []);
-  assert.deepEqual(Object.keys(api).sort(), [
-    'defineDerived',
-    'defineValue',
-    'err',
-    'ok',
-  ]);
+  assert.deepEqual(Object.keys(api).sort(), ['defineDerived', 'defineValue']);
   for (const name of [
     'parts',
     'raw',
@@ -56,7 +52,7 @@ test('private brand, prototype forgery, constructor recovery, and hidden state',
   }
   assert(!UserId.is(structuredClone(v)));
 });
-test('Result parse preserves producer error while codec emits a custom issue', () => {
+test('ProducerResult parse preserves producer error while codec emits a custom issue', () => {
   const error = {
     kind: 'test/reject',
     reason: 'invalid_parts' as const,

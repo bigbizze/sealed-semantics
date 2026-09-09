@@ -6,10 +6,11 @@ import { resolve } from 'node:path';
 test('autocomplete suggests only configured documentation and law capabilities', () => {
   const filename = resolve('test/completion-fixture.ts');
   const source = `
-    import {defineValue,defineDerived,ok} from '../src/index.js';
+    import {defineValue,defineDerived} from '../src/index.js';
     import {assertValueLaws,assertDerivedLaws} from '../src/laws.js';
     import * as fc from 'fast-check';
     import {z} from 'zod';
+    const ok = <T,>(value:T) => ({ok:true as const,value});
     const Basic=defineValue({kind:'completion/basic',wire:z.string(),decode:ok}).with({toWireShape:p=>p});
     const Full=defineValue({kind:'completion/full',wire:z.string(),decode:ok}).with({toWireShape:p=>p,canonical:p=>({text:p}),allocate:()=>'',view:{suffix:p=>p.slice(-6)}});
     const Derived=defineDerived({kind:'completion/derived',derive:(s:string)=>ok(s)}).with({});

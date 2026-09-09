@@ -11,7 +11,7 @@ This document records the accepted amendments and the decisions made during impl
 7. The allocator belongs to the definition. A zero-argument allocator supports `Kind.allocate()`; dependency-taking allocators retain their exact declared arguments. All allocated raw output MUST pass through the normal validation, decode, and seal path.
 8. Both semantic and derived kinds MUST expose `Kind.map<V>()` and `Kind.set()`. Semantic keys use deterministic encoded equality. Derived keys use object identity. Both MUST reject keys that fail the supplied kind's is predicate. Collection constructors remain internal; ValueMap and ValueSet are type-only public exports. There is no indexer registry or single-copy restriction.
 9. Derived values certify that the designated producer successfully ran, subject to the existing ownership contract. They do not certify existence, authorization, currentness, persistence, or transaction success. Pass sealed semantic values directly into derivations. Encode only when a representation boundary needs raw data.
-10. `.value` belongs to a successful Result, not to a sealed instance. Examples MUST narrow the Result before accessing its value. The instance has no generic value, parts, raw, unwrap, or fromParts operation.
+10. `.value` belongs to a successful ProducerResult, not to a sealed instance. Examples MUST narrow the result before accessing its value. The instance has no generic value, parts, raw, unwrap, or fromParts operation.
 
 The erased brand remains per kind. Full instance assignability also depends on declared wire, canonical, and view signatures. Renaming a kind remains a type change; putting methods on the instance does not insert kind into data.
 
@@ -32,3 +32,5 @@ The law harness no longer identifies sealed objects by their public method shape
 Hardening verification: all 27 tests pass on Node 22.14.0 and 24.21.0. Type checks pass with TypeScript 7.0.2 and 5.7.3. Isolated consumers pass with the minimum Zod 4.1.0 and current Zod 4; the main entry runs without fast-check installed, and the laws entry runs after installing that optional peer. The consumer check also accepts schemas from a second physical Zod copy. The adjacent local-path example project still compiles and runs.
 
 Optional `.docs(metadata)` returns a new frozen kind with the same producer and brand. Metadata is exposed as `Kind.documentation`; it does not configure semantics. See [documentation metadata](documentation.md) for typed samples and the explicit `assertValueDocs` check.
+
+The producer/result contract is named `ProducerResult<T, E = ValueError>`. Runtime `ok` and `err` exports are removed. Producers return the structural success/failure shape directly or use consumer-owned compatible helpers. This supersedes the historical specification’s result API; error preservation is unchanged. See [producer results](producer-results.md).

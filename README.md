@@ -12,7 +12,7 @@ Only `.with(...)` completes the definition. Choose stable, namespaced kind liter
 
 ```ts
 import { z } from 'zod';
-import { defineValue, defineDerived, ok, err, type ValueOf } from 'sealed-semantics';
+import { defineValue, defineDerived, type ValueOf } from 'sealed-semantics';
 
 const normalizeUserSpelling = (w: string) =>
   w.startsWith('user:') ? `usr_${w.slice(5).replaceAll('-', '')}` : w;
@@ -21,8 +21,8 @@ const UserId = defineValue({
   wire: z.string().regex(/^(usr_[a-f0-9]{16,}|user:[0-9a-f-]{36})$/),
   decode: w => {
     const spelling = normalizeUserSpelling(w);
-    return /^usr_[a-f0-9]{16,}$/.test(spelling) ? ok({ spelling }) :
-      err({ kind: 'example/user-id', reason: 'invalid_parts', issues: ['Invalid alias'] } as const);
+    return /^usr_[a-f0-9]{16,}$/.test(spelling) ? { ok: true, value: { spelling } } :
+      { ok: false, error: { kind: 'example/user-id', reason: 'invalid_parts', issues: ['Invalid alias'] } };
   },
 }).with({
   toWireShape: p => p.spelling,
@@ -49,7 +49,7 @@ const constantTimeEqual = (a: Uint8Array, b: Uint8Array) => {
 const Sha256Digest = defineValue({
   kind: 'example/sha256',
   wire: z.string().regex(/^[a-f0-9]{64}$/),
-  decode: hex => ok({ bytes: hexToBytes(hex) }),
+  decode: hex => ({ ok: true, value: { bytes: hexToBytes(hex) } }),
 }).with({
   toWireShape: p => bytesToHex(p.bytes),
   equals: (a, b) => constantTimeEqual(a.bytes, b.bytes),
@@ -57,7 +57,7 @@ const Sha256Digest = defineValue({
 });
 const NamespaceId = defineValue({
   kind: 'example/namespace-id', wire: z.string().regex(/^ns:[a-z]+$/),
-  decode: w => ok(w),
+  decode: w => ({ ok: true, value: w }),
 }).with({ toWireShape: p => p });
 const ContentAddress = defineValue({
   kind: 'example/content-address',
@@ -66,7 +66,7 @@ const ContentAddress = defineValue({
     content_class: z.enum(['primary', 'attachment']),
     digest: Sha256Digest.wire,
   }),
-  decode: w => ok(w), // Nested values are already sealed.
+  decode: w => ({ ok: true, value: w }), // Nested values are already sealed.
 }).with({
   toWireShape: p => p, // Zod encodes nested values backward.
   view: {
@@ -82,9 +82,9 @@ type PrepareInput = { rows: WriteRows; content: ContentAddress[] };
 const copyWriteRows = (rows: WriteRows): WriteRows => rows.map(row => ({ ...row }));
 const PreparedWrite = defineDerived({
   kind: 'example/prepared-write',
-  derive: (input: PrepareInput) => ok({
+  derive: (input: PrepareInput) => ({ ok: true, value: {
     rows: copyWriteRows(input.rows), contentToRetain: [...input.content],
-  }),
+  } }),
 }).with({ view: {
   rows: p => copyWriteRows(p.rows) as Readonly<WriteRows>,
   contentToRetain: p => [...p.contentToRetain] as readonly ContentAddress[],
@@ -107,7 +107,7 @@ if (parsed.ok) {
 }
 ```
 
-`parse`, `allocate`, and `derive` return `Result`. Producers reject inputs with `err`.
+`parse`, `allocate`, and `derive` return `ProducerResult`. Producers return explicit success or failure objects.
 Zod's `z.decode`, `z.encode`, `z.safeDecode`, and `z.safeEncode` work with `Kind.wire`.
 `JSON.stringify(value)`, implicit coercion, and recovered constructors throw.
 `Kind.map<V>()` and `Kind.set()` compare semantic keys by normalized wire data and derived keys by identity.
@@ -136,3 +136,5 @@ Optional `.docs({...})` returns a frozen kind with the same producer and brand.
 Read metadata through `Kind.documentation`. Examples are checked against completed types.
 Use `assertValueDocs(Kind)` from `sealed-semantics/laws` in CI to check wire examples.
 Documentation does not run schemas or callbacks at startup. See [documentation metadata](docs/documentation.md).
+
+The only runtime exports are `defineValue` and `defineDerived`. Use [structurally compatible producer results](docs/producer-results.md); there are no public `ok` or `err` helpers.

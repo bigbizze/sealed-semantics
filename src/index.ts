@@ -5,7 +5,7 @@ import { makeSeal } from './seal.js';
 import { makeCodec } from './codec.js';
 import { stableWireKey } from './keying.js';
 import type {
-  Result,
+  ProducerResult,
   ValueOptions,
   ProjectionOptions,
   ValueKind,
@@ -18,7 +18,7 @@ import type {
   DerivedBuilder,
 } from './types.js';
 export type {
-  Result,
+  ProducerResult,
   ValueError,
   ValueOf,
   JsonValue,
@@ -29,8 +29,8 @@ export type {
 } from './types.js';
 import { ValueMap, ValueSet } from './collections.js';
 export type { ValueMap, ValueSet } from './collections.js';
-export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
-export const err = <E>(error: E): Result<never, E> => ({ ok: false, error });
+const ok = <T>(value: T): ProducerResult<T, never> => ({ ok: true, value });
+const err = <E>(error: E): ProducerResult<never, E> => ({ ok: false, error });
 const seen = new Set<string>();
 function register(kind: string) {
   if (seen.has(kind)) throw new TypeError(`Duplicate kind: ${kind}`);
@@ -42,7 +42,7 @@ function collections<K extends AnyKind>(kind: K) {
 export function defineValue<const K extends string, W extends z.ZodType, P>(spec: {
   kind: LiteralKind<K>;
   wire: W & JsonSchema<W>;
-  decode: (w: z.output<W>) => Result<P>;
+  decode: (w: z.output<W>) => ProducerResult<P>;
 }): ValueBuilder<K, W, P> {
   validateDefinition(spec, true);
   const { kind, decode } = spec;
@@ -99,7 +99,7 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
 }
 export function defineDerived<const K extends string, I, P>(spec: {
   kind: LiteralKind<K>;
-  derive: (input: I) => Result<P>;
+  derive: (input: I) => ProducerResult<P>;
 }): DerivedBuilder<K, I, P> {
   validateDefinition(spec, false);
   const { kind, derive } = spec;

@@ -17,4 +17,4 @@ jobs:
       - run: npm install --no-save zod@${{ matrix.zod }}
       - run: npm run check
       - run: npm run test:package -- ${{ matrix.zod }}
-      - run: npm exec --package=typescript@5.7.3 -- tsc --noEmit
+      - run: npm run typecheck:5.7

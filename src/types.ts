@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import type { ValueMap, ValueSet } from './collections.js';
 export type JsonValue =
   string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
-export type Result<T, E = ValueError> =
+export type ProducerResult<T, E = ValueError> =
   { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: E };
 export interface ValueError {
   readonly kind: string;
@@ -75,7 +75,7 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
     };
     readonly kind: K;
     is(x: unknown): x is SemanticValue<K, W, O>;
-    parse(input: unknown): Result<SemanticValue<K, W, O>>;
+    parse(input: unknown): ProducerResult<SemanticValue<K, W, O>>;
     readonly wire: z.ZodCodec<
       W,
       z.ZodType<SemanticValue<K, W, O>, SemanticValue<K, W, O>>
@@ -83,7 +83,7 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
     map<V>(): ValueMap<ValueKind<K, W, O>, V>;
     set(): ValueSet<ValueKind<K, W, O>>;
   } & (O extends { allocate: (...args: infer A) => unknown }
-    ? { allocate(...args: A): Result<SemanticValue<K, W, O>> }
+    ? { allocate(...args: A): ProducerResult<SemanticValue<K, W, O>> }
     : {})
 >;
 export type DerivedKind<K extends string, I, O> = Readonly<{
@@ -95,7 +95,7 @@ export type DerivedKind<K extends string, I, O> = Readonly<{
   };
   readonly kind: K;
   is(x: unknown): x is DerivedValue<K, O>;
-  derive(input: I): Result<DerivedValue<K, O>>;
+  derive(input: I): ProducerResult<DerivedValue<K, O>>;
   map<V>(): ValueMap<DerivedKind<K, I, O>, V>;
   set(): ValueSet<DerivedKind<K, I, O>>;
 }>;

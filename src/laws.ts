@@ -2,16 +2,16 @@
 import assert from 'node:assert/strict';
 import * as fc from 'fast-check';
 import { stableWireKey } from './keying.js';
-import type { AnyKind, Result, ValueOf, ConfigurationError } from './types.js';
+import type { AnyKind, ProducerResult, ValueOf, ConfigurationError } from './types.js';
 type CollectionKind = AnyKind & {
   map<V>(): { set(k: any, v: V): any; get(k: any): V | undefined; size: number };
   set(): { add(k: any): any; size: number };
 };
 type SemanticKind = CollectionKind & {
-  parse(input: unknown): Result<any>;
+  parse(input: unknown): ProducerResult<any>;
   wire: unknown;
 };
-type Derived = CollectionKind & { derive(input: any): Result<any> };
+type Derived = CollectionKind & { derive(input: any): ProducerResult<any> };
 type Return<K, N extends PropertyKey> =
   K extends Record<N, (...args: any[]) => infer R> ? R : never;
 type Mutator<T> = (value: T) => void;
@@ -92,7 +92,7 @@ type RuntimeMutators = {
   canonical?: Mutator<any>;
   view?: Record<string, Mutator<any>>;
 };
-function acquire<T>(result: Result<T>): T {
+function acquire<T>(result: ProducerResult<T>): T {
   assert.equal(result.ok, true, 'generator must produce accepted inputs');
   if (!result.ok) throw new Error('Rejected generated input');
   return result.value;

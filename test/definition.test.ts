@@ -1,7 +1,8 @@
+import { ok, err } from './result.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { defineValue, defineDerived, ok } from '../src/index.js';
+import { defineValue, defineDerived } from '../src/index.js';
 
 test('invalid semantic options fail before a kind is reserved', () => {
   const builder = () =>

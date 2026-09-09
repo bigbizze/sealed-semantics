@@ -1,9 +1,10 @@
+import { ok, err } from './result.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fc from 'fast-check';
 import { z } from 'zod';
 import { assertValueLaws, assertDerivedLaws } from '../src/laws.js';
-import { defineValue, defineDerived, ok } from '../src/index.js';
+import { defineValue, defineDerived } from '../src/index.js';
 import {
   UserId,
   Sha256Digest,

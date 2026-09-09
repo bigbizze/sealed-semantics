@@ -1,7 +1,8 @@
+import { ok, err } from './result.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { z } from 'zod';
-import { defineValue, defineDerived, ok } from '../src/index.js';
+import { defineValue, defineDerived } from '../src/index.js';
 import { assertValueDocs } from '../src/laws.js';
 
 test('documentation preserves the producer, brand, collections, and frozen API', () => {
