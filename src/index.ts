@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { validateDefinition, validateOptions } from './definition.js';
+import { documentedKind } from './documentation.js';
 import { makeSeal } from './seal.js';
 import { makeCodec } from './codec.js';
 import { stableWireKey } from './keying.js';
@@ -14,7 +15,15 @@ import type {
   CheckedOptions,
   AnyKind,
 } from './types.js';
-export type { Result, ValueError, ValueOf, JsonValue, AnyKind } from './types.js';
+export type {
+  Result,
+  ValueError,
+  ValueOf,
+  JsonValue,
+  AnyKind,
+  ValueDocumentation,
+  ProjectionDocumentation,
+} from './types.js';
 import { ValueMap, ValueSet } from './collections.js';
 export type { ValueMap, ValueSet } from './collections.js';
 export const ok = <T>(value: T): Result<T, never> => ({ ok: true, value });
@@ -84,7 +93,7 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
           allocate: (...args: Parameters<typeof allocate>) => parse(allocate(...args)),
         });
       Object.assign(result, collections(result as unknown as AnyKind));
-      return Object.freeze(result) as unknown as ValueKind<K, W, O>;
+      return documentedKind(result) as unknown as ValueKind<K, W, O>;
     },
   });
 }
@@ -117,7 +126,7 @@ export function defineDerived<const K extends string, I, P>(spec: {
         },
       };
       Object.assign(result, collections(result as unknown as AnyKind));
-      return Object.freeze(result) as unknown as DerivedKind<K, I, O>;
+      return documentedKind(result) as unknown as DerivedKind<K, I, O>;
     },
   });
 }

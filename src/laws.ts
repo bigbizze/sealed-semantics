@@ -247,3 +247,34 @@ export function assertDerivedLaws<K extends Derived>(
     }),
   );
 }
+
+/** Check a documented wire example and its normalized round trip, without sampling. */
+export function assertValueDocs<
+  K extends SemanticKind & {
+    readonly documentation: { readonly exampleWire?: unknown };
+  },
+>(kind: K): void {
+  if (!Object.hasOwn(kind.documentation, 'exampleWire')) return;
+  const parsed = kind.parse(kind.documentation.exampleWire);
+  assert(parsed.ok, `${kind.kind}: documentation.exampleWire was rejected by parse`);
+  if (!parsed.ok) return;
+  assert(
+    kind.is(parsed.value),
+    `${kind.kind}: documentation example has an invalid brand`,
+  );
+  const value: any = parsed.value;
+  const raw = value.encode();
+  const key = stableWireKey(raw);
+  const reparsed = kind.parse(raw);
+  assert(reparsed.ok, `${kind.kind}: encoded documentation example was rejected`);
+  if (!reparsed.ok) return;
+  assert(
+    value.equals(reparsed.value),
+    `${kind.kind}: documentation round trip changed equality`,
+  );
+  assert.equal(
+    stableWireKey(reparsed.value.encode()),
+    key,
+    `${kind.kind}: documentation round trip changed encoding`,
+  );
+}

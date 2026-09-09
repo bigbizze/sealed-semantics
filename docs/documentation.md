@@ -1,0 +1,11 @@
+# Documentation metadata
+
+`defineValue(...)` establishes the producer. `.with(...)` establishes behavior and completes the kind. Optional `.docs(...)` describes that completed API. It returns a new frozen kind with the same methods, codec, collections, and private brand. It does not register another kind or run schemas or producer callbacks. Calling `.docs(...)` again replaces the documentation in another new kind.
+
+Metadata is available as `Kind.documentation`; `.docs` remains the attachment method. The top-level metadata, views map, and each view description record are copied and frozen. Example values remain author-owned references: the library does not clone or freeze their graphs.
+
+Semantic documentation supports `description`, `exampleWire`, `exampleCanonical`, and `views`. Derived documentation supports `description` and `views`. Each declared view can have a `description` and an `example`. All properties are optional. Example wire types come from the schema input, including nested raw wire data. Canonical and view examples use their completed return types. Examples cannot widen those types. An absent canonical operation prohibits `exampleCanonical`; unknown view names and unknown metadata properties fail excess-property checks on object literals. As with ordinary TypeScript object types, extra keys on pre-existing variables can pass structural assignment. Use `satisfies` at the metadata declaration to check those keys.
+
+`assertValueDocs(Kind)` from `sealed-semantics/laws` checks a provided wire example through `parse`, verifies the brand, and checks equality and stable encoding through an encode/parse round trip. A description-only document needs no wire check. A regex-invalid string can pass TypeScript but fails this explicit test. Canonical and view examples are type-checked only; they need not describe the same input as the wire example. The check uses no random generators. The laws entry still requires its optional fast-check peer.
+
+Metadata strings do not become generated JSDoc comments. Add normal JSDoc to declarations when specific hover text is needed. Future declaration generators or editor tools can consume `Kind.documentation`; the core has no dependency on them.

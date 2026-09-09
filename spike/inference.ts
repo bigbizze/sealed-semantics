@@ -283,3 +283,33 @@ const frozenBuilder = defineDerived({
 });
 // @ts-expect-error builder operation is readonly
 frozenBuilder.with = frozenBuilder.with;
+
+const DocumentedUser = UserId.docs({
+  description: 'A user identifier.',
+  exampleWire: 'usr_0123456789abcdef',
+  exampleCanonical: { type: 'utf8', value: 'usr_0123456789abcdef' },
+});
+type DocumentedValue = Assert<
+  Equal<ValueOf<typeof DocumentedUser>, ValueOf<typeof UserId>>
+>;
+DocumentedUser.allocate(() => 'usr_0123456789abcdef');
+// @ts-expect-error Documentation cannot change the inferred wire type.
+UserId.docs({ exampleWire: 123 });
+// @ts-expect-error Canonical examples must have the complete return shape.
+UserId.docs({ exampleCanonical: { type: 'utf8' } });
+// @ts-expect-error No canonical operation exists.
+NamespaceId.docs({ exampleCanonical: 'ns:x' });
+// @ts-expect-error No views exist.
+NamespaceId.docs({ views: { suffix: { example: 'abc' } } });
+// @ts-expect-error Documentation spelling is checked.
+UserId.docs({ descriptin: 'typo' });
+// @ts-expect-error Metadata container is readonly.
+DocumentedUser.documentation.description = 'changed';
+ContentAddress.docs({ views: { contentClass: { example: 'primary' } } });
+// @ts-expect-error Projection example must match its inferred enum.
+ContentAddress.docs({ views: { contentClass: { example: 'invalid' } } });
+// @ts-expect-error Unknown projection name.
+ContentAddress.docs({ views: { suffix: { example: 'abc' } } });
+PreparedWrite.docs({ description: 'Local write proof.' });
+// @ts-expect-error Derived kinds have no wire representation.
+PreparedWrite.docs({ exampleWire: 'anything' });

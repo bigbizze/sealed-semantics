@@ -1,6 +1,8 @@
 import { z } from 'zod';
 
 const reservedFields = new Set([
+  'docs',
+  'documentation',
   'view',
   'map',
   'set',

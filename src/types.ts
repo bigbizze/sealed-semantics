@@ -61,6 +61,10 @@ export type SemanticValue<K extends string, W extends z.ZodType, O> = Value<
 export type DerivedValue<K extends string, O> = Proof<K> & Views<O>;
 export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
   {
+    /** Attach typed documentation without changing the producer or its brand. */
+    docs(metadata: ValueDocumentation<W, O>): ValueKind<K, W, O> & {
+      readonly documentation: ValueDocumentation<W, O>;
+    };
     readonly kind: K;
     is(x: unknown): x is SemanticValue<K, W, O>;
     parse(input: unknown): Result<SemanticValue<K, W, O>>;
@@ -75,6 +79,10 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
     : {})
 >;
 export type DerivedKind<K extends string, I, O> = Readonly<{
+  /** Attach documentation without changing the derivation or its brand. */
+  docs(metadata: ProjectionDocumentation<O>): DerivedKind<K, I, O> & {
+    readonly documentation: ProjectionDocumentation<O>;
+  };
   readonly kind: K;
   is(x: unknown): x is DerivedValue<K, O>;
   derive(input: I): Result<DerivedValue<K, O>>;
@@ -89,6 +97,8 @@ export type JsonSchema<W extends z.ZodType> = 0 extends 1 & z.input<W>
 export type LiteralKind<K extends string> = string extends K ? never : K;
 
 export type ReservedField =
+  | 'docs'
+  | 'documentation'
   | 'view'
   | 'map'
   | 'set'
@@ -133,3 +143,21 @@ export type CheckedOptions<O, Allowed> = O &
         };
       }
     : unknown);
+
+/** Examples describe outputs; they do not configure or validate the producer. */
+export type ProjectionDocumentation<O> = Readonly<{
+  description?: string;
+  views?: O extends { fields: infer F }
+    ? {
+        readonly [N in keyof F]?: Readonly<{
+          description?: string;
+          example?: F[N] extends (...args: any[]) => infer R ? R : never;
+        }>;
+      }
+    : never;
+}>;
+export type ValueDocumentation<W extends z.ZodType, O> = ProjectionDocumentation<O> &
+  Readonly<{
+    exampleWire?: z.input<W>;
+    exampleCanonical?: O extends { canonical: (...args: any[]) => infer C } ? C : never;
+  }>;

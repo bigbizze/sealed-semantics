@@ -29,6 +29,10 @@ const UserId = defineValue({
   allocate: () => `user:${crypto.randomUUID()}`,
   canonical: p => ({ type: 'utf8', value: p.spelling }),
   debug: p => `user(…${p.spelling.slice(-6)})`,
+}).docs({
+  description: 'A normalized user identifier.',
+  exampleWire: 'usr_0123456789abcdef',
+  exampleCanonical: { type: 'utf8', value: 'usr_0123456789abcdef' },
 });
 type UserId = ValueOf<typeof UserId>;
 
@@ -109,7 +113,7 @@ Zod's `z.decode`, `z.encode`, `z.safeDecode`, and `z.safeEncode` work with `Kind
 `Kind.map<V>()` and `Kind.set()` compare semantic keys by normalized wire data and derived keys by identity.
 Collections retain runtime kind validation. `ValueMap` and `ValueSet` are type-only exports.
 Declared fields are called through `value.view.*`; no standard methods live inside `view`.
-Instances, prototypes, and view facades are frozen; Parts are not. View is privately cached and null-prototype.
+Kinds, builders, instances, prototypes, and view facades are frozen; Parts are not. View is privately cached and null-prototype.
 Definitions without fields have no `view`. Invalid configuration fails before registering its kind.
 Reserved field names receive a descriptive compiler error. Canonical output is `value.canonical()`.
 Pass sealed values directly into derivations. Encode only when a boundary needs raw data.
@@ -127,3 +131,8 @@ The scan detects direct literal kinds on calls named defineValue/defineDerived, 
 It does not resolve renamed imports, computed expressions, generated code, or dependency source automatically.
 
 Development: `npm ci`, then `npm run check`. See [release checks](docs/releasing.md).
+
+Optional `.docs({...})` returns a frozen kind with the same producer and brand.
+Read metadata through `Kind.documentation`. Examples are checked against completed types.
+Use `assertValueDocs(Kind)` from `sealed-semantics/laws` in CI to check wire examples.
+Documentation does not run schemas or callbacks at startup. See [documentation metadata](docs/documentation.md).
