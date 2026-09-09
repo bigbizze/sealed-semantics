@@ -1,33 +1,125 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, readFileSync, writeFileSync, cpSync, rmSync } from 'node:fs';
+import {
+  mkdtempSync,
+  readFileSync,
+  writeFileSync,
+  cpSync,
+  rmSync,
+  existsSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
-const root=resolve('.');
-const run=(cmd,args,cwd=root)=>execFileSync(cmd,args,{cwd,encoding:'utf8',stdio:['ignore','pipe','pipe']});
-const metadata=JSON.parse(run('npm',['pack','--ignore-scripts','--json']))[0];
-assert(metadata.files.some(f=>f.path==='dist/index.d.ts'));
-assert(metadata.files.some(f=>f.path==='bin/check-kinds.mjs'));
-assert(!metadata.files.some(f=>f.path.startsWith('test/') || f.path.startsWith('node_modules/')));
-const temp=mkdtempSync(join(tmpdir(),'sealed-semantics-consumer-'));
+const root = resolve('.');
+const run = (cmd, args, cwd = root) =>
+  execFileSync(cmd, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+const metadata = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json']))[0];
+assert(metadata.files.some((f) => f.path === 'dist/index.d.ts'));
+assert(metadata.files.some((f) => f.path === 'bin/check-kinds.mjs'));
+assert(
+  !metadata.files.some(
+    (f) => f.path.startsWith('test/') || f.path.startsWith('node_modules/'),
+  ),
+);
+const temp = mkdtempSync(join(tmpdir(), 'sealed-semantics-consumer-'));
 try {
- writeFileSync(join(temp,'package.json'),JSON.stringify({type:'module',private:true}));
- run('npm',['install','--ignore-scripts','--no-audit','--no-fund',join(root,metadata.filename),`zod@${process.argv[2]??'4.1.0'}`,'fast-check','@types/node'],temp);
- const readme=readFileSync(join(root,'README.md'),'utf8');
- const code=[...readme.matchAll(/```ts\n([\s\S]*?)```/g)].map(m=>m[1]).join('\n');
- writeFileSync(join(temp,'readme.ts'),code);
- writeFileSync(join(temp,'tsconfig.json'),JSON.stringify({compilerOptions:{target:'ES2022',module:'NodeNext',moduleResolution:'NodeNext',strict:true,noUncheckedIndexedAccess:true,exactOptionalPropertyTypes:true,skipLibCheck:true,types:['node']},include:['readme.ts','constraints.ts']}));
- const constraints=readFileSync(join(root,'spike/inference.ts'),'utf8').replaceAll("'../src/index.js'","'sealed-semantics'").replaceAll("'../src/types.js'","'sealed-semantics'");
- writeFileSync(join(temp,'constraints.ts'),constraints);
- run(process.execPath,[join(root,'node_modules/typescript/bin/tsc'),'--noEmit','-p',join(temp,'tsconfig.json')],temp);
- cpSync(join(temp,'node_modules/sealed-semantics'),join(temp,'node_modules/sealed-semantics-copy'),{recursive:true});
- writeFileSync(join(temp,'smoke.mjs'),`
+  writeFileSync(
+    join(temp, 'package.json'),
+    JSON.stringify({ type: 'module', private: true }),
+  );
+  run(
+    'npm',
+    [
+      'install',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      join(root, metadata.filename),
+      `zod@${process.argv[2] ?? '4.1.0'}`,
+    ],
+    temp,
+  );
+  assert(
+    !existsSync(join(temp, 'node_modules/fast-check')),
+    'main consumers must not need the optional test peer',
+  );
+  run(
+    process.execPath,
+    [
+      '--input-type=module',
+      '-e',
+      "import {defineValue,ok} from 'sealed-semantics'; import {z} from 'zod'; const K=defineValue({kind:'consumer/no-test-peer',wire:z.string(),decode:w=>ok(w)}).with({toWireShape:p=>p}); if (!K.parse('x').ok) throw Error();",
+    ],
+    temp,
+  );
+  run(
+    'npm',
+    [
+      'install',
+      '--save-dev',
+      '--ignore-scripts',
+      '--no-audit',
+      '--no-fund',
+      'fast-check@^4.9.0',
+      '@types/node',
+    ],
+    temp,
+  );
+  const readme = readFileSync(join(root, 'README.md'), 'utf8');
+  const code = [...readme.matchAll(/```ts\n([\s\S]*?)```/g)]
+    .map((m) => m[1])
+    .join('\n');
+  writeFileSync(join(temp, 'readme.ts'), code);
+  writeFileSync(
+    join(temp, 'tsconfig.json'),
+    JSON.stringify({
+      compilerOptions: {
+        target: 'ES2022',
+        module: 'NodeNext',
+        moduleResolution: 'NodeNext',
+        strict: true,
+        noUncheckedIndexedAccess: true,
+        exactOptionalPropertyTypes: true,
+        skipLibCheck: true,
+        types: ['node'],
+      },
+      include: ['readme.ts', 'constraints.ts'],
+    }),
+  );
+  const constraints = readFileSync(join(root, 'spike/inference.ts'), 'utf8')
+    .replaceAll("'../src/index.js'", "'sealed-semantics'")
+    .replaceAll("'../src/types.js'", "'sealed-semantics'");
+  writeFileSync(join(temp, 'constraints.ts'), constraints);
+  run(
+    process.execPath,
+    [
+      join(root, 'node_modules/typescript/bin/tsc'),
+      '--noEmit',
+      '-p',
+      join(temp, 'tsconfig.json'),
+    ],
+    temp,
+  );
+  cpSync(
+    join(temp, 'node_modules/sealed-semantics'),
+    join(temp, 'node_modules/sealed-semantics-copy'),
+    { recursive: true },
+  );
+  cpSync(join(temp, 'node_modules/zod'), join(temp, 'node_modules/zod-copy'), {
+    recursive: true,
+  });
+  writeFileSync(
+    join(temp, 'smoke.mjs'),
+    `
  import assert from 'node:assert/strict';
  import { z } from 'zod';
  import * as fc from 'fast-check';
  import * as a from 'sealed-semantics';
  import * as b from 'sealed-semantics-copy';
  import { assertValueLaws } from 'sealed-semantics/laws';
+ const {z: foreignZod}=await import('zod-copy');
+ const ForeignSchema=a.defineValue({kind:'consumer/foreign-schema',wire:foreignZod.string(),decode:w=>a.ok(w)}).with({toWireShape:p=>p});
+ assert(ForeignSchema.parse('x').ok);
  const A=a.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>a.ok(w)}).with({toWireShape:p=>p});
  const B=b.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>b.ok(w)}).with({toWireShape:p=>p});
  const x=A.parse('x').value,y=A.parse('x').value;
@@ -47,12 +139,29 @@ try {
  assert.equal(new foreign.ValueMap(A).set(x,1).get(y),1);
  assert.equal(new foreign.ValueSet(D).add(p).add(q).size,2);
  assertValueLaws(A,{validWire:fc.string()});
- for (const path of ['seal','codec','keying','collections','dist/seal.js','src/seal.ts']) await assert.rejects(import('sealed-semantics/'+path),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
- `);
- run(process.execPath,['smoke.mjs'],temp);
- run(process.execPath,[join(root,'node_modules/tsx/dist/cli.mjs'),'readme.ts'],temp);
- run(process.execPath,[join(temp,'node_modules/sealed-semantics/bin/check-kinds.mjs'),'readme.ts'],temp);
- console.log(`Package smoke passed with Zod ${process.argv[2]??'4.1.0'}: README, declaration constraints, cross-copy brands/collections, test-only entry, exports, CLI.`);
- console.log(`Tarball: ${join(root,metadata.filename)}`);
-} catch(error) { console.error(error.stdout?.toString()??'');console.error(error.stderr?.toString()??'');throw error; }
-finally {rmSync(temp,{recursive:true,force:true});}
+ assertValueLaws(Composite,{validWire:fc.record({id:fc.string()}),sealedKinds:[A]});
+ for (const path of ['seal','definition','codec','keying','collections','dist/seal.js','src/seal.ts']) await assert.rejects(import('sealed-semantics/'+path),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
+ `,
+  );
+  run(process.execPath, ['smoke.mjs'], temp);
+  run(
+    process.execPath,
+    [join(root, 'node_modules/tsx/dist/cli.mjs'), 'readme.ts'],
+    temp,
+  );
+  run(
+    process.execPath,
+    [join(temp, 'node_modules/sealed-semantics/bin/check-kinds.mjs'), 'readme.ts'],
+    temp,
+  );
+  console.log(
+    `Package smoke passed with Zod ${process.argv[2] ?? '4.1.0'}: README, declaration constraints, cross-copy brands/collections, test-only entry, exports, CLI.`,
+  );
+  console.log(`Tarball: ${join(root, metadata.filename)}`);
+} catch (error) {
+  console.error(error.stdout?.toString() ?? '');
+  console.error(error.stderr?.toString() ?? '');
+  throw error;
+} finally {
+  rmSync(temp, { recursive: true, force: true });
+}

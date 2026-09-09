@@ -109,7 +109,8 @@ Zod's `z.decode`, `z.encode`, `z.safeDecode`, and `z.safeEncode` work with `Kind
 `Kind.map<V>()` and `Kind.set()` compare semantic keys by normalized wire data and derived keys by identity.
 Collections retain runtime kind validation. `ValueMap` and `ValueSet` are type-only exports.
 Declared fields are called through `value.view.*`; no standard methods live inside `view`.
-The facade is privately cached, frozen, and null-prototype; definitions without fields have no `view`.
+Instances, prototypes, and view facades are frozen; Parts are not. View is privately cached and null-prototype.
+Definitions without fields have no `view`. Invalid configuration fails before registering its kind.
 Reserved field names receive a descriptive compiler error. Canonical output is `value.canonical()`.
 Pass sealed values directly into derivations. Encode only when a boundary needs raw data.
 They provide get/set or add, has, delete, clear, size, iteration, and forEach as applicable.
@@ -118,8 +119,9 @@ Producers must own Parts exclusively, never mutate them, and copy mutable projec
 Neither constructor proves existence, permission, currentness, or storage success.
 See [accepted amendments](docs/amendments.md), [guarantees](docs/guarantees.md), [laws](docs/laws.md), and [type viability](docs/viability.md).
 
-For consumer law tests, install `fast-check` as a dev dependency and import the harness from `sealed-semantics/laws`.
+For consumer law tests, install the optional `fast-check` peer as a dev dependency and import the harness from `sealed-semantics/laws`.
 Supply valid input generators, equivalent alias pairs, and mutators for custom mutable projections.
+List nested sealed kinds in the harness option `sealedKinds`; unrecognized objects are not assumed sealed.
 Run `npx check-kinds 'src/**/*.ts' 'other-root/**/*.ts'` in CI across all owned roots.
 The scan detects direct literal kinds on calls named defineValue/defineDerived, including qualified calls.
 It does not resolve renamed imports, computed expressions, generated code, or dependency source automatically.
