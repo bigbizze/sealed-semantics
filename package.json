@@ -1,6 +1,6 @@
 {
   "name": "sealed-semantics",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Explicitly encoded semantic values and local derived proofs",
   "type": "module",
   "license": "MIT",

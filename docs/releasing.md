@@ -5,8 +5,8 @@ This repository builds an ESM npm package with declaration files. The package ex
 1. Run `npm ci` and `npm run check`.
 2. Run `npm run test:package` for the minimum Zod version, then `npm run test:package -- 4` for current Zod 4.
 3. Run `npm run typecheck:5.7` to check the minimum TypeScript version.
-4. Inspect `npm pack --dry-run`. `npm pack` runs the checks through prepack and creates `sealed-semantics-0.1.0.tgz` for the current version.
-5. Share the tarball directly with `npm install /path/to/sealed-semantics-0.1.0.tgz`, or publish with `npm publish --access public` from an authorized npm account after choosing the final version and package name.
+4. Inspect `npm pack --dry-run`. `npm pack` runs the checks through prepack and creates `sealed-semantics-0.2.0.tgz` for the current version.
+5. Share the tarball directly with `npm install /path/to/sealed-semantics-0.2.0.tgz`, or publish with `npm publish --access public` from an authorized npm account after choosing the final version and package name.
 
 No npm publication, remote repository, or release tag is created by these checks. Repository, homepage, and issue links point to `bigbizze/sealed-semantics` on GitHub.
 
@@ -21,7 +21,7 @@ The checked-in CI configuration repeats checks on Node 22 and 24 with Zod 4.1.0 
 
 | Command | Purpose |
 | --- | --- |
-| `npm run check` | Formatting, main type checks, library tests, README length, build, and the consumer tests plus runnable demonstration. |
+| `npm run check` | Formatting, main type checks, library tests, README links and code fences, build, and the consumer tests plus runnable demonstration. |
 | `npm run test:consumer` | Refresh the installed local package, check the consumer types, run its tests, then execute its demonstration. |
 | `npm run examples --prefix examples/consumer` | Run the demonstration with section descriptions and detailed operation logs. |
 | `npm run test:package` | Test an installed tarball, including compiling and executing the README snippets. |
