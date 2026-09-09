@@ -25,6 +25,7 @@ export type {
   AnyKind,
   ValueDocumentation,
   ProjectionDocumentation,
+  DerivedDocumentation,
 } from './types.js';
 import { ValueMap, ValueSet } from './collections.js';
 export type { ValueMap, ValueSet } from './collections.js';
@@ -44,7 +45,8 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
   decode: (w: z.output<W>) => Result<P>;
 }): ValueBuilder<K, W, P> {
   validateDefinition(spec, true);
-  const { kind, wire, decode } = spec;
+  const { kind, decode } = spec;
+  const wire: W = spec.wire;
   return Object.freeze({
     with<const O extends ValueOptions<W, P>>(
       options: CheckedOptions<O, ValueOptions<W, P>>,
@@ -102,7 +104,7 @@ export function defineDerived<const K extends string, I, P>(spec: {
   validateDefinition(spec, false);
   const { kind, derive } = spec;
   return Object.freeze({
-    with<const O extends ProjectionOptions<P>>(
+    with<const O extends ProjectionOptions<P> & Record<keyof O, unknown>>(
       options: CheckedOptions<O, ProjectionOptions<P>>,
     ): DerivedKind<K, I, O> {
       validateOptions(options, false);

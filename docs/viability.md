@@ -30,3 +30,5 @@ The first two alternatives preserve the required runtime and type properties wit
 The producer/.with inference stages are unchanged. Instance types now preserve optional canonical() and the exact read-only property types under view. An empty view omits the instance member. Kind types carry map/set factories with exact key and value constraints. Same-kind branding is unchanged; the complete structural instance surface also includes the configured projections. The test suite checks actual compiler output for reserved names instead of accepting an opaque never-type error.
 
 The optional `.docs()` stage uses completed wire and projection types. Compile-only tests reject wrong samples, missing canonical support, unknown view names, and raw/decoded nested wire confusion. `ValueOf` and allocator inference remain unchanged after documentation is attached.
+
+See [compiler diagnostics](diagnostics.md) for the audit of configuration failures and the cases that retain normal TypeScript messages.

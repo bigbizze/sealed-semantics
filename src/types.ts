@@ -9,6 +9,10 @@ export interface ValueError {
   readonly reason: 'invalid_wire' | 'invalid_parts' | 'invalid_input';
   readonly issues: readonly string[];
 }
+/** An impossible requirement that explains an invalid configuration in compiler errors. */
+export type ConfigurationError<Message extends string> = {
+  readonly [Explanation in Message]: never;
+};
 declare const BRAND: unique symbol;
 export interface Proof<K extends string> {
   readonly [BRAND]: K;
@@ -82,8 +86,8 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
 >;
 export type DerivedKind<K extends string, I, O> = Readonly<{
   /** Attach documentation without changing the derivation or its brand. */
-  docs(metadata: ProjectionDocumentation<O>): DerivedKind<K, I, O> & {
-    readonly documentation: ProjectionDocumentation<O>;
+  docs(metadata: DerivedDocumentation<O>): DerivedKind<K, I, O> & {
+    readonly documentation: DerivedDocumentation<O>;
   };
   readonly kind: K;
   is(x: unknown): x is DerivedValue<K, O>;
@@ -92,11 +96,14 @@ export type DerivedKind<K extends string, I, O> = Readonly<{
   set(): ValueSet<DerivedKind<K, I, O>>;
 }>;
 export type JsonSchema<W extends z.ZodType> = 0 extends 1 & z.input<W>
-  ? never
+  ? ConfigurationError<'Wire schema input must not be any. Use a schema with a specific JSON input type.'>
   : [z.input<W>] extends [JsonValue]
     ? W
-    : never;
-export type LiteralKind<K extends string> = string extends K ? never : K;
+    : ConfigurationError<'Wire schema input must be JSON-compatible. Encode dates, bigints, and other non-JSON values as JSON wire data.'>;
+export type LiteralKind<K extends string> = K &
+  (string extends K
+    ? ConfigurationError<'kind must be a string literal, not a widened string. Use a literal or as const.'>
+    : unknown);
 
 export type ReservedField =
   | 'docs'
@@ -128,9 +135,17 @@ export type ReservedField =
   | 'toJSON'
   | 'valueOf'
   | 'toString';
-export type CheckedOptions<O, Allowed> = O &
-  Record<Exclude<keyof O, keyof Allowed>, never> &
-  (O extends { view: infer F }
+export type CheckedOptions<O, Allowed> = O & {
+  [N in Exclude<keyof O, keyof Allowed>]: ConfigurationError<
+    N extends 'fields'
+      ? 'The fields option was renamed to view. Configure projections under view.'
+      : N extends 'canonical' | 'allocate' | 'toWireShape' | 'equals'
+        ? `Derived definitions cannot configure ${N}. Only semantic definitions support this option.`
+        : N extends string
+          ? `Unknown .with option "${N}". Check the option name; documentation belongs in .docs(...).`
+          : 'Symbol-named options are not supported. Use a declared string option name.'
+  >;
+} & (O extends { view: infer F }
     ? {
         view: F & {
           [N in Extract<keyof F, ReservedField>]: {
@@ -151,19 +166,26 @@ export type ProjectionDocumentation<O> = Readonly<{
   description?: string;
   views?: O extends { view: infer F }
     ? keyof F extends never
-      ? never
+      ? ConfigurationError<'docs.views requires declared projections. Add projections to .with({ view: ... }) first.'>
       : {
           readonly [N in keyof F]?: Readonly<{
             description?: string;
             example?: F[N] extends (...args: any[]) => infer R ? R : never;
           }>;
         }
-    : never;
+    : ConfigurationError<'docs.views requires declared projections. Add projections to .with({ view: ... }) first.'>;
 }>;
+export type DerivedDocumentation<O> = ProjectionDocumentation<O> &
+  Readonly<{
+    exampleWire?: ConfigurationError<'Derived definitions have no wire representation. Remove exampleWire.'>;
+    exampleCanonical?: ConfigurationError<'Derived definitions have no canonical representation. Remove exampleCanonical.'>;
+  }>;
 export type ValueDocumentation<W extends z.ZodType, O> = ProjectionDocumentation<O> &
   Readonly<{
     exampleWire?: z.input<W>;
-    exampleCanonical?: O extends { canonical: (...args: any[]) => infer C } ? C : never;
+    exampleCanonical?: O extends { canonical: (...args: any[]) => infer C }
+      ? C
+      : ConfigurationError<'exampleCanonical requires canonical in .with(...). Add canonical or remove exampleCanonical.'>;
   }>;
 
 /** An unfinished semantic definition. Call .with(...) to create its kind. */
@@ -174,7 +196,7 @@ export interface ValueBuilder<K extends string, W extends z.ZodType, P> {
 }
 /** An unfinished derived definition. Call .with(...) to create its kind. */
 export interface DerivedBuilder<K extends string, I, P> {
-  readonly with: <const O extends ProjectionOptions<P>>(
+  readonly with: <const O extends ProjectionOptions<P> & Record<keyof O, unknown>>(
     options: CheckedOptions<O, ProjectionOptions<P>>,
   ) => DerivedKind<K, I, O>;
 }

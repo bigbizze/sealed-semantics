@@ -88,7 +88,8 @@ try {
   );
   const constraints = readFileSync(join(root, 'spike/inference.ts'), 'utf8')
     .replaceAll("'../src/index.js'", "'sealed-semantics'")
-    .replaceAll("'../src/types.js'", "'sealed-semantics'");
+    .replaceAll("'../src/types.js'", "'sealed-semantics'")
+    .replaceAll("'../src/laws.js'", "'sealed-semantics/laws'");
   writeFileSync(join(temp, 'constraints.ts'), constraints);
   run(
     process.execPath,

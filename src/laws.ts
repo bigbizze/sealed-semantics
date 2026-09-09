@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import * as fc from 'fast-check';
 import { stableWireKey } from './keying.js';
-import type { AnyKind, Result, ValueOf } from './types.js';
+import type { AnyKind, Result, ValueOf, ConfigurationError } from './types.js';
 type CollectionKind = AnyKind & {
   map<V>(): { set(k: any, v: V): any; get(k: any): V | undefined; size: number };
   set(): { add(k: any): any; size: number };
@@ -15,10 +15,16 @@ type Derived = CollectionKind & { derive(input: any): Result<any> };
 type Return<K, N extends PropertyKey> =
   K extends Record<N, (...args: any[]) => infer R> ? R : never;
 type Mutator<T> = (value: T) => void;
+type ProjectionMutator<V, N extends 'encode' | 'canonical'> =
+  V extends Record<N, (...args: any[]) => infer R>
+    ? Mutator<R>
+    : ConfigurationError<`projectionMutators.${N} requires a declared ${N} operation. Remove this mutator.`>;
 type Mutators<K extends AnyKind> = {
-  encode?: Mutator<Return<ValueOf<K>, 'encode'>>;
-  canonical?: Mutator<Return<ValueOf<K>, 'canonical'>>;
-  view?: Record<string, Mutator<any>>;
+  encode?: ProjectionMutator<ValueOf<K>, 'encode'>;
+  canonical?: ProjectionMutator<ValueOf<K>, 'canonical'>;
+  view?: ValueOf<K> extends { readonly view: infer V }
+    ? { [N in keyof V]?: Mutator<V[N]> }
+    : ConfigurationError<'projectionMutators.view requires declared view projections. Add projections or remove this mutator.'>;
 };
 function acquire<T>(result: Result<T>): T {
   assert.equal(result.ok, true, 'generator must produce accepted inputs');
@@ -134,6 +140,11 @@ function shared<K extends AnyKind>(
   assert.deepEqual({ ...value }, {});
   assert.deepEqual(Object.keys(value), []);
   assert(!kind.is(structuredClone(value)));
+  const runtimeMutators = mutators as {
+    encode?: Mutator<any>;
+    canonical?: Mutator<any>;
+    view?: Record<string, Mutator<any>>;
+  };
   const all = projections(value);
   const observe = () =>
     Object.fromEntries(
@@ -145,8 +156,8 @@ function shared<K extends AnyKind>(
   for (const [name, project] of Object.entries(all)) {
     const before = observe();
     const custom = name.startsWith('view.')
-      ? mutators.view?.[name.slice(5)]
-      : (mutators as any)[name];
+      ? runtimeMutators.view?.[name.slice(5)]
+      : (runtimeMutators as any)[name];
     if (custom) custom(project());
     else mutate(project(), isSealed);
     assert.deepEqual(observe(), before, `projection leaked mutable Parts: ${name}`);
@@ -159,9 +170,9 @@ export function assertValueLaws<K extends SemanticKind>(
     equivalentAliases?: fc.Arbitrary<
       [Return<ValueOf<K>, 'encode'>, Return<ValueOf<K>, 'encode'>]
     >;
-    allocateArgs?: fc.Arbitrary<
-      K extends { allocate(...args: infer A): unknown } ? A : never
-    >;
+    allocateArgs?: K extends { allocate(...args: infer A): unknown }
+      ? fc.Arbitrary<A>
+      : ConfigurationError<'allocateArgs requires an allocator in .with(...). Add allocate or remove allocateArgs.'>;
     projectionMutators?: Mutators<K>;
     sealedKinds?: readonly AnyKind[];
   },
@@ -213,7 +224,7 @@ export function assertValueLaws<K extends SemanticKind>(
     );
   if (options.allocateArgs)
     fc.assert(
-      fc.property(options.allocateArgs, (args) => {
+      fc.property(options.allocateArgs as fc.Arbitrary<any[]>, (args) => {
         assert('allocate' in kind, 'allocateArgs requires an allocator');
         const value = acquire((kind as any).allocate(...args));
         shared(kind, value, options.projectionMutators, options.sealedKinds);

@@ -1,4 +1,6 @@
 import { z } from 'zod';
+import * as fc from 'fast-check';
+import { assertValueLaws, assertDerivedLaws } from '../src/laws.js';
 import { defineValue, defineDerived, ok } from '../src/index.js';
 import type { ValueOf } from '../src/types.js';
 type Equal<A, B> =
@@ -352,4 +354,72 @@ unfinishedValue.with = unfinishedValue.with;
 const finishedValue = unfinishedValue.with({ toWireShape: (p) => p });
 type FinishedEncoding = Assert<
   Equal<ReturnType<ValueOf<typeof finishedValue>['encode']>, string>
+>;
+
+// Documentation prerequisites remain errors for variables as well as literals.
+const missingCanonical = { exampleCanonical: { type: 'utf8', value: 'x' } };
+// @ts-expect-error A message-bearing type must still reject unsupported examples.
+NamespaceId.docs(missingCanonical);
+// @ts-expect-error Derived canonical documentation is prohibited.
+PreparedWrite.docs({ exampleCanonical: { type: 'utf8', value: 'x' } });
+// @ts-expect-error Any-input wire schemas remain prohibited.
+defineValue({ kind: 'diagnostic/any-input', wire: z.any(), decode: ok });
+assertValueLaws(UserId, {
+  validWire: fc.string(),
+  projectionMutators: {
+    canonical: (value) => {
+      type CanonicalInput = Assert<
+        Equal<typeof value, { type: string; value: string }>
+      >;
+      value.value = 'probe';
+    },
+  },
+});
+assertDerivedLaws(PreparedWrite, {
+  validInput: fc.constant<PrepareInput>({ rows: [], content: [] }),
+  projectionMutators: {
+    view: {
+      rows: (value) => {
+        type ViewInput = Assert<Equal<typeof value, readonly string[]>>;
+      },
+    },
+  },
+});
+assertValueLaws(NamespaceId, {
+  validWire: fc.string(),
+  // @ts-expect-error An allocation generator needs an allocator.
+  allocateArgs: fc.constant([]),
+});
+assertValueLaws(NamespaceId, {
+  validWire: fc.string(),
+  // @ts-expect-error A canonical mutator needs a canonical operation.
+  projectionMutators: { canonical: () => {} },
+});
+assertDerivedLaws(PreparedWrite, {
+  validInput: fc.constant<PrepareInput>({ rows: [], content: [] }),
+  // @ts-expect-error A derived kind cannot have an encoder mutator.
+  projectionMutators: { encode: () => {} },
+});
+assertValueLaws(NamespaceId, {
+  validWire: fc.string(),
+  // @ts-expect-error A view mutator needs a view.
+  projectionMutators: { view: { missing: () => {} } },
+});
+assertDerivedLaws(PreparedWrite, {
+  validInput: fc.constant<PrepareInput>({ rows: [], content: [] }),
+  // @ts-expect-error Mutator names must refer to actual view projections.
+  projectionMutators: { view: { missing: () => {} } },
+});
+
+// @ts-expect-error Explicit undefined does not make a forbidden derived option valid.
+unfinishedDerived.with({ canonical: undefined });
+// @ts-expect-error Explicit undefined does not restore the old fields option.
+unfinishedDerived.with({ fields: undefined });
+interface NamedDerivedOptions {
+  view: { length: (parts: string) => number };
+}
+const namedDerivedOptions: NamedDerivedOptions = { view: { length: (p) => p.length } };
+const namedDerived = unfinishedDerived.with(namedDerivedOptions);
+type NamedProjection = Assert<
+  Equal<ValueOf<typeof namedDerived>['view']['length'], number>
 >;
