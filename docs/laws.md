@@ -1,6 +1,6 @@
 # Laws
 
-Import `assertValueLaws` and `assertDerivedLaws` from `canonical-type/laws`. Install `fast-check` and Node type declarations as development dependencies. Supply explicit fast-check arbitraries; a Zod schema does not supply a generator. The harness runs synchronous properties, using fast-check's default run count and seed handling. Fast-check failure causes contain the underlying assertion.
+Import `assertValueLaws` and `assertDerivedLaws` from `sealed-semantics/laws`. Install `fast-check` and Node type declarations as development dependencies. Supply explicit fast-check arbitraries; a Zod schema does not supply a generator. The harness runs synchronous properties, using fast-check's default run count and seed handling. Fast-check failure causes contain the underlying assertion.
 
 1. Accepted semantic input produces a value recognized by its kind. This checks the acquisition path.
 2. A prototype-forged object is rejected. A prototype is not the private-field brand.

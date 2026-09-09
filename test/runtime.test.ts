@@ -12,7 +12,7 @@ test('private brand, prototype forgery, constructor recovery, and hidden state',
  assert(UserId.is(v)); assert(!UserId.is(fake)); assert(!UserId.is(new Proxy(v,{})));
  assert(!z.safeEncode(UserId.wire,fake).success);
  assert(!UserId.wire.out.safeParse(fake).success);
- assert.throws(()=>new (Object.getPrototypeOf(v).constructor)(Symbol('canonical-type/construct'),{}),TypeError);
+ assert.throws(()=>new (Object.getPrototypeOf(v).constructor)(Symbol('sealed-semantics/construct'),{}),TypeError);
  assert.throws(()=>Object.getPrototypeOf(v).canonical.call(fake),TypeError);
  assert.throws(()=>v.equals(fake),TypeError);
  assert.throws(()=>Object.getPrototypeOf(v).encode.call(fake),TypeError);

@@ -32,7 +32,7 @@ This audit maps the original specification to the implemented package. The API s
 | §15 all test categories | Compile-only, property, runtime, example-contract, scanner, and package-consumer suites exist. No test uses a construction backdoor. |
 | §16 acceptance criteria 1–9 | Covered by the entries above, the build, complete test suite, scanner, size check, and isolated package installation. |
 | User request: alternative ergonomic constraints | `viability.md` compares the implemented staged builder, schema-first stages, typed producer objects, and an explicit Parts schema. Negative consumer tests verify diagnostics against the emitted declarations. |
-| User request: shareable npm repository | Git repository at `~/c/canonical-type`; package exports, declarations, source maps, license, README, release procedure, CI configuration, executable scanner, and tested tarball. No external publication is required to share the tarball. |
+| User request: shareable npm repository | Git repository at `~/c/sealed-semantics`; package exports, declarations, source maps, license, README, release procedure, CI configuration, executable scanner, and tested tarball. No external publication is required to share the tarball. |
 
 Verified locally on Node 22.14.0 with Zod 4.1.0 and 4.5.4, using TypeScript 7.0.2 and the 5.7.3 compatibility check. The complete suite has 14 tests, including property runs over all reference kinds. Both peer versions passed isolated tarball consumer checks. CI is configured for Node 22 and 24 but has not run on a hosted service.
 

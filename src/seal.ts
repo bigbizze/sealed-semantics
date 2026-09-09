@@ -1,4 +1,4 @@
-const CONSTRUCT: unique symbol = Symbol('canonical-type/construct');
+const CONSTRUCT: unique symbol = Symbol('sealed-semantics/construct');
 export function makeSeal<P>(kind: string, ops: {
   encode?: (parts: P) => unknown;
   canonical?: ((parts: P) => unknown) | undefined;

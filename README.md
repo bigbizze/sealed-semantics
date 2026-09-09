@@ -1,10 +1,10 @@
-# canonical-type
+# sealed-semantics
 
 Semantic values and local derived proofs with private state and explicit encoding.
 Requires Node 22+, TypeScript 5.7+, and Zod 4.1.x or 4.x.
 
 ```sh
-npm install canonical-type zod
+npm install sealed-semantics zod
 ```
 
 The producer stage establishes Parts; `.with(...)` then infers every projection parameter.
@@ -12,7 +12,7 @@ Only `.with(...)` completes the definition. Choose stable, namespaced kind liter
 
 ```ts
 import { z } from 'zod';
-import { defineValue, defineDerived, ok, err, type ValueOf } from 'canonical-type';
+import { defineValue, defineDerived, ok, err, type ValueOf } from 'sealed-semantics';
 
 const normalizeUserSpelling = (w: string) =>
   w.startsWith('user:') ? `usr_${w.slice(5).replaceAll('-', '')}` : w;
@@ -118,7 +118,7 @@ Producers must own Parts exclusively, never mutate them, and copy mutable projec
 Neither constructor proves existence, permission, currentness, or storage success.
 See [accepted amendments](docs/amendments.md), [guarantees](docs/guarantees.md), [laws](docs/laws.md), and [type viability](docs/viability.md).
 
-For consumer law tests, install `fast-check` as a dev dependency and import the harness from `canonical-type/laws`.
+For consumer law tests, install `fast-check` as a dev dependency and import the harness from `sealed-semantics/laws`.
 Supply valid input generators, equivalent alias pairs, and mutators for custom mutable projections.
 Run `npx check-kinds 'src/**/*.ts' 'other-root/**/*.ts'` in CI across all owned roots.
 The scan detects direct literal kinds on calls named defineValue/defineDerived, including qualified calls.

@@ -39,7 +39,7 @@ Instances reject implicit string conversion, numeric conversion, and JSON serial
 
 The staged builder is the inference-gate revision described in `viability.md`. Call `.with(...)` to complete a definition; only this step reserves the kind and creates its runtime identity. Projection names that conflict with kind operations, prototype behavior, or forbidden accessors are rejected. The runtime captures callbacks at definition time. Do not mutate the Zod schema or definition after setup.
 
-Size exception: the amended shipped sources may exceed 400 lines when type declarations, the law harness, and the CLI are included. The added lines implement the required private view cache, frozen facade, conditional instance types, and clear reserved-name diagnostics. Core runtime source remains below 400 lines; `check:size` verifies that count and reports the full count. The main entry has one runtime peer dependency, Zod. The separate Node-only `canonical-type/laws` entry requires consumers to install `fast-check` as a development dependency. It is never imported by the main entry.
+Size exception: the amended shipped sources may exceed 400 lines when type declarations, the law harness, and the CLI are included. The added lines implement the required private view cache, frozen facade, conditional instance types, and clear reserved-name diagnostics. Core runtime source remains below 400 lines; `check:size` verifies that count and reports the full count. The main entry has one runtime peer dependency, Zod. The separate Node-only `sealed-semantics/laws` entry requires consumers to install `fast-check` as a development dependency. It is never imported by the main entry.
 
 ## Amended instance surface
 
