@@ -444,3 +444,47 @@ test('derived serialization errors do not recommend a nonexistent encoder', () =
     });
   }
 });
+test('kinds and builders cannot have acquisition or collection operations replaced', () => {
+  const builder = defineValue({
+    kind: 'hardening/frozen-kind',
+    wire: z.string(),
+    decode: (w) => ok(w),
+  });
+  const derivedBuilder = defineDerived({
+    kind: 'hardening/frozen-derived',
+    derive: (s: string) => ok(s),
+  });
+  for (const b of [builder, derivedBuilder]) {
+    assert(Object.isFrozen(b));
+    assert.equal(
+      Reflect.set(b, 'with', () => null),
+      false,
+    );
+    assert.throws(() => Object.setPrototypeOf(b, {}), TypeError);
+  }
+  const K = builder.with({ toWireShape: (p) => p, allocate: () => 'allocated' });
+  const D = derivedBuilder.with({});
+  for (const kind of [K, D]) {
+    assert(Object.isFrozen(kind));
+    for (const key of Object.keys(kind)) {
+      const original = Reflect.get(kind, key);
+      assert.equal(
+        Reflect.set(kind, key, () => null),
+        false,
+      );
+      assert.equal(Reflect.deleteProperty(kind, key), false);
+      assert.equal(Reflect.get(kind, key), original);
+    }
+    assert.throws(() => Object.setPrototypeOf(kind, {}), TypeError);
+    assert.equal(Reflect.set(kind, 'extra', 1), false);
+  }
+  const v = value(K.allocate());
+  assert.equal(v.encode(), 'allocated');
+  assert.equal(
+    K.map<number>()
+      .set(v, 1)
+      .get(value(K.parse('allocated'))),
+    1,
+  );
+  assert(D.is(value(D.derive('input'))));
+});

@@ -59,26 +59,28 @@ export type SemanticValue<K extends string, W extends z.ZodType, O> = Value<
   Views<O> &
   Canonical<O>;
 export type DerivedValue<K extends string, O> = Proof<K> & Views<O>;
-export type ValueKind<K extends string, W extends z.ZodType, O> = {
-  readonly kind: K;
-  is(x: unknown): x is SemanticValue<K, W, O>;
-  parse(input: unknown): Result<SemanticValue<K, W, O>>;
-  readonly wire: z.ZodCodec<
-    W,
-    z.ZodType<SemanticValue<K, W, O>, SemanticValue<K, W, O>>
-  >;
-  map<V>(): ValueMap<ValueKind<K, W, O>, V>;
-  set(): ValueSet<ValueKind<K, W, O>>;
-} & (O extends { allocate: (...args: infer A) => unknown }
-  ? { allocate(...args: A): Result<SemanticValue<K, W, O>> }
-  : {});
-export type DerivedKind<K extends string, I, O> = {
+export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
+  {
+    readonly kind: K;
+    is(x: unknown): x is SemanticValue<K, W, O>;
+    parse(input: unknown): Result<SemanticValue<K, W, O>>;
+    readonly wire: z.ZodCodec<
+      W,
+      z.ZodType<SemanticValue<K, W, O>, SemanticValue<K, W, O>>
+    >;
+    map<V>(): ValueMap<ValueKind<K, W, O>, V>;
+    set(): ValueSet<ValueKind<K, W, O>>;
+  } & (O extends { allocate: (...args: infer A) => unknown }
+    ? { allocate(...args: A): Result<SemanticValue<K, W, O>> }
+    : {})
+>;
+export type DerivedKind<K extends string, I, O> = Readonly<{
   readonly kind: K;
   is(x: unknown): x is DerivedValue<K, O>;
   derive(input: I): Result<DerivedValue<K, O>>;
   map<V>(): ValueMap<DerivedKind<K, I, O>, V>;
   set(): ValueSet<DerivedKind<K, I, O>>;
-};
+}>;
 export type JsonSchema<W extends z.ZodType> = 0 extends 1 & z.input<W>
   ? never
   : [z.input<W>] extends [JsonValue]

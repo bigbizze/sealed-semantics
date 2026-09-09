@@ -31,14 +31,14 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
   kind: LiteralKind<K>;
   wire: W & JsonSchema<W>;
   decode: (w: z.output<W>) => Result<P>;
-}): {
+}): Readonly<{
   with<const O extends ValueOptions<W, P>>(
     options: CheckedOptions<O, ValueOptions<W, P>>,
   ): ValueKind<K, W, O>;
-} {
+}> {
   validateDefinition(spec, true);
   const { kind, wire, decode } = spec;
-  return {
+  return Object.freeze({
     with<const O extends ValueOptions<W, P>>(
       options: CheckedOptions<O, ValueOptions<W, P>>,
     ): ValueKind<K, W, O> {
@@ -84,21 +84,21 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
           allocate: (...args: Parameters<typeof allocate>) => parse(allocate(...args)),
         });
       Object.assign(result, collections(result as unknown as AnyKind));
-      return result as unknown as ValueKind<K, W, O>;
+      return Object.freeze(result) as unknown as ValueKind<K, W, O>;
     },
-  };
+  });
 }
 export function defineDerived<const K extends string, I, P>(spec: {
   kind: LiteralKind<K>;
   derive: (input: I) => Result<P>;
-}): {
+}): Readonly<{
   with<const O extends ProjectionOptions<P>>(
     options: CheckedOptions<O, ProjectionOptions<P>>,
   ): DerivedKind<K, I, O>;
-} {
+}> {
   validateDefinition(spec, false);
   const { kind, derive } = spec;
-  return {
+  return Object.freeze({
     with<const O extends ProjectionOptions<P>>(
       options: CheckedOptions<O, ProjectionOptions<P>>,
     ): DerivedKind<K, I, O> {
@@ -117,7 +117,7 @@ export function defineDerived<const K extends string, I, P>(spec: {
         },
       };
       Object.assign(result, collections(result as unknown as AnyKind));
-      return result as unknown as DerivedKind<K, I, O>;
+      return Object.freeze(result) as unknown as DerivedKind<K, I, O>;
     },
-  };
+  });
 }

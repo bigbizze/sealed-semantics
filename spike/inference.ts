@@ -267,3 +267,19 @@ defineDerived({ kind: 'amendment/symbol-type', derive: (s: string) => ok(s) }).w
     [Symbol.toPrimitive]: (p: string) => p,
   },
 });
+// @ts-expect-error kind acquisition methods are readonly
+UserId.parse = UserId.parse;
+// @ts-expect-error kind predicates are readonly
+UserId.is = UserId.is;
+// @ts-expect-error kind allocators are readonly
+UserId.allocate = UserId.allocate;
+// @ts-expect-error kind collection factories are readonly
+UserId.map = UserId.map;
+// @ts-expect-error derived producers are readonly
+PreparedWrite.derive = PreparedWrite.derive;
+const frozenBuilder = defineDerived({
+  kind: 'types/frozen-builder',
+  derive: (s: string) => ok(s),
+});
+// @ts-expect-error builder operation is readonly
+frozenBuilder.with = frozenBuilder.with;

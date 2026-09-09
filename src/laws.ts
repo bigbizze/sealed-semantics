@@ -30,7 +30,8 @@ function snapshot(
   isSealed: (value: unknown) => boolean,
   seen = new Map<object, any>(),
 ): any {
-  if (x === null || typeof x !== 'object' || isSealed(x)) return x;
+  if (x === null || (typeof x !== 'object' && typeof x !== 'function') || isSealed(x))
+    return x;
   if (seen.has(x)) return seen.get(x);
   if (ArrayBuffer.isView(x))
     return {
@@ -46,8 +47,12 @@ function snapshot(
       snapshot(v, isSealed, seen),
     ]);
   if (x instanceof Set) out.entries = [...x].map((v) => snapshot(v, isSealed, seen));
-  for (const key of Reflect.ownKeys(x))
-    out.properties.push([key, snapshot(x[key], isSealed, seen)]);
+  for (const key of Reflect.ownKeys(x)) {
+    const descriptor = Object.getOwnPropertyDescriptor(x, key)!;
+    if ('value' in descriptor)
+      out.properties.push([key, snapshot(descriptor.value, isSealed, seen)]);
+    else out.properties.push([key, { get: descriptor.get, set: descriptor.set }]);
+  }
   return out;
 }
 function mutate(
@@ -55,6 +60,10 @@ function mutate(
   isSealed: (value: unknown) => boolean,
   seen = new Set<object>(),
 ): void {
+  if (typeof x === 'function')
+    throw new TypeError(
+      'Function-valued projections require an explicit projectionMutator',
+    );
   if (x === null || typeof x !== 'object' || isSealed(x) || seen.has(x)) return;
   seen.add(x);
   if (ArrayBuffer.isView(x)) {
@@ -62,20 +71,26 @@ function mutate(
     for (let i = 0; i < bytes.length; i++) bytes[i] = bytes[i]! ^ 255;
     return;
   }
-  if (Array.isArray(x)) {
-    for (const value of x) mutate(value, isSealed, seen);
-    x.push('__law_probe__');
-    return;
-  }
+  const array = Array.isArray(x);
   if (
+    array ||
     Object.getPrototypeOf(x) === Object.prototype ||
     Object.getPrototypeOf(x) === null
   ) {
-    for (const key of Object.keys(x)) {
-      mutate(x[key], isSealed, seen);
-      x[key] = '__law_probe__';
+    // A frozen outer container can still hold mutable aliases. Visit children
+    // before attempting writes; rejected writes are expected, not law failures.
+    for (const key of Reflect.ownKeys(x)) {
+      if (array && key === 'length') continue;
+      const descriptor = Object.getOwnPropertyDescriptor(x, key)!;
+      if (!('value' in descriptor)) continue;
+      mutate(descriptor.value, isSealed, seen);
+      Reflect.set(x, key, '__law_probe__');
     }
-    x.__law_probe__ = true;
+    if (array) {
+      if (Object.isExtensible(x)) Reflect.set(x, String(x.length), '__law_probe__');
+    } else {
+      Reflect.set(x, '__law_probe__', true);
+    }
     return;
   }
   throw new TypeError(
@@ -97,6 +112,7 @@ function shared<K extends AnyKind>(
   sealedKinds: readonly AnyKind[] = [],
 ): void {
   const isSealed = (x: unknown) => kind.is(x) || sealedKinds.some((k) => k.is(x));
+  assert(Object.isFrozen(kind));
   assert(kind.is(value));
   assert(Object.isFrozen(value));
   assert(Object.isFrozen(Object.getPrototypeOf(value)));

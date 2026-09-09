@@ -150,3 +150,79 @@ test('sealed children require explicit private-brand predicates', () => {
   );
   assertDerivedLaws(Parent, { validInput: fc.integer(), sealedKinds: [Child] });
 });
+test('frozen detached canonical objects and field containers satisfy mutation laws', () => {
+  const K = defineValue({
+    kind: 'law/frozen-canonical',
+    wire: z.string(),
+    decode: (w) => ok({ text: w }),
+  }).with({
+    toWireShape: (p) => p.text,
+    canonical: (p) => Object.freeze({ type: 'utf8' as const, value: p.text }),
+    fields: {
+      list: (p) => Object.freeze([{ text: p.text }]),
+      nested: (p) => Object.freeze({ child: { text: p.text } }),
+      sealed: (p) => Object.seal([p.text]),
+      fixedLength: (p) =>
+        Object.defineProperty([p.text], 'length', { writable: false }),
+    },
+  });
+  assertValueLaws(K, { validWire: fc.string() });
+});
+test('frozen outer objects and arrays do not hide mutable child aliases', () => {
+  for (const shape of ['object', 'array'] as const) {
+    const K = defineDerived({
+      kind: `law/frozen-leak-${shape}`,
+      derive: (n: number) => ok({ child: { n } }),
+    }).with({
+      fields: {
+        leak: (p) =>
+          shape === 'object'
+            ? Object.freeze({ child: p.child })
+            : Object.freeze([p.child]),
+      },
+    });
+    assert.throws(
+      () => assertDerivedLaws(K, { validInput: fc.integer() }),
+      (e: any) => /projection leaked/.test(String(e.cause)),
+    );
+  }
+});
+test('functions require mutators and function property aliases are observed', () => {
+  const makeFunction = (n: number) => Object.assign(() => {}, { child: { n } });
+  const Safe = defineDerived({
+    kind: 'law/function-copy',
+    derive: (n: number) => ok(n),
+  }).with({ fields: { callback: (p) => makeFunction(p) } });
+  assert.throws(
+    () => assertDerivedLaws(Safe, { validInput: fc.integer() }),
+    (e: any) => /Function-valued projections require/.test(String(e.cause)),
+  );
+  const mutation = {
+    fields: {
+      callback: (fn: ReturnType<typeof makeFunction>) => {
+        fn.child.n++;
+      },
+    },
+  };
+  assertDerivedLaws(Safe, { validInput: fc.integer(), projectionMutators: mutation });
+  const Leak = defineDerived({
+    kind: 'law/function-leak',
+    derive: (n: number) => ok(makeFunction(n)),
+  }).with({ fields: { callback: (p) => p } });
+  assert.throws(
+    () =>
+      assertDerivedLaws(Leak, {
+        validInput: fc.integer(),
+        projectionMutators: mutation,
+      }),
+    (e: any) => /projection leaked/.test(String(e.cause)),
+  );
+  const Nested = defineDerived({
+    kind: 'law/function-nested',
+    derive: (n: number) => ok(n),
+  }).with({ fields: { callback: (p) => Object.freeze({ fn: makeFunction(p) }) } });
+  assert.throws(
+    () => assertDerivedLaws(Nested, { validInput: fc.integer() }),
+    (e: any) => /Function-valued projections require/.test(String(e.cause)),
+  );
+});
