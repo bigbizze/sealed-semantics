@@ -341,5 +341,3 @@ export function assertDerivedLaws<
     }),
   );
 }
-
-export { assertValueDocs, assertDerivedDocs, assertDocs } from './docs.js';

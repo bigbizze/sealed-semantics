@@ -1,8 +1,8 @@
-import { z } from 'zod';
+import type { z } from 'zod';
 import { validateDefinition, validateOptions } from './definition.js';
 import { documentedKind } from './documentation.js';
 import { makeSeal } from './seal.js';
-import { makeCodec } from './codec.js';
+import { makeWireCodec, encodeWire, parseWire } from './zod-codec.js';
 import { stableWireKey } from './keying.js';
 import type {
   ProducerResult,
@@ -32,11 +32,7 @@ import { ValueMap, ValueSet } from './collections.js';
 export type { ValueMap, ValueSet } from './collections.js';
 const ok = <T>(value: T): ProducerResult<T, never> => ({ ok: true, value });
 const err = <E>(error: E): ProducerResult<never, E> => ({ ok: false, error });
-const seen = new Set<string>();
-function register(kind: string) {
-  if (seen.has(kind)) throw new TypeError(`Duplicate kind: ${kind}`);
-  seen.add(kind);
-}
+import { register } from './registry.js';
 function collections<K extends AnyKind>(kind: K) {
   return { map: <V>() => new ValueMap<K, V>(kind), set: () => new ValueSet(kind) };
 }
@@ -53,9 +49,8 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
       options: CheckedOptions<O, ValueOptions<W, P>>,
     ): ValueKind<K, W, O> {
       validateOptions(options, true);
-      register(kind);
       const { toWireShape, equals, debug, allocate, canonical } = options;
-      const encode = (p: P) => z.encode(wire, toWireShape(p));
+      const encode = (p: P) => encodeWire(wire, toWireShape(p));
       const bridge = makeSeal(kind, {
         encode,
         debug,
@@ -65,7 +60,7 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
           equals ?? ((a, b) => stableWireKey(encode(a)) === stableWireKey(encode(b))),
       });
       const parse = (input: unknown) => {
-        const parsed = wire.safeParse(input);
+        const parsed = parseWire(wire, input);
         if (!parsed.success)
           return err({
             kind,
@@ -79,7 +74,16 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
         kind,
         is: bridge.is,
         parse,
-        wire: makeCodec(
+        parseOrThrow: (input: unknown) => {
+          const result = parse(input);
+          if (result.ok) return result.value;
+          const error = result.error;
+          throw new TypeError(
+            `${error.kind}: ${error.reason}: ${error.issues.join('; ')}`,
+            { cause: error },
+          );
+        },
+        wire: makeWireCodec(
           wire,
           kind,
           decode,
@@ -94,11 +98,13 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
           allocate: (...args: Parameters<typeof allocate>) => parse(allocate(...args)),
         });
       Object.assign(result, collections(result as unknown as AnyKind));
-      return documentedKind(result, {
+      const completed = documentedKind(result, {
         semantic: true,
         canonical: !!canonical,
         view: Object.keys(options.view ?? {}),
       }) as unknown as ValueKind<K, W, O>;
+      register(kind);
+      return completed;
     },
   });
 }
@@ -113,7 +119,6 @@ export function defineDerived<const K extends string, I, P>(spec: {
       options: CheckedOptions<O, ProjectionOptions<P>>,
     ): DerivedKind<K, I, O> {
       validateOptions(options, false);
-      register(kind);
       const bridge = makeSeal<P>(kind, {
         debug: options.debug,
         view: options.view,
@@ -127,11 +132,13 @@ export function defineDerived<const K extends string, I, P>(spec: {
         },
       };
       Object.assign(result, collections(result as unknown as AnyKind));
-      return documentedKind(result, {
+      const completed = documentedKind(result, {
         semantic: false,
         canonical: false,
         view: Object.keys(options.view ?? {}),
       }) as unknown as DerivedKind<K, I, O>;
+      register(kind);
+      return completed;
     },
   });
 }

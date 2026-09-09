@@ -1,0 +1,7 @@
+{
+  "extends": "./tsconfig.typecheck.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "outDir": "dist-test"
+  }
+}

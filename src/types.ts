@@ -76,6 +76,8 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
     readonly kind: K;
     is(x: unknown): x is SemanticValue<K, W, O>;
     parse(input: unknown): ProducerResult<SemanticValue<K, W, O>>;
+    /** Return the sealed value, or throw a TypeError with the ValueError as cause. */
+    parseOrThrow(input: unknown): SemanticValue<K, W, O>;
     readonly wire: z.ZodCodec<
       W,
       z.ZodType<SemanticValue<K, W, O>, SemanticValue<K, W, O>>
@@ -120,6 +122,7 @@ export type ReservedField =
   | 'kind'
   | 'is'
   | 'parse'
+  | 'parseOrThrow'
   | 'derive'
   | 'wire'
   | 'allocate'
@@ -165,7 +168,7 @@ export type CheckedOptions<O, Allowed> = O & {
       }
     : unknown);
 
-/** Examples describe outputs; they do not configure or validate the producer. */
+/** Examples are validated when .docs() is called; they do not configure the producer. */
 export type ProjectionDocumentation<O> = Readonly<{ description?: string }> &
   (O extends { view: infer F }
     ? keyof F extends never

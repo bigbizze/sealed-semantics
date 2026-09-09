@@ -1,3 +1,5 @@
+> Design rationale. For the current operation list and behavior, see [guarantees](guarantees.md).
+
 # Methods on instances versus a separate codec import
 
 A separately imported free `encode(v)` could define a region that can hold and compare values but cannot render them. An instance method travels with the value, so import rules cannot enforce that region.

@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { ProducerResult } from './types.js';
-export function makeCodec<W extends z.ZodType, P, V>(
+export function makeWireCodec<W extends z.ZodType, P, V>(
   wire: W,
   kind: string,
   decode: (w: z.output<W>) => ProducerResult<P>,
@@ -22,4 +22,19 @@ export function makeCodec<W extends z.ZodType, P, V>(
     },
     encode: (value) => shape(read(value)),
   });
+}
+
+// Keep runtime schema operations here. Public types still use Zod directly.
+export function encodeWire<W extends z.ZodType>(wire: W, value: z.output<W>) {
+  return z.encode(wire, value);
+}
+export function parseWire<W extends z.ZodType>(wire: W, input: unknown) {
+  return wire.safeParse(input);
+}
+export function decodeWire<W extends z.ZodType>(wire: W, input: z.input<W>) {
+  return z.safeDecode(wire, input);
+}
+export function isWireSchema(value: unknown): value is z.ZodType {
+  // Zod checks schema traits, including schemas from other installed copies.
+  return value instanceof z.ZodType;
 }

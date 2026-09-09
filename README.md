@@ -1,141 +1,125 @@
 # sealed-semantics
 
-Semantic values and local derived proofs with private state and explicit encoding.
-Requires Node 22+, TypeScript 5.7+, and Zod 4.1.x or 4.x.
+Validate external data into specific types. Require checked values at application functions instead of accepting any object with matching properties.
+
+`defineValue` creates semantic values such as `UserId` and `ProjectId`. `defineDerived` creates values that can only be obtained after their producer accepts the input. The producer supplies the rules; the library keeps the accepted state private.
+
+The package is in initial development; the API may change before 1.0.
+
+Requires Node 22+, TypeScript 5.7+, and Zod >=4.1 <5.
 
 ```sh
 npm install sealed-semantics zod
 ```
 
-The producer stage establishes Parts; `.with(...)` then infers every projection parameter.
-Only `.with(...)` completes the definition. Choose stable, namespaced kind literals.
+## Validate IDs at the boundary
 
 ```ts
 import { z } from 'zod';
 import { defineValue, defineDerived, type ValueOf } from 'sealed-semantics';
 
-const normalizeUserSpelling = (w: string) =>
-  w.startsWith('user:') ? `usr_${w.slice(5).replaceAll('-', '')}` : w;
 const UserId = defineValue({
-  kind: 'example/user-id',
-  wire: z.string().regex(/^(usr_[a-f0-9]{16,}|user:[0-9a-f-]{36})$/),
-  decode: w => {
-    const spelling = normalizeUserSpelling(w);
-    return /^usr_[a-f0-9]{16,}$/.test(spelling) ? { ok: true, value: { spelling } } :
-      { ok: false, error: { kind: 'example/user-id', reason: 'invalid_parts', issues: ['Invalid alias'] } };
-  },
+  kind: 'readme/user-id',
+  wire: z.string().regex(/^usr_[a-f0-9]{16,}$/i),
+  decode: spelling => ({ ok: true, value: spelling.toLowerCase() }),
 }).with({
-  toWireShape: p => p.spelling,
-  allocate: () => `user:${crypto.randomUUID()}`,
-  canonical: p => ({ type: 'utf8', value: p.spelling }),
-  debug: p => `user(…${p.spelling.slice(-6)})`,
-}).docs({
-  description: 'A normalized user identifier.',
-  examples: [{ input: 'usr_0123456789abcdef', encoded: 'usr_0123456789abcdef', canonical: { type: 'utf8', value: 'usr_0123456789abcdef' } }],
+  toWireShape: spelling => spelling,
+  view: { suffix: spelling => spelling.slice(-6) },
 });
 type UserId = ValueOf<typeof UserId>;
 
-const hexToBytes = (hex: string) =>
-  Uint8Array.from(hex.match(/../g)!, pair => parseInt(pair, 16));
-const bytesToHex = (bytes: Uint8Array) =>
-  [...bytes].map(b => b.toString(16).padStart(2, '0')).join('');
-const constantTimeEqual = (a: Uint8Array, b: Uint8Array) => {
-  if (a.length !== b.length) return false;
-  let difference = 0;
-  for (let i = 0; i < a.length; i++) difference |= a[i]! ^ b[i]!;
-  return difference === 0;
-}; // Full byte scan; JavaScript provides no timing guarantee.
-const Sha256Digest = defineValue({
-  kind: 'example/sha256',
-  wire: z.string().regex(/^[a-f0-9]{64}$/),
-  decode: hex => ({ ok: true, value: { bytes: hexToBytes(hex) } }),
-}).with({
-  toWireShape: p => bytesToHex(p.bytes),
-  equals: (a, b) => constantTimeEqual(a.bytes, b.bytes),
-  canonical: p => ({ type: 'bytes', value: p.bytes.slice() }),
-});
-const NamespaceId = defineValue({
-  kind: 'example/namespace-id', wire: z.string().regex(/^ns:[a-z]+$/),
-  decode: w => ({ ok: true, value: w }),
-}).with({ toWireShape: p => p });
-const ContentAddress = defineValue({
-  kind: 'example/content-address',
-  wire: z.object({
-    namespace_id: NamespaceId.wire,
-    content_class: z.enum(['primary', 'attachment']),
-    digest: Sha256Digest.wire,
-  }),
-  decode: w => ({ ok: true, value: w }), // Nested values are already sealed.
-}).with({
-  toWireShape: p => p, // Zod encodes nested values backward.
-  view: {
-    namespace: p => p.namespace_id,
-    contentClass: p => p.content_class,
-    digest: p => p.digest,
-  },
-});
-type ContentAddress = ValueOf<typeof ContentAddress>;
+const ProjectId = defineValue({
+  kind: 'readme/project-id',
+  wire: z.string().regex(/^prj_[a-f0-9]{16,}$/),
+  decode: spelling => ({ ok: true, value: spelling }),
+}).with({ toWireShape: spelling => spelling });
+type ProjectId = ValueOf<typeof ProjectId>;
 
-type WriteRows = { id: string; content: ContentAddress }[];
-type PrepareInput = { rows: WriteRows; content: ContentAddress[] };
-const copyWriteRows = (rows: WriteRows): WriteRows => rows.map(row => ({ ...row }));
-const PreparedWrite = defineDerived({
-  kind: 'example/prepared-write',
-  derive: (input: PrepareInput) => ({ ok: true, value: {
-    rows: copyWriteRows(input.rows), contentToRetain: [...input.content],
-  } }),
-}).with({ view: {
-  rows: p => copyWriteRows(p.rows) as Readonly<WriteRows>,
-  contentToRetain: p => [...p.contentToRetain] as readonly ContentAddress[],
-} });
-export const prepareWrite = PreparedWrite.derive;
-type CommitIo = { write(rows: Readonly<WriteRows>): void };
-export function commitWrite(plan: ValueOf<typeof PreparedWrite>, io: CommitIo) {
-  io.write(plan.view.rows);
-}
-const parsed = UserId.parse('usr_0123456789abcdef');
-if (parsed.ok) {
-  const userId = parsed.value;
-  const raw = userId.encode();
-  const canonical = userId.canonical();
-  const users = UserId.map<string>();
-  users.set(userId, "example");
-  const seen = UserId.set().add(userId);
-  const ResponseSchema = z.object({ user_id: UserId.wire });
-  const response = z.encode(ResponseSchema, { user_id: parsed.value });
-}
+const MembershipResponse = z.object({
+  user_id: UserId.wire,
+  project_id: ProjectId.wire,
+});
+const member = MembershipResponse.parse({
+  user_id: 'USR_0123456789ABCDEF',
+  project_id: 'prj_fedcba9876543210',
+});
+// member.user_id is a UserId; member.project_id is a ProjectId.
+const wireResponse = z.encode(MembershipResponse, member);
+// { user_id: 'usr_0123456789abcdef', project_id: 'prj_fedcba9876543210' }
+
+const user = UserId.parseOrThrow('usr_0123456789abcdef');
+const profiles = UserId.map<string>();
+profiles.set(member.user_id, 'Alice');
+console.log(profiles.get(user)); // Alice: equal IDs share an entry.
 ```
 
-`parse`, `allocate`, and `derive` return `ProducerResult`. Producers return explicit success or failure objects.
-Zod's `z.decode`, `z.encode`, `z.safeDecode`, and `z.safeEncode` work with `Kind.wire`.
-`JSON.stringify(value)`, implicit coercion, and recovered constructors throw.
-`Kind.map<V>()` and `Kind.set()` compare semantic keys by normalized wire data and derived keys by identity.
-Collections retain runtime kind validation. `ValueMap` and `ValueSet` are type-only exports.
-Declared projections are read through `value.view.*`; no standard methods live inside `view`.
-Kinds, builders, instances, prototypes, and view facades are frozen; Parts are not. View is privately cached and null-prototype.
-Definitions without projections have no `view`. Invalid configuration fails before registering its kind.
-Reserved field names receive a descriptive compiler error. Canonical output is `value.canonical()`.
-Pass sealed values directly into derivations. Encode only when a boundary needs raw data.
-They provide get/set or add, has, delete, clear, size, iteration, and forEach as applicable.
+You can parse individual fields with `parseOrThrow()`. A Zod schema handles an entire request or response, including nested values, without manual field mapping. Validation also produces the sealed types; encoding the same schema produces raw JSON data.
 
-Producers must own Parts exclusively, never mutate them, and copy mutable projections.
-Neither constructor proves existence, permission, currentness, or storage success.
-See [accepted amendments](docs/amendments.md), [guarantees](docs/guarantees.md), [laws](docs/laws.md), and [type viability](docs/viability.md).
+Use `parse()` when you want a success/failure result. `parseOrThrow()` returns the value directly or throws a `TypeError` with the original `ValueError` as `cause`. See [producer results](docs/producer-results.md).
 
-For consumer law tests, install the optional `fast-check` peer as a dev dependency and import the harness from `sealed-semantics/laws`.
-Supply valid input generators, equivalent alias pairs, and mutators for custom mutable projections.
-List nested sealed kinds in the harness option `sealedKinds`; unrecognized objects are not assumed sealed.
-Run `npx check-kinds 'src/**/*.ts' 'other-root/**/*.ts'` in CI across all owned roots.
-The scan detects direct literal kinds on calls named defineValue/defineDerived, including qualified calls.
-It does not resolve renamed imports, computed expressions, generated code, or dependency source automatically.
+## Require a checked input before saving
 
-Development: `npm ci`, then `npm run check`. See [release checks](docs/releasing.md).
+A matching object shape does not establish that validation ran. A derived type lets a function require the result of a particular producer:
 
-Optional `.docs({...})` returns a frozen kind with the same producer and brand.
-Read metadata through `Kind.documentation`. Examples are checked against completed types.
-Use `assertValueDocs(Kind)` from `sealed-semantics/docs` to check linked input, encoded, and canonical examples.
-Documentation does not run schemas or callbacks at startup. See [documentation metadata](docs/documentation.md).
+```ts
+const MembershipBatch = defineDerived({
+  kind: 'readme/membership-batch',
+  derive: (input: { projectId: ProjectId; userIds: readonly UserId[] }) => {
+    if (!ProjectId.is(input?.projectId) || !Array.isArray(input?.userIds as unknown)
+      || input.userIds.length === 0
+      || !Array.from(input.userIds).every(id => UserId.is(id))) {
+      return { ok: false, error: {
+        kind: 'readme/membership-batch', reason: 'invalid_input',
+        issues: ['Expected a sealed project and at least one sealed user.'],
+      } };
+    }
+    const users = UserId.set();
+    for (const id of input.userIds) users.add(id);
+    return { ok: true, value: { projectId: input.projectId, userIds: [...users] } };
+  },
+}).with({ view: {
+  projectId: parts => parts.projectId,
+  userIds: parts => [...parts.userIds],
+} });
+type MembershipBatch = ValueOf<typeof MembershipBatch>;
 
-The only runtime exports are `defineValue` and `defineDerived`. Use [structurally compatible producer results](docs/producer-results.md); there are no public `ok` or `err` helpers.
+function saveMembershipBatch(
+  batch: MembershipBatch,
+  write: (project: string, users: string[]) => void,
+) {
+  if (!MembershipBatch.is(batch)) throw new TypeError('Expected a MembershipBatch');
+  write(batch.view.projectId.encode(), batch.view.userIds.map(id => id.encode()));
+}
 
-Require docs in CI with `sealed-semantics check-docs dist/definitions.js` (imports the selected module).
+const batch = MembershipBatch.derive({ projectId: member.project_id, userIds: [user] });
+if (batch.ok) saveMembershipBatch(batch.value, (project, users) => {
+  console.log('Database write:', { project, users });
+});
+```
+
+The producer checks the IDs, rejects empty selections, removes duplicate users, and stores a new array. The save function can rely on those steps having run. TypeScript rejects an ordinary matching object; `MembershipBatch.is` also rejects callers that bypass TypeScript. The producer must implement the promised checks and avoid mutable aliases. The library does not establish authorization or database state.
+
+The [full membership workflow](examples/consumer/src/examples/define-derived/membership-workflow/membership-workflow.ts) first derives individual `PreparedMembership` plans from both ID types, then derives a batch that checks all plans belong to one project.
+
+## Run the application examples
+
+```sh
+npm ci
+npm run test:consumer
+npm run examples --prefix examples/consumer
+```
+
+Start with the [example index](examples/consumer/src/examples/index.ts). It shows the important API calls beside section descriptions. [Runners](examples/consumer/src/runners.ts) provide fixtures and detailed logging. The fake HTTP server and database adapters do not perform external writes.
+
+## API rules and further reading
+
+- `defineValue(...).with(...)` and `defineDerived(...).with(...)` complete definitions. Optional `.docs(...)` validates executable examples immediately.
+- `value.view.name` reads a declared projection. `value.canonical()` exists only when configured. Derived values have no encoding or canonical representation.
+- Semantic `.equals()` compares represented values; `===` compares object identity. Derived equality uses identity. Kind maps and sets follow these rules.
+- Kinds, instances, prototypes, and view facades are frozen. Private state is not generically frozen; producers must own it and return copies of mutable projections.
+- Names are unique among completed definitions in one JavaScript realm, including across installed package copies. Unimported source files are not checked.
+- The package exports `sealed-semantics` and `sealed-semantics/laws`. There is no CLI or public Result helper API. Install the optional `fast-check` peer for law tests.
+
+Read [guarantees](docs/guarantees.md), [documentation metadata](docs/documentation.md), [diagnostics](docs/diagnostics.md), and [law testing](docs/laws.md). For development, run `npm run check`; see [release checks](docs/releasing.md) for package and version-matrix validation. [Revision 5](docs/specification.md) is historical; [amendments](docs/amendments.md) record its changes.
+
+Contributions: [CONTRIBUTING.md](CONTRIBUTING.md). Security reports: [SECURITY.md](SECURITY.md). Licensed under [MIT](LICENSE).

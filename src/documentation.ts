@@ -1,3 +1,5 @@
+import { validateDocumentation } from './docs.js';
+import type { AnyKind } from './types.js';
 export type DocumentationShape = Readonly<{
   semantic: boolean;
   canonical: boolean;
@@ -20,12 +22,7 @@ export type Metadata = {
     >
   >;
 };
-// Test-only inspection data. This map cannot enumerate kinds or change their behavior.
-const shapes = new WeakMap<object, DocumentationShape>();
-export const documentationShape = (kind: object): DocumentationShape | undefined =>
-  shapes.get(kind);
-
-// Copy and freeze metadata containers, without validating or freezing sample graphs.
+// Validate before copying metadata containers; sample graphs remain producer-owned.
 export function documentedKind<T extends object>(
   kind: T,
   shape: DocumentationShape,
@@ -33,9 +30,16 @@ export function documentedKind<T extends object>(
 ): object {
   const result = {
     ...kind,
-    docs: (next: Metadata) => documentedKind(kind, shape, next),
+    docs: (next: Metadata) => {
+      if (next === undefined) throw new TypeError('Documentation must be an object');
+      return documentedKind(kind, shape, next);
+    },
   };
   if (metadata !== undefined) {
+    validateDocumentation(
+      { ...kind, documentation: metadata } as unknown as AnyKind,
+      shape,
+    );
     const documentation = { ...metadata };
     if (metadata.examples !== undefined) {
       documentation.examples = Object.freeze(
@@ -57,6 +61,5 @@ export function documentedKind<T extends object>(
       enumerable: true,
     });
   }
-  shapes.set(result, Object.freeze({ ...shape, view: Object.freeze([...shape.view]) }));
   return Object.freeze(result);
 }

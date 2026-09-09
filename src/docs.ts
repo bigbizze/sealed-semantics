@@ -1,7 +1,15 @@
-// Explicit Node-only documentation checks. No fast-check dependency or generators.
-import assert from 'node:assert/strict';
-import { z } from 'zod';
-import { documentationShape } from './documentation.js';
+// Internal, platform-independent validation performed by .docs().
+import { documentationEqual } from './documentation-equal.js';
+function assert(condition: unknown, message: string): asserts condition {
+  if (!condition) throw new TypeError(message);
+}
+assert.equal = (actual: unknown, expected: unknown, message: string) =>
+  assert(Object.is(actual, expected), message);
+assert.deepEqual = (actual: unknown, expected: unknown, message: string) =>
+  assert(documentationEqual(actual, expected), message);
+import type { z } from 'zod';
+import { decodeWire } from './zod-codec.js';
+import type { DocumentationShape } from './documentation.js';
 import { stableWireKey } from './keying.js';
 import type { AnyKind, ProducerResult } from './types.js';
 
@@ -27,24 +35,14 @@ function keys(value: object, allowed: readonly string[], label: string): void {
   for (const name of Object.getOwnPropertyNames(value))
     assert(allowed.includes(name), `${label}: unknown property ${name}`);
 }
-function metadata(kind: AnyKind, semantic: boolean) {
-  const shape = documentationShape(kind);
-  assert(
-    shape,
-    `${kind.kind}: use the docs checker from the package copy that defined this kind`,
-  );
-  assert.equal(
-    shape.semantic,
-    semantic,
-    `${kind.kind}: wrong documentation checker for this kind`,
-  );
+function metadata(kind: AnyKind, shape: DocumentationShape) {
   assert(Object.hasOwn(kind, 'documentation'), `${kind.kind}: missing .docs()`);
   const doc = record((kind as any).documentation, `${kind.kind}.documentation`);
   keys(
     doc,
     [
       'description',
-      ...(semantic ? ['examples'] : []),
+      ...(shape.semantic ? ['examples'] : []),
       ...(shape.view.length ? ['view'] : []),
     ],
     kind.kind,
@@ -74,8 +72,10 @@ function metadata(kind: AnyKind, semantic: boolean) {
   return { doc, shape };
 }
 /** Validate every documented input through both acquisition paths and compare its outputs. */
-export function assertValueDocs(kind: Semantic): void {
-  const { doc, shape } = metadata(kind, true);
+export function validateDocumentation(kind: AnyKind, shape: DocumentationShape): void {
+  const { doc } = metadata(kind, shape);
+  if (!shape.semantic) return;
+  const semantic = kind as Semantic;
   assert(
     Array.isArray(doc.examples) && doc.examples.length > 0,
     `${kind.kind}: examples must be a non-empty array`,
@@ -91,10 +91,10 @@ export function assertValueDocs(kind: Semantic): void {
     for (const key of ['input', 'encoded', ...(shape.canonical ? ['canonical'] : [])]) {
       assert(Object.hasOwn(example, key), `${label}.${key} is required`);
     }
-    const decoded = z.safeDecode(kind.wire, example.input);
+    const decoded = decodeWire(semantic.wire, example.input);
     assert(decoded.success, `${label}.input was rejected by wire.safeDecode`);
     assert(kind.is(decoded.data), `${label}: codec returned an invalid brand`);
-    const parsed = kind.parse(example.input);
+    const parsed = semantic.parse(example.input);
     assert(parsed.ok, `${label}.input was rejected by parse`);
     if (!parsed.ok) continue;
     assert(kind.is(parsed.value), `${label}: parse returned an invalid brand`);
@@ -119,7 +119,7 @@ export function assertValueDocs(kind: Semantic): void {
         `${label}: codec canonical does not match`,
       );
     }
-    const reparsed = kind.parse(raw);
+    const reparsed = semantic.parse(raw);
     assert(reparsed.ok, `${label}: encoded output was rejected by parse`);
     if (!reparsed.ok) continue;
     assert(value.equals(reparsed.value), `${label}: round trip changed equality`);
@@ -129,26 +129,4 @@ export function assertValueDocs(kind: Semantic): void {
       `${label}: round trip changed encoding`,
     );
   }
-}
-/** Check derived descriptions without executing a derivation or inventing an input. */
-export function assertDerivedDocs(
-  kind: AnyKind & { derive(input: any): ProducerResult<any> },
-): void {
-  metadata(kind, false);
-}
-/** Enforce documentation for an explicit list of exported definitions. */
-export function assertDocs(kinds: readonly AnyKind[]): void {
-  const errors: string[] = [];
-  for (const kind of kinds) {
-    try {
-      if (documentationShape(kind)?.semantic) assertValueDocs(kind as Semantic);
-      else
-        assertDerivedDocs(
-          kind as AnyKind & { derive(input: any): ProducerResult<any> },
-        );
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
-    }
-  }
-  if (errors.length) throw new Error(errors.join('\n'));
 }

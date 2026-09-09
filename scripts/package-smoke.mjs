@@ -15,12 +15,13 @@ const run = (cmd, args, cwd = root) =>
   execFileSync(cmd, args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 const metadata = JSON.parse(run('npm', ['pack', '--ignore-scripts', '--json']))[0];
 assert(metadata.files.some((f) => f.path === 'dist/index.d.ts'));
-assert(metadata.files.some((f) => f.path === 'bin/check-kinds.mjs'));
-assert(metadata.files.some((f) => f.path === 'bin/sealed-semantics.mjs'));
-assert(metadata.files.some((f) => f.path === 'dist/docs.d.ts'));
+assert(!metadata.files.some((f) => f.path.startsWith('bin/')));
 assert(
   !metadata.files.some(
-    (f) => f.path.startsWith('test/') || f.path.startsWith('node_modules/'),
+    (f) =>
+      f.path.startsWith('test/') ||
+      f.path.startsWith('node_modules/') ||
+      f.path.startsWith('examples/'),
   ),
 );
 const temp = mkdtempSync(join(tmpdir(), 'sealed-semantics-consumer-'));
@@ -54,7 +55,7 @@ try {
     ],
     temp,
   );
-  // The deterministic docs entry and CLI must work without fast-check.
+  // Documentation validation runs on import without fast-check.
   writeFileSync(
     join(temp, 'docs-good.mjs'),
     `
@@ -66,8 +67,12 @@ try {
     export const Plan=defineDerived({kind:'consumer/documented-plan',derive:i=>({ok:true,value:i})}).with({}).docs({});
   `,
   );
-  const docsCli = join(temp, 'node_modules/sealed-semantics/bin/sealed-semantics.mjs');
-  run(process.execPath, [docsCli, 'check-docs', 'docs-good.mjs'], temp);
+  run(process.execPath, ['docs-good.mjs'], temp);
+  const manifest = JSON.parse(
+    readFileSync(join(temp, 'node_modules/sealed-semantics/package.json'), 'utf8'),
+  );
+  assert(!manifest.bin);
+  assert.deepEqual(Object.keys(manifest.exports).sort(), ['.', './laws']);
   writeFileSync(
     join(temp, 'docs-bad.mjs'),
     `
@@ -77,11 +82,9 @@ try {
   `,
   );
   assert.throws(
-    () => run(process.execPath, [docsCli, 'check-docs', 'docs-bad.mjs'], temp),
+    () => run(process.execPath, ['docs-bad.mjs'], temp),
     (error) =>
-      error.status === 1 &&
-      error.stderr.includes('missing .docs()') &&
-      error.stderr.includes('view.text missing description'),
+      error.status === 1 && error.stderr.includes('view.text missing description'),
   );
   run(
     'npm',
@@ -148,17 +151,20 @@ try {
  import * as fc from 'fast-check';
  import * as a from 'sealed-semantics';
  import * as b from 'sealed-semantics-copy';
- import { assertValueLaws, assertValueDocs } from 'sealed-semantics/laws';
+ import { assertValueLaws } from 'sealed-semantics/laws';
  const {z: foreignZod}=await import('zod-copy');
  const ForeignSchema=a.defineValue({kind:'consumer/foreign-schema',wire:foreignZod.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p});
  assert(ForeignSchema.parse('x').ok);
  const A=a.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p});
- const B=b.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p});
+ assert.throws(()=>b.defineValue({kind:'consumer/id',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p}), /Duplicate kind/);
+ assert.throws(()=>b.defineDerived({kind:'consumer/id',derive:i=>({ok:true,value:i})}).with({}), /Duplicate kind/);
+ const B=b.defineValue({kind:'consumer/other-id',wire:z.string(),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p});
  const x=A.parse('x').value,y=A.parse('x').value;
  assert(!B.is(x)); assert(!A.is(B.parse('x').value));
  assert.equal(A.map().set(x,1).get(y),1);
  assert.equal(A.set().add(x).add(y).size,1);
  const D=a.defineDerived({kind:'consumer/proof',derive:i=>({ok:true,value:i})}).with({});
+ assert.throws(()=>b.defineDerived({kind:'consumer/proof',derive:i=>({ok:true,value:i})}).with({}), /Duplicate kind/);
  const p=D.derive(1).value,q=D.derive(1).value;
  assert.equal(D.set().add(p).add(q).size,2);
  const Composite=b.defineValue({kind:'consumer/composite',wire:z.object({id:A.wire}),decode:w=>({ok:true,value:w})}).with({toWireShape:p=>p,view:{id:p=>p.id}});
@@ -171,10 +177,11 @@ try {
  const foreign=await import('./node_modules/sealed-semantics-copy/dist/collections.js');
  assert.equal(new foreign.ValueMap(A).set(x,1).get(y),1);
  assert.equal(new foreign.ValueSet(D).add(p).add(q).size,2);
- assertValueDocs(A.docs({examples:[{input:'x',encoded:'x'}]}));
+ A.docs({examples:[{input:'x',encoded:'x'}]});
+ assert.throws(()=>A.docs({examples:[{input:'x',encoded:'bad'}]}), /encoded does not match/);
  assertValueLaws(A,{validWire:fc.string()});
  assertValueLaws(Composite,{validWire:fc.record({id:fc.string()}),sealedKinds:[A]});
- for (const path of ['seal','definition','documentation','codec','keying','collections','dist/seal.js','src/seal.ts']) await assert.rejects(import('sealed-semantics/'+path),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
+ for (const path of ['zod-codec','docs','registry','documentation-equal','seal','definition','documentation','codec','keying','collections','dist/seal.js','src/seal.ts']) await assert.rejects(import('sealed-semantics/'+path),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
  `,
   );
   run(process.execPath, ['smoke.mjs'], temp);
@@ -183,13 +190,8 @@ try {
     [join(root, 'node_modules/tsx/dist/cli.mjs'), 'readme.ts'],
     temp,
   );
-  run(
-    process.execPath,
-    [join(temp, 'node_modules/sealed-semantics/bin/check-kinds.mjs'), 'readme.ts'],
-    temp,
-  );
   console.log(
-    `Package smoke passed with Zod ${process.argv[2] ?? '4.1.0'}: README, declaration constraints, cross-copy brands/collections, test-only entry, exports, CLI.`,
+    `Package smoke passed with Zod ${process.argv[2] ?? '4.1.0'}: README, declaration constraints, cross-copy brands/collections, test-only entry, exports, synchronous docs validation.`,
   );
   console.log(`Tarball: ${join(root, metadata.filename)}`);
 } catch (error) {

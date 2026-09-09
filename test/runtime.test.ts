@@ -358,6 +358,7 @@ test('all reserved field names are rejected with a descriptive error', () => {
     'kind',
     'is',
     'parse',
+    'parseOrThrow',
     'derive',
     'wire',
     'allocate',
@@ -491,4 +492,50 @@ test('kinds and builders cannot have acquisition or collection operations replac
     1,
   );
   assert(D.is(value(D.derive('input'))));
+});
+
+test('parseOrThrow uses normal acquisition and preserves rejection details', () => {
+  const parsed = UserId.parseOrThrow('user:01234567-89ab-cdef-0123-456789abcdef');
+  assert(UserId.is(parsed));
+  assert.equal(parsed.encode(), 'usr_0123456789abcdef0123456789abcdef');
+  const failure = UserId.parse(123);
+  assert(!failure.ok);
+  assert.throws(
+    () => UserId.parseOrThrow(123),
+    (error) => {
+      assert(error instanceof TypeError);
+      assert.match(error.message, /invalid_wire/);
+      assert.deepEqual(error.cause, failure.error);
+      return true;
+    },
+  );
+  const rejected = {
+    kind: 'runtime/parse-or-throw',
+    reason: 'invalid_parts' as const,
+    issues: ['Rejected spelling'],
+  };
+  let calls = 0;
+  const Kind = defineValue({
+    kind: 'runtime/parse-or-throw',
+    wire: z.string(),
+    decode: (_input: string): ProducerResult<string> => {
+      calls++;
+      return err(rejected);
+    },
+  }).with({ toWireShape: (p) => p });
+  const detached = Kind.parseOrThrow;
+  assert.throws(
+    () => detached('x'),
+    (error) => {
+      assert(error instanceof TypeError);
+      assert.equal(
+        error.message,
+        'runtime/parse-or-throw: invalid_parts: Rejected spelling',
+      );
+      assert.equal(error.cause, rejected);
+      return true;
+    },
+  );
+  assert.equal(calls, 1);
+  assert(!('parseOrThrow' in PreparedWrite));
 });

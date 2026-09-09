@@ -1,4 +1,4 @@
-> Historical baseline audit for commit cdf295e. For the current amended implementation, see [amendments.md](amendments.md) and run the current check and package scripts. Counts and API locations below describe the original baseline.
+> Historical baseline audit for commit cdf295e. For current usage, see the [README](../README.md) and [guarantees](guarantees.md); for implementation changes, see [amendments.md](amendments.md) and run the current check and package scripts. Counts and API locations below describe the original baseline.
 
 # Revision 5 acceptance audit
 
@@ -17,7 +17,7 @@ This audit maps the original specification to the implemented package. The API s
 | §7.1 private-field brand and static bridge | `src/seal.ts` static block names the private field. Runtime tests reject prototype forgery, proxies, forged codec outputs, recovered construction, and invalid projection/encode/equality receivers. |
 | §7.2 one acquisition path | parse and allocate share parse; codec and derive share the same per-definition seal closure. Result tests and law acquisition tests exercise all paths. |
 | §7.3 ownership and non-mutation | Obligations are reproduced verbatim in `guarantees.md`. Law tests mutate all example projections; unit tests change producer inputs, canonical bytes, and repeat callbacks. Tests demonstrate sampled behavior, not a proof of producer discipline. |
-| §7.4 and §8.2 duplicate kinds | Runtime tests cover semantic and derived duplicates. Scanner tests cover separate files, a qualified call through another copy, escaped literals, comments, strings, and empty matches. `check:kinds` passes all five example kinds. |
+| §7.4 and §8.2 duplicate kinds | Runtime tests cover semantic and derived duplicates. Package smoke tests cover duplicate completion through separate installed package copies. The former scanner has been removed. |
 | §8.1 nominality | Exact same-kind brand assertion and negative cross-kind equality, assignment, and structural construction tests. Package smoke creates equal kind literals in separate physical copies and verifies distinct runtime brands. |
 | §8.3 mandatory first gate | Commit `b4754bb` contains declaration-only API tests before runtime implementation. The original signature fails two diagnostic expectations; the revised builder passes all four reference shapes. `viability.md` records evidence and alternative schemas. |
 | §9 deterministic keys, semantic and identity collections | Keying tests cover sorting, escaping, array order, repeated references, rejected domains, and negative zero. Runtime and law tests cover normalized semantic lookup, derived identity, original-key iteration, callbacks, deletion, clearing, invalid keys, and non-leaking entry arrays. |

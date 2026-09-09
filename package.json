@@ -9,7 +9,6 @@
   },
   "files": [
     "dist",
-    "bin",
     "docs",
     "README.md",
     "LICENSE",
@@ -23,28 +22,20 @@
     "./laws": {
       "types": "./dist/laws.d.ts",
       "import": "./dist/laws.js"
-    },
-    "./docs": {
-      "types": "./dist/docs.d.ts",
-      "import": "./dist/docs.js"
     }
   },
-  "bin": {
-    "check-kinds": "bin/check-kinds.mjs",
-    "sealed-semantics": "bin/sealed-semantics.mjs"
-  },
   "scripts": {
-    "build": "node node_modules/typescript/bin/tsc -p tsconfig.build.json",
+    "build": "node scripts/build.mjs",
     "typecheck": "node node_modules/typescript/bin/tsc --noEmit",
     "test": "tsx --test test/*.test.ts",
-    "check:kinds": "node bin/check-kinds.mjs 'examples/**/*.ts'",
-    "check": "npm run format:check && npm run typecheck && npm test && npm run check:kinds && npm run check:readme && npm run build",
+    "check": "npm run format:check && npm run typecheck && npm test && npm run check:readme && npm run build && npm run test:consumer",
     "prepack": "npm run check",
     "test:package": "npm run build && node scripts/package-smoke.mjs",
-    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"examples/**/*.ts\" \"spike/**/*.ts\" \"scripts/*.mjs\" \"bin/*.mjs\"",
-    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"examples/**/*.ts\" \"spike/**/*.ts\" \"scripts/*.mjs\" \"bin/*.mjs\"",
+    "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\" \"examples/**/*.ts\" \"spike/**/*.ts\" \"scripts/*.mjs\"",
+    "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"examples/**/*.ts\" \"spike/**/*.ts\" \"scripts/*.mjs\"",
     "check:readme": "node scripts/check-readme.mjs",
-    "typecheck:5.7": "node node_modules/typescript-5-7/bin/tsc --noEmit"
+    "typecheck:5.7": "node node_modules/typescript-5-7/bin/tsc --noEmit",
+    "test:consumer": "npm test --prefix examples/consumer"
   },
   "peerDependencies": {
     "fast-check": "^4.9.0",
@@ -71,5 +62,16 @@
     "fast-check": {
       "optional": true
     }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bigbizze/sealed-semantics.git"
+  },
+  "homepage": "https://github.com/bigbizze/sealed-semantics#readme",
+  "bugs": {
+    "url": "https://github.com/bigbizze/sealed-semantics/issues"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }

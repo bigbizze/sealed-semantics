@@ -7,19 +7,13 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "skipLibCheck": true,
-    "declaration": true,
+    "rootDir": "src",
     "outDir": "dist",
-    "types": [
-      "node"
-    ]
+    "sourceMap": true,
+    "rewriteRelativeImportExtensions": true,
+    "verbatimModuleSyntax": true
   },
   "include": [
-    "src",
-    "test",
-    "spike",
-    "examples"
-  ],
-  "exclude": [
-    "examples/consumer"
+    "src/**/*.ts"
   ]
 }

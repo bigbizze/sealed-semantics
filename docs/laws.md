@@ -20,7 +20,7 @@ Import `assertValueLaws` and `assertDerivedLaws` from `sealed-semantics/laws`. T
 16. Derived equality is identity. Independently produced values remain distinct keys in kind-scoped maps and sets; repeated use of the same instance agrees with identity.
 17. Derived values satisfy laws 8–12. They have no encode or canonical operations.
 
-An allocation-argument arbitrary also checks successful allocation, runtime branding, common instance laws, and a parse/encode round trip. Semantic collection checks use independently parsed equivalent keys. Unit tests separately check codec output forgery, invalid inputs, error preservation, iteration, and the duplicate-kind scanner.
+An allocation-argument arbitrary also checks successful allocation, runtime branding, common instance laws, and a parse/encode round trip. Semantic collection checks use independently parsed equivalent keys. Unit tests separately check codec output forgery, invalid inputs, error preservation, iteration, and duplicate-kind rejection within a realm, including separate package copies.
 
 The harness is test-only and traverses projections, never private Parts. Built-in mutators accept frozen plain objects and arrays, and still visit their children. Function-valued projections require an explicit projectionMutator. Accessor-containing outputs require an explicit projectionMutator, including accessors nested inside plain containers. Without one, the harness rejects the output without invoking its getters. With an explicit mutator, observation reads getters with their original receiver and snapshots the returned graph. Getter side effects and exceptions are then part of the test; setters and private closure state still need domain observations. Custom types with private state need a mutator that makes an observable change; the observer captures enumerable and non-enumerable own state plus standard Date, Map, Set, and buffer content, but cannot inspect arbitrary private class state. Test such projections through additional domain observations. A dishonest or ineffective mutator cannot establish alias safety.
 
@@ -34,4 +34,4 @@ Common laws now also require frozen kinds, instances, and prototypes. Dedicated 
 
 Configure custom view mutators under `projectionMutators.view`. The harness reads each view getter again after mutation, so it checks fresh outputs against the earlier observations.
 
-The deterministic documentation checks are available through `sealed-semantics/docs` without fast-check, and re-exported here. They verify linked input, encoded, and canonical examples and complete projection descriptions. See [executable documentation](documentation.md).
+Documentation validates linked input, encoded, and canonical examples and complete projection descriptions when `.docs()` is called. No separate docs harness is needed. See [executable documentation](documentation.md).

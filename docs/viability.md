@@ -32,3 +32,10 @@ The producer/.with inference stages are unchanged. Instance types now preserve o
 The optional `.docs()` stage uses completed wire and projection types. Compile-only tests reject wrong samples, missing canonical support, unknown view names, and raw/decoded nested wire confusion. `ValueOf` and allocator inference remain unchanged after documentation is attached.
 
 See [compiler diagnostics](diagnostics.md) for the audit of configuration failures and the cases that retain normal TypeScript messages.
+
+
+## Consumer inference regression checks
+
+The consumer tests also check the exact types of `MembershipBatch.view.projectId` and `MembershipBatch.view.plans`. A passing runtime test alone cannot detect an accidental `any`. In particular, `Array.isArray` can narrow a typed readonly array to `any[]`; checking an `unknown` expression avoids replacing the known element type. The example retains runtime validation and tests exact inferred types.
+
+`parseOrThrow` returns the same specific semantic instance type as the success branch of `parse`. It is absent from derived kinds. Both minimum and main compiler checks cover these distinctions.

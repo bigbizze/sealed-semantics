@@ -518,3 +518,10 @@ const InlineResult = defineValue({
     return parts.spelling;
   },
 });
+
+const directlyParsedUser = UserId.parseOrThrow('usr_0123456789abcdef');
+const directlyParsedUserType: ValueOf<typeof UserId> = directlyParsedUser;
+// @ts-expect-error parseOrThrow returns the exact semantic kind.
+const wrongDirectKind: ValueOf<typeof Sha256Digest> = directlyParsedUser;
+// @ts-expect-error Derived kinds have no wire parsing operation.
+PreparedWrite.parseOrThrow('x');

@@ -1,4 +1,4 @@
-> Historical revision 5 baseline. The accepted changes and final decisions in [amendments.md](amendments.md) take precedence.
+> Historical revision 5 baseline, retained as design history rather than a current usage guide. Names, APIs, CLI commands, and source-size rules below may have been removed. Use the [README](../README.md), [guarantees](guarantees.md), and [documentation guide](documentation.md) for the current API. [Amendments](amendments.md) record the changes and take precedence.
 
 # sealed-value — implementation specification (revision 5)
 

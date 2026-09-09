@@ -1,4 +1,4 @@
-import { z } from 'zod';
+import { isWireSchema } from './zod-codec.js';
 
 const reservedFields = new Set([
   'docs',
@@ -11,6 +11,7 @@ const reservedFields = new Set([
   'kind',
   'is',
   'parse',
+  'parseOrThrow',
   'derive',
   'wire',
   'allocate',
@@ -88,11 +89,7 @@ export function validateDefinition(spec: unknown, semantic: boolean): void {
     throw new TypeError('kind must be a namespaced string literal');
   }
   callback(input, semantic ? 'decode' : 'derive', 'definition');
-  // Zod's hasInstance checks its schema traits, including across installed copies.
-  if (
-    semantic &&
-    (!Object.hasOwn(input, 'wire') || !(input.wire instanceof z.ZodType))
-  ) {
+  if (semantic && (!Object.hasOwn(input, 'wire') || !isWireSchema(input.wire))) {
     throw new TypeError('definition.wire must be a Zod schema');
   }
 }

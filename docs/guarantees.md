@@ -2,6 +2,32 @@
 
 `defineValue` certifies that a producer accepted a value under its grammar and normalization rules. `defineDerived` certifies that its producer ran on the supplied input and transferred ownership of its result. The API does not expose mutable access to that result when the producer meets the obligations below. Neither constructor certifies existence, membership, permission, currentness, storage success, or transaction state.
 
+## What downstream functions can require
+
+A `UserId` establishes that the configured wire schema and decode callback accepted its input. A `ProjectId` is a different type. Neither means that a database record exists.
+
+In the consumer example, `PreparedMembership` requires both sealed IDs and checks their brands. `MembershipBatch` then accepts multiple plans, checks that they belong to one project, rejects an empty list, and removes duplicate users. `saveMembershipBatch` requires that batch type. Its caller must have obtained a value accepted by the batch producer, which itself accepted only valid plans.
+
+The type is evidence of a construction path, not a proof that the producer is correct. If a producer omits a rule, the library does not supply it. Application functions exposed to JavaScript or `any` should call the relevant `Kind.is` predicate when they require the runtime guarantee.
+
+## Equality and observation
+
+Two independent parses create two objects. `a === b` is therefore false even when `a.equals(b)` is true. Semantic equality must agree with normalized encoded data; semantic maps and sets use that data as their keys. Derived equality is object identity: deriving two plans with equal children still creates two distinct local results.
+
+`view.plans` can return a fresh array containing the same sealed plans. Removing an item from that array changes only the returned copy. Copying the input array protects against edits by the original caller; copying on projection protects against edits by consumers. Neither operation requires cloning the sealed children.
+
+## Public operations
+
+| Location | Operations |
+| --- | --- |
+| Semantic kind | `parse`, `parseOrThrow`, `is`, `wire`, `map`, `set`, `docs`; `allocate` only when configured. |
+| Derived kind | `derive`, `is`, `map`, `set`, `docs`. |
+| Semantic instance | `encode`, `equals`, `debug`; `canonical` only when configured; `view` only for declared projections. |
+| Derived instance | `equals`, `debug`; `view` only for declared projections. |
+| View facade | Exactly the declared projection getters, read as properties. |
+
+Kinds also expose their `kind` string and, after `.docs()`, `documentation`. No standard operation is placed inside `view`. There is no public unseal, unwrap, Result helper, or `deriveOrThrow` operation.
+
 ## Runtime and type identity
 
 Each completed definition creates a class with an ES private field. A private token restricts construction. The class's static block creates private-field inspection closures. Those closures and the class are internal; no package export or kind property exposes them. Recovering the constructor from an instance does not reveal the token. A forged prototype does not pass `Kind.is` or the codec output schema. Prototype identity alone is not validity. Proxies do not inherit the private field.
@@ -10,14 +36,14 @@ TypeScript uses an erased brand indexed by the literal kind. Definitions with th
 
 Renaming a kind breaks type identity. The package does not insert it into wire data, canonical data, or collection keys. A consumer makes kind data-bearing only by explicitly including it in an external representation; such a consumer must migrate that data when renaming the kind.
 
-The duplicate-kind Set is a diagnostic within one installed copy. It stores only strings, not definitions or indexers. Run `check-kinds` over all owned source roots in CI for cross-copy duplicates. Collections use the supplied kind's public `is`, `parse`/`wire` shape, and the sealed value's explicit encoding. No single-copy package requirement is imposed.
+At most one completed definition of a kind may exist in a JavaScript realm. A registry stored on `globalThis` under `Symbol.for('sealed-semantics/kinds')` rejects duplicates synchronously across installed package copies. It stores only names, not definitions or Parts. `.docs()` does not register another definition. Separate realms have separate registries; this rule does not claim source-tree uniqueness. Module reloads that complete the same definition again are duplicates. Compiling a file does not execute it; unused modules and separate test processes are not checked together. Collections use the supplied kind and require no shared indexer registry.
 
-## Producer obligations (verbatim from revision 5)
+## Producer obligations
 
 - `decode` and `derive` return a `Parts` graph for which the producer retains no mutable alias;
 - every callback that receives `Parts` treats it as immutable and must not mutate it or
   anything reachable from it. This applies to `toWireShape`, custom `equals`, `canonical`,
-  every field projection, and `debug`;
+  every view projection, and `debug`;
 - `view` and `canonical` return primitives, sealed values, or fresh copies of anything
   mutable (`bytes.slice()`, `[...list]`, a domain-specific copy function, etc.);
 - any custom value returned by a projection that is mutable must likewise be a fresh value
@@ -35,13 +61,13 @@ RawWire must be a TypeScript JSON structural type. At runtime it must consist of
 
 Instances reject implicit string conversion, numeric conversion, and JSON serialization with the specified TypeError. Object spread produces an empty object. Structured cloning produces an unbranded object. The instance cannot gain own properties or change its prototype. Its per-definition prototype is frozen after all methods are installed. Attempts to replace or remove its methods fail. This does not make JavaScript intrinsics or producer code a security sandbox.
 
-## Builder and size
+## Definition completion and configuration
 
 The staged builder is the inference-gate revision described in `viability.md`. Call `.with(...)` to complete a definition; only this step reserves the kind and creates its runtime identity. Projection names that conflict with kind operations, prototype behavior, or forbidden accessors are rejected. The runtime captures callbacks at definition time. Do not mutate the Zod schema or definition after setup.
 
 The physical source-line limit is removed. Source is formatted normally with Prettier and checked by `format:check`; no source-size gate rewards compressing statements. The README keeps its separate under-150-line requirement. Zod is the required runtime peer. fast-check ^4.9.0 is an optional peer used only by the public Node-only laws entry; ordinary main-entry consumers do not need it. Consumers of the law harness install it as a development dependency.
 
-Definition objects and options must use known, enumerable string data properties. The runtime checks required callbacks, configured optional callbacks, field functions, and the wire schema before registering a kind. Unknown keys, malformed callbacks, symbols, hidden properties, and accessors fail with descriptive TypeErrors. This validates configuration shape, not callback behavior or whether a callback will throw for some future input.
+Definition objects and options must use known, enumerable string data properties. The runtime checks required callbacks, configured optional callbacks, projection functions, and the wire schema before registering a kind. Unknown keys, malformed callbacks, symbols, hidden properties, and accessors fail with descriptive TypeErrors. This validates configuration shape, not callback behavior or whether a callback will throw for some future input.
 
 Semantic coercion errors recommend explicit encoding. Derived coercion errors say `<kind> has no external representation and cannot be serialized`; they never recommend an unavailable encode() method.
 

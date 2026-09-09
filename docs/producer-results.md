@@ -33,4 +33,25 @@ Consumers can instead use their own helpers or a result implementation with comp
 
 The package does not export runtime `ok` or `err` helpers, and the old `Result` type name is removed. The only runtime exports from the main entry are `defineValue` and `defineDerived`. Helpers in tests and reference examples belong to those callers.
 
-Input rejection remains explicit. A failed wire schema produces `invalid_wire`. A producer failure preserves its `ValueError` object through `parse` or `derive`; the Zod codec converts producer rejection into a custom issue. Thrown producer exceptions remain programming errors. No exception-based acquisition or generic error mapping was added.
+Input rejection remains explicit. A failed wire schema produces `invalid_wire`. A producer failure preserves its `ValueError` object through `parse` or `derive`; the Zod codec converts producer rejection into a custom issue. Thrown producer exceptions remain programming errors. Producer exceptions also propagate unchanged through `parseOrThrow`.
+
+
+For exception-based callers, `Kind.parseOrThrow(input)` returns the exact sealed value type directly. It calls the same acquisition path as `parse()` once. On a rejected input it throws a `TypeError`; the message contains the error kind, reason, and issues, and `cause` holds the original `ValueError`. It is available on semantic kinds only, including documented kinds. Results remain plain objects without an `unwrap()` method.
+
+```ts
+const label = Label.parseOrThrow('hello');
+```
+
+## Choosing a boundary API
+
+| Need | Operation | Failure |
+| --- | --- | --- |
+| Inspect a single value's rejection | `Kind.parse(input)` | `{ ok: false, error }` |
+| Stop the operation on invalid input | `Kind.parseOrThrow(input)` | Throws `TypeError` with `ValueError` as cause |
+| Decode a complete request or response | `schema.parse(body)` or `z.decode(schema, body)` | Throws a Zod error for validation rejection |
+| Inspect whole-object validation failure | `schema.safeParse(body)` or `z.safeDecode(schema, body)` | `{ success: false, error }` |
+| Produce a checked local value | `Kind.derive(input)` | `{ ok: false, error }` |
+
+Build complete schemas with properties such as `user_id: UserId.wire`. One decode then validates the object structure and supplies the sealed property types, including nested arrays and objects. `z.encode(schema, value)` converts the complete result back to raw data. This reduces repetitive manual parsing and makes boundary validation easier to adopt.
+
+`await response.json()` reads JSON but does not validate its shape. When manually parsing fields, each `parseOrThrow` validates only that field. Do not annotate raw JSON as the decoded type before validating it. The [consumer index](../examples/consumer/src/examples/index.ts) demonstrates both approaches and compares their outputs with `.equals()`.
