@@ -28,3 +28,17 @@ The checked-in CI configuration repeats checks on Node 22 and 24 with Zod 4.1.0 
 | `npm run typecheck:5.7` | Verify library declarations and inference checks with the minimum compiler. |
 
 The consumer's public examples are under `src/examples/define-value` and `src/examples/define-derived`. Its index keeps key API calls visible; runners supply fixtures and logs. The standalone package tests do not replace tarball validation: local files can work even if a published file is missing.
+
+## 0.2.0 migration
+
+This minor release changes the pre-1.0 definition API:
+
+- Rename `defineValue` to `defineKind`.
+- Rename the definition's `wire` option to `schema` and the completed kind's `.wire` codec to `.codec`.
+- Rename `toWireShape` to `encode`. Move it, `canonical`, `allocate`, `equals`, and `debug` into the initial definition. Derived definitions support only `kind`, `derive`, and optional `debug`.
+- Replace `.with({ view: projections })` with optional `.view(projections)`.
+- Finish every builder with `.seal()`. Only completed kinds expose parsing, derivation, and collection methods.
+- Put optional `.docs(...)` before `.seal()`, after any `.view(...)` call. Documentation examples validate when the builder is sealed.
+- Repeated `.seal()` calls on the same builder return the same kind. Sealing separate builders with the same kind name fails.
+
+Instance encoding, equality, and declared view getters retain their behavior. See the consumer examples for complete definitions.
