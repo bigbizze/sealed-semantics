@@ -1,0 +1,42 @@
+# Guarantees and obligations
+
+`defineValue` certifies that a producer accepted a value under its grammar and normalization rules. `defineDerived` certifies that its producer ran on the supplied input and transferred ownership of its result. The API does not expose mutable access to that result when the producer meets the obligations below. Neither constructor certifies existence, membership, permission, currentness, storage success, or transaction state.
+
+## Runtime and type identity
+
+Each completed definition creates a class with an ES private field. A private token restricts construction. The class's static block creates private-field inspection closures. Those closures and the class are internal; no package export or kind property exposes them. Recovering the constructor from an instance does not reveal the token. A forged prototype does not pass `Kind.is` or the codec output schema. Prototype identity alone is not validity. Proxies do not inherit the private field.
+
+TypeScript uses an erased brand indexed by the literal kind. Definitions with the same kind and wire type have the same public value type, even though their runtime brands differ. A namespaced literal is required. This is per-kind nominality, not generative type identity. Type assertions, `any`, and JavaScript can bypass static checks; runtime brand checks still apply.
+
+Renaming a kind breaks type identity. The package does not insert it into wire data, canonical data, or collection keys. A consumer makes kind data-bearing only by explicitly including it in an external representation; such a consumer must migrate that data when renaming the kind.
+
+The duplicate-kind Set is a diagnostic within one installed copy. It stores only strings, not definitions or indexers. Run `check-kinds` over all owned source roots in CI for cross-copy duplicates. Collections use the supplied kind's public `is`, `parse`/`wire` shape, and the sealed value's explicit encoding. No single-copy package requirement is imposed.
+
+## Producer obligations (verbatim from revision 5)
+
+- `decode` and `derive` return a `Parts` graph for which the producer retains no mutable alias;
+- every callback that receives `Parts` treats it as immutable and must not mutate it or
+  anything reachable from it. This applies to `toWireShape`, custom `equals`, `canonical`,
+  every field projection, and `debug`;
+- `fields` and `canonical` return primitives, sealed values, or fresh copies of anything
+  mutable (`bytes.slice()`, `[...list]`, a domain-specific copy function, etc.);
+- any custom value returned by a projection that is mutable must likewise be a fresh value
+  with no mutable alias back into `Parts`.
+
+Parts are private. A producer can still violate this contract by returning Parts, a mutable child, or a retained alias. The package cannot detect these violations in general. The runtime does not clone, freeze, or traverse Parts. Primitives and sealed children can be returned directly. Fresh outer containers must also avoid mutable aliases in their children. A domain copy function must preserve sealed children; `structuredClone` loses their private brands.
+
+Projection return types remain exactly as declared. A mutable copy stays mutable in TypeScript; a producer can explicitly declare a readonly return type. Canonical representations are caller-defined and need the same copy discipline. Protocol owners must maintain compatibility vectors and select canonical spellings for aliases. Custom equality must agree with encoded JSON key equality. The law harness checks samples; it cannot prove exclusive ownership or the absence of producer mutation for all inputs.
+
+## JSON boundary
+
+RawWire must be a TypeScript JSON structural type. At runtime it must consist of strings, finite numbers, booleans, null, dense arrays, and plain objects with enumerable string data properties. Null-prototype objects are accepted. Accessors, hidden properties, symbol keys, functions, undefined, bigints, dates, typed arrays, cycles, sparse arrays, and extra array properties are not JSON wire data. Repeated acyclic references are allowed. Internal keying validates this domain recursively and throws `TypeError` for violations. Object keys sort lexicographically; array order and JSON string escaping are preserved. Negative zero encodes as `-0`, not `0`. Canonical output is not restricted to JSON.
+
+`encode()` uses backward Zod encoding. Composite codecs therefore emit fully raw data. A forward-only Zod transform cannot encode backward; use a codec. Schemas and producers must be synchronous for the Result acquisition API. Async callbacks and throwing producer callbacks are specification errors, not invalid-input Results. `decode` and `derive` must return `err(ValueError)` for input rejection. An allocator whose arguments can be invalid should return raw data that the wire schema rejects. `parse` returns `invalid_wire` for wire rejection and preserves a decode error object. Zod codec rejection becomes a custom issue. Programming errors can throw even on Zod safe paths.
+
+Instances reject implicit string conversion, numeric conversion, and JSON serialization with the specified TypeError. Object spread produces an empty object. Structured cloning produces an unbranded object. These are API guarantees for ordinary instances, not protection against hostile prototype modification or JavaScript monkey-patching.
+
+## Builder and size
+
+The staged builder is the inference-gate revision described in `viability.md`. Call `.with(...)` to complete a definition; only this step reserves the kind and creates its runtime identity. Projection names that conflict with kind operations, prototype behavior, or forbidden accessors are rejected. The runtime captures callbacks at definition time. Do not mutate the Zod schema or definition after setup.
+
+The source is below the 400-line limit, including declarations and the test-only law harness. The main entry has one runtime peer dependency, Zod. The separate Node-only `canonical-type/laws` entry requires consumers to install `fast-check` as a development dependency. It is never imported by the main entry.

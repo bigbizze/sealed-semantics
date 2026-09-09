@@ -9,3 +9,18 @@ The revised API uses `defineValue({kind, wire, decode}).with({toWireShape, ...})
 `npx tsc --noEmit` passed with the four reference shapes in `spike/inference.ts`. The assertions detect `any`, verify exact allocator and field types, check raw versus decoded composite data, and reject cross-kind assignments, equality, and non-JSON inputs. `spike/api.ts` contains declarations only. No runtime implementation existed at this gate.
 
 Reproduction: copy `spike/initial.ts.txt` to a temporary `.ts` file inside `spike` and run the compiler to reproduce the two expected diagnostics; remove that copy afterward. Run `npm run typecheck` for the accepted shape.
+
+## Consumer constraints and alternatives
+
+The accepted builder is implemented, not just proposed. `spike/inference.ts` now imports the real factories. It checks wrong wire outputs, wrong allocator outputs, invalid Parts access, invalid producer errors, non-JSON schemas, widened kind strings, unknown options, derived-only restrictions, and reserved field names. Diagnostics occur on the invalid configured property. All projection parameters are inferred from the previous producer stage. Mutable and explicitly readonly returns retain their exact types. The declaration-only original spike API is retained as gate evidence.
+
+The first stage needs a declared input domain for `derive`; TypeScript cannot infer an unknown caller domain from a callback body. An annotation such as `(input: PrepareInput)` is necessary and intentional. Allocator parameter annotations likewise declare the caller contract. There are no manually supplied factory generic arguments.
+
+| Shape | Inference and invalid-configuration behavior | Tradeoff |
+| --- | --- | --- |
+| Implemented producer then `.with(projections)` | Wire context types decode; its result types Parts; Parts types all projections. Exact-key checks reject unsupported configuration. | One additional call, with direct property diagnostics. |
+| Schema-first fluent stages, such as `value(kind).wire(schema).decode(fn).with(ops)` | Each stage establishes the next input type and can prohibit invalid operation order through its return type. | More calls and public builder states; useful if the producer stage later gains more dependencies. |
+| Explicit typed producer object, followed by `defineValue(producer, operations)` | Inferring the producer in an earlier statement gives the second argument a fixed Parts type. `satisfies` can validate the producer without widening it. | Extra variable and a separate schema-based helper or input annotation. Same runtime model is possible. |
+| Explicit Parts schema plus wire schema | Schemas establish both callback domains before inference of callbacks. Mismatched return types receive compiler errors; a runtime Parts schema could validate outputs. | Duplicates the internal shape and adds validation/configuration beyond this specification. Not selected. |
+
+The first two alternatives preserve the required runtime and type properties without a caller-supplied brand token. An explicit fresh type token could instead provide per-definition nominality, but changes the specification's chosen per-kind identity model and increases consumer work. None of these shapes can prove exclusive ownership, non-mutation, canonical compatibility, absence of `any` in caller-authored code, or finite JavaScript numbers from a `number` type. Those require runtime checks, law tests, and producer discipline.

@@ -32,3 +32,7 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = {
 export type DerivedKind<K extends string, I, O> = { readonly kind: K; is(x: unknown): x is Proof<K>; derive(input: I): Result<Proof<K>> } & Fields<O, Proof<K>>;
 export type JsonSchema<W extends z.ZodType> = 0 extends (1 & z.input<W>) ? never : [z.input<W>] extends [JsonValue] ? W : never;
 export type LiteralKind<K extends string> = string extends K ? never : K;
+
+export type ReservedField = 'kind' | 'is' | 'parse' | 'derive' | 'wire' | 'allocate' | 'canonical' | 'encode' | 'equals' | 'debug' | 'parts' | 'raw' | 'unwrap' | 'fromParts' | 'indexKey' | '__proto__' | 'constructor' | 'prototype' | 'then' | 'toJSON' | 'valueOf' | 'toString';
+export type CheckedOptions<O, Allowed> = O & Record<Exclude<keyof O, keyof Allowed>, never> &
+  (O extends { fields: infer F } ? { fields: F & Record<Extract<keyof F, ReservedField>, never> } : unknown);

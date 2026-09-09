@@ -1,0 +1,34 @@
+const CONSTRUCT: unique symbol = Symbol('canonical-type/construct');
+export function makeSeal<P>(kind: string, ops: {
+  encode?: (parts: P) => unknown;
+  equals?: (a: P, b: P) => boolean;
+  debug?: ((parts: P) => string) | undefined;
+}): { is: (x: unknown) => boolean; read: (x: unknown) => P; seal: (parts: P) => object } {
+  let hasBrand!: (x: unknown) => x is Sealed;
+  let unseal!: (x: unknown) => P;
+  const trap = (): never => { throw new TypeError(`${kind} cannot be serialized implicitly; use value.encode() or encode the enclosing contract schema`); };
+  class Sealed {
+    #parts: P;
+    constructor(token: typeof CONSTRUCT, parts: P) {
+      if (token !== CONSTRUCT) throw new TypeError(`${kind} cannot be constructed directly`);
+      this.#parts = parts;
+    }
+    static {
+      hasBrand = (x: unknown): x is Sealed => typeof x === 'object' && x !== null && #parts in x;
+      unseal = (x: unknown): P => {
+        if (!hasBrand(x)) throw new TypeError(`${kind} is not a sealed value`);
+        return x.#parts;
+      };
+    }
+    equals(other: unknown): boolean {
+      const a = unseal(this), b = unseal(other);
+      return ops.equals ? ops.equals(a, b) : this === other;
+    }
+    debug(): string { const p = unseal(this); return ops.debug ? ops.debug(p) : kind; }
+    toJSON(): never { return trap(); }
+    valueOf(): never { return trap(); }
+    [Symbol.toPrimitive](): never { return trap(); }
+  }
+  if (ops.encode) Object.defineProperty(Sealed.prototype, 'encode', { value: function(this: Sealed) { return ops.encode!(unseal(this)); } });
+  return { is: hasBrand, read: unseal, seal: (parts: P) => new Sealed(CONSTRUCT, parts) };
+}
