@@ -25,9 +25,13 @@ export interface AnyKind {
   readonly kind: string;
   is(x: unknown): x is Proof<string>;
 }
-export type ValueOf<Kd extends AnyKind> = Kd extends { is(x: unknown): x is infer V }
-  ? V
-  : never;
+export type ValueOf<
+  Kd extends
+    | AnyKind
+    | {
+        readonly 'ValueOf requires a completed kind. Call .with(...) on the definition first.': never;
+      },
+> = Kd extends { is(x: unknown): x is infer V } ? V : never;
 export type ProjectionOptions<P> = {
   view?: Record<string, (p: P) => unknown>;
   debug?: (p: P) => string;
@@ -161,3 +165,16 @@ export type ValueDocumentation<W extends z.ZodType, O> = ProjectionDocumentation
     exampleWire?: z.input<W>;
     exampleCanonical?: O extends { canonical: (...args: any[]) => infer C } ? C : never;
   }>;
+
+/** An unfinished semantic definition. Call .with(...) to create its kind. */
+export interface ValueBuilder<K extends string, W extends z.ZodType, P> {
+  readonly with: <const O extends ValueOptions<W, P>>(
+    options: CheckedOptions<O, ValueOptions<W, P>>,
+  ) => ValueKind<K, W, O>;
+}
+/** An unfinished derived definition. Call .with(...) to create its kind. */
+export interface DerivedBuilder<K extends string, I, P> {
+  readonly with: <const O extends ProjectionOptions<P>>(
+    options: CheckedOptions<O, ProjectionOptions<P>>,
+  ) => DerivedKind<K, I, O>;
+}

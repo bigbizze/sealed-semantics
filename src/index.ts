@@ -14,6 +14,8 @@ import type {
   LiteralKind,
   CheckedOptions,
   AnyKind,
+  ValueBuilder,
+  DerivedBuilder,
 } from './types.js';
 export type {
   Result,
@@ -40,11 +42,7 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
   kind: LiteralKind<K>;
   wire: W & JsonSchema<W>;
   decode: (w: z.output<W>) => Result<P>;
-}): Readonly<{
-  with<const O extends ValueOptions<W, P>>(
-    options: CheckedOptions<O, ValueOptions<W, P>>,
-  ): ValueKind<K, W, O>;
-}> {
+}): ValueBuilder<K, W, P> {
   validateDefinition(spec, true);
   const { kind, wire, decode } = spec;
   return Object.freeze({
@@ -100,11 +98,7 @@ export function defineValue<const K extends string, W extends z.ZodType, P>(spec
 export function defineDerived<const K extends string, I, P>(spec: {
   kind: LiteralKind<K>;
   derive: (input: I) => Result<P>;
-}): Readonly<{
-  with<const O extends ProjectionOptions<P>>(
-    options: CheckedOptions<O, ProjectionOptions<P>>,
-  ): DerivedKind<K, I, O>;
-}> {
+}): DerivedBuilder<K, I, P> {
   validateDefinition(spec, false);
   const { kind, derive } = spec;
   return Object.freeze({

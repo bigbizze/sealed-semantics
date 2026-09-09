@@ -331,3 +331,25 @@ ContentAddress.docs({
 });
 // @ts-expect-error The former fields option is no longer accepted.
 defineDerived({ kind: 'invalid/old-fields', derive: () => ok(0) }).with({ fields: {} });
+
+const unfinishedValue = defineValue({
+  kind: 'diagnostic/unfinished-value',
+  wire: z.string(),
+  decode: ok,
+});
+const unfinishedDerived = defineDerived({
+  kind: 'diagnostic/unfinished-derived',
+  derive: (s: string) => ok(s),
+});
+// @ts-expect-error Complete the semantic builder with .with first.
+type UnfinishedValue = ValueOf<typeof unfinishedValue>;
+// @ts-expect-error Complete the derived builder with .with first.
+type UnfinishedDerived = ValueOf<typeof unfinishedDerived>;
+// @ts-expect-error Arbitrary objects are still rejected, rather than silently becoming never.
+type NotAKind = ValueOf<{ value: string }>;
+// @ts-expect-error Named builders keep their frozen .with type.
+unfinishedValue.with = unfinishedValue.with;
+const finishedValue = unfinishedValue.with({ toWireShape: (p) => p });
+type FinishedEncoding = Assert<
+  Equal<ReturnType<ValueOf<typeof finishedValue>['encode']>, string>
+>;
