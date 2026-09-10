@@ -33,17 +33,22 @@ This comes from two distinct things: semantic kinds, which are values, and seman
 
 ```ts
 const UserId = defineKind({
-  kind: 'app/user-id',
-  schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/),
+  kind: 'app/user-id', // globally unique namespace for this kind.
+  schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/), // regular zod schema for handling serialization
+  key: id => id // key for checking equality between instances of this kind. `schema` can be an object, or anything, meaning complex keys can be needed for reference
 })
-  .view({ suffix: spelling => spelling.slice(-6) })
-  .seal();
+  .view({ // You can define methods on the kind here. 
+    suffix: id => id.slice(-6),
+    uiDisplay: id => `User ID: ${id}` 
+   })
+  .seal(); // Make the kind immutable from here.
+
 type UserId = ValueOf<typeof UserId>;
 ```
 
 kinds are meant to trasit across serialization boundaries with no issues. they use zod for encoding and decoding as you already would.
 
-**defineMint** creates contracts that couple a typescript types to some set of rules specified in its definition. This means that when a function wants to only accept Payment objects, where payment object really means "Only payment objects that are validated, authorized and time-stamped through the officially sanctioned paths for doing such things in this repo", having PaymentObject be defined as just a typescript types which has these 3 string properties and one boolean is obviously not ideal. If PaymentObject were a minted datatype, those requirements could be added to it's mint function, it's value guaranteed to have been run through them, and only values produced by `mint()` be allowed to be passed to functions expecting PaymentObject.
+**defineMinted** creates contracts that couple a typescript types to some set of rules specified in its definition. This means that when a function wants to only accept Payment objects, where payment object really means "Only payment objects that are validated, authorized and time-stamped through the officially sanctioned paths for doing such things in this repo", having PaymentObject be defined as just a typescript types which has these 3 string properties and one boolean is obviously not ideal. If PaymentObject were a minted datatype, those requirements could be added to it's mint function, it's value guaranteed to have been run through them, and only values produced by `mint()` be allowed to be passed to functions expecting PaymentObject.
 
 You can also create minted datatypes which include kinds, or other mints. This allows the semantic attestations to compose naturally.
 
