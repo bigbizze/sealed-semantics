@@ -26,17 +26,7 @@ type Checked<P, A> = P & {
   >;
 };
 
-function shared(kind: AnyKind, value: any): void {
-  assert(Boolean(kind.is(value)), foreignValue(kind.name, value, 'laws'));
-  for (const x of [kind, value, Object.getPrototypeOf(value)])
-    assert(Object.isFrozen(x));
-  assert(!kind.is(Object.create(Object.getPrototypeOf(value))));
-  assert.throws(() => new value.constructor(), TypeError);
-  assert.throws(() => JSON.stringify(value), TypeError);
-  assert.throws(() => String(value), TypeError);
-  assert.throws(() => value.valueOf(), TypeError);
-  assert.deepEqual(Object.keys(value), []);
-  assert(!kind.is(structuredClone(value)));
+function copies(value: any, equivalent: any): void {
   if ('copy' in value) {
     assert.equal(value.copy, value.copy);
     assert(Object.isFrozen(value.copy));
@@ -49,14 +39,40 @@ function shared(kind: AnyKind, value: any): void {
       assert(second instanceof Uint8Array);
       assert.notEqual(first, second);
       assert.notEqual(first.buffer, second.buffer);
-      if (first.length) first[0] = first[0]! ^ 255;
+      const original = new Uint8Array(second);
+      for (let i = 0; i < first.length; i++) first[i] = first[i]! ^ 255;
+      assert.deepEqual(second, original, `copy.${name} must isolate existing copies`);
       assert.deepEqual(
         value.copy[name](),
-        second,
+        original,
         `copy.${name} mutations must not affect later copies`,
+      );
+      const throughEquivalent = equivalent.copy[name]();
+      assert.notEqual(throughEquivalent, first);
+      assert.notEqual(throughEquivalent, second);
+      assert.notEqual(throughEquivalent.buffer, first.buffer);
+      assert.notEqual(throughEquivalent.buffer, second.buffer);
+      assert.deepEqual(
+        throughEquivalent,
+        original,
+        `copy.${name} mutations must not affect copies through an equivalent decode`,
       );
     }
   }
+}
+
+function shared(kind: AnyKind, value: any, equivalent: any = value): void {
+  assert(Boolean(kind.is(value)), foreignValue(kind.name, value, 'laws'));
+  for (const x of [kind, value, Object.getPrototypeOf(value)])
+    assert(Object.isFrozen(x));
+  assert(!kind.is(Object.create(Object.getPrototypeOf(value))));
+  assert.throws(() => new value.constructor(), TypeError);
+  assert.throws(() => JSON.stringify(value), TypeError);
+  assert.throws(() => String(value), TypeError);
+  assert.throws(() => value.valueOf(), TypeError);
+  assert.deepEqual(Object.keys(value), []);
+  assert(!kind.is(structuredClone(value)));
+  copies(value, equivalent);
   if ('view' in value) {
     assert.equal(value.view, value.view);
     assert(Object.isFrozen(value.view));
@@ -77,8 +93,9 @@ export function assertValueLaws<
 >(kind: K, options: Checked<O, ValueLawOptions<K>>): void {
   const check = (raw: z.input<K['codec']>) => {
     const a = parseCodec(kind.codec, raw);
-    assert.equal(a, parseCodec(kind.codec, raw), 'repeated decode identity');
-    shared(kind, a);
+    const repeated = parseCodec(kind.codec, raw);
+    assert.equal(a, repeated, 'repeated decode identity');
+    shared(kind, a, repeated);
     const encoded = encodeWire(kind.codec, a);
     const b = parseCodec(kind.codec, encoded);
     assert.equal(a, b, 'codec round-trip identity');
@@ -90,11 +107,10 @@ export function assertValueLaws<
   if (options.equivalentAliases)
     fc.assert(
       fc.property(options.equivalentAliases, ([a, b]) => {
-        assert.equal(
-          parseCodec(kind.codec, a),
-          parseCodec(kind.codec, b),
-          'normalized alias identity',
-        );
+        const first = parseCodec(kind.codec, a);
+        const alias = parseCodec(kind.codec, b);
+        assert.equal(first, alias, 'normalized alias identity');
+        copies(first, alias);
       }),
     );
   const allocation = options as ValueLawOptions<K> & {

@@ -88,3 +88,38 @@ test('laws exercise runtime rejection of unsupported observations', () => {
     (e: any) => /unsupported object/.test(String(e.cause)),
   );
 });
+
+test('copy laws cover generated semantic values and normalized aliases without consumer checks', () => {
+  const source = new Uint8Array([0, 127, 255]);
+  const K = defineSeal({
+    name: 'law/bytes',
+    schema: z.codec(z.string(), z.string(), {
+      decode: (s) => s.toLowerCase(),
+      encode: (s) => s,
+    }),
+    key: (s) => s,
+  })
+    .copy({
+      toBytes: (s) => new TextEncoder().encode(s),
+      sharedProducerBytes: () => source,
+      empty: () => new Uint8Array(0),
+    })
+    .seal();
+  const input = fc.string({ minLength: 1 });
+  assertValueLaws(K, {
+    validWire: input,
+    equivalentAliases: input.map((s) => [s, s.toLowerCase()]),
+  });
+  assert.deepEqual(source, new Uint8Array([0, 127, 255]));
+});
+
+test('copy laws reject invalid runtime output from a producer', () => {
+  const K = defineSeal({ name: 'law/invalid-copy', schema: z.string(), key: (s) => s })
+    .copy({ bytes: () => new Uint32Array([1, 2]) } as any)
+    .seal();
+  assert.throws(
+    () => assertValueLaws(K, { validWire: fc.string() }),
+    (error: any) =>
+      /copy.bytes.*must return a genuine Uint8Array/.test(String(error.cause)),
+  );
+});
