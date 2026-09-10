@@ -1,550 +1,269 @@
-import { ok, err } from './result.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 import * as api from '../src/index.js';
-import { defineKind, defineDerived, type ProducerResult } from '../src/index.js';
+import { defineKind, defineMinted } from '../src/index.js';
 import { stableWireKey } from '../src/keying.js';
 import {
   UserId,
   Sha256Digest,
   ContentAddress,
+  NamespaceId,
   PreparedWrite,
 } from '../examples/reference.js';
-function value<T>(r: ProducerResult<T>): T {
-  if (!r.ok) throw Error(JSON.stringify(r.error));
-  return r.value;
-}
-const raw = 'usr_0123456789abcdef';
-test('private brand, prototype forgery, constructor recovery, and hidden state', () => {
-  const v = value(UserId.parse(raw)),
-    fake = Object.create(Object.getPrototypeOf(v));
-  assert(UserId.is(v));
-  assert(!UserId.is(fake));
-  assert(!UserId.is(new Proxy(v, {})));
-  assert(!z.safeEncode(UserId.codec, fake).success);
-  assert(!UserId.codec.out.safeParse(fake).success);
+import { ok } from './result.js';
+
+test('only Zod exposes boundary operations; private brands reject forgery and constructor recovery', () => {
+  assert.deepEqual(Object.keys(api).sort(), ['defineKind', 'defineMinted']);
+  const value = UserId.codec.parse('usr_0123456789abcdef');
+  for (const name of [
+    'parse',
+    'parseSafe',
+    'safeParse',
+    'parseOrThrow',
+    'decode',
+    'encode',
+    'canonical',
+  ]) {
+    assert(!(name in UserId), name);
+    assert(!(name in value), name);
+  }
+  const fake = Object.create(Object.getPrototypeOf(value));
+  for (const bad of [fake, {}, new Proxy(value, {}), structuredClone(value), null]) {
+    assert(!UserId.is(bad));
+    assert(!z.safeEncode(UserId.codec, bad as any).success);
+  }
+  assert.throws(() => new (value.constructor as any)(), TypeError);
+  assert.throws(() => new (value.constructor as any)(Symbol(), {}), TypeError);
+  assert.throws(() => value.equals(fake), TypeError);
+  assert.throws(() => value.debug.call(fake), TypeError);
+});
+
+test('schema-only kinds infer Parts and validate through all Zod boundary paths', async () => {
+  const Id = defineKind({ kind: 'runtime/identity', schema: z.string().min(2) })
+    .view({ length: (text) => text.length })
+    .seal();
+  const a = Id.codec.parse('ab');
+  assert.equal(a.view.length, 2);
+  assert(z.decode(Id.codec, 'ab').equals(a));
+  assert((await Id.codec.parseAsync('ab')).equals(a));
+  assert.equal(z.encode(Id.codec, a), 'ab');
+  assert(!Id.codec.safeParse(42).success);
+  assert(!z.safeDecode(Id.codec, 'x').success);
+  assert.throws(() => Id.codec.parse('x'), z.ZodError);
+});
+
+test('schema codecs normalize inputs, validate decoded Parts, and encode nested contracts', () => {
+  const legacy = 'user:550e8400-e29b-41d4-a716-446655440000';
+  const current = 'usr_550e8400e29b41d4a716446655440000';
+  const a = UserId.codec.parse(legacy),
+    b = z.decode(UserId.codec, current);
+  assert.notEqual(a, b);
+  assert(a.equals(b));
+  assert.equal(z.encode(UserId.codec, a), current);
+  // Accepted by the broad external grammar but rejected by the codec output schema.
+  assert(!UserId.codec.safeParse(`user:${'-'.repeat(36)}`).success);
+  const raw = {
+    namespace_id: 'ns:example',
+    content_class: 'primary' as const,
+    digest: 'ab'.repeat(32),
+  };
+  const Contract = z.object({
+    user: UserId.codec,
+    addresses: z.array(ContentAddress.codec),
+  });
+  const decoded = Contract.parse({ user: legacy, addresses: [raw] });
+  assert(ContentAddress.is(decoded.addresses[0]));
+  assert(NamespaceId.is(decoded.addresses[0]!.view.namespace));
+  assert(Sha256Digest.is(decoded.addresses[0]!.view.digest));
+  assert.deepEqual(z.encode(Contract, decoded), { user: current, addresses: [raw] });
+});
+
+test('Zod refinements and codec issues remain Zod errors in both directions', () => {
+  const Limited = defineKind({
+    kind: 'runtime/refined',
+    schema: z.codec(z.string(), z.number().min(0), {
+      decode: (text, ctx) => {
+        if (text === 'bad') {
+          ctx.issues.push({
+            code: 'custom',
+            input: text,
+            message: 'Cannot convert input',
+          });
+          return z.NEVER;
+        }
+        return Number(text);
+      },
+      encode: (n) => String(n),
+    }),
+  }).seal();
+  const rejected = Limited.codec.safeParse('bad');
+  assert(!rejected.success);
+  assert.equal(rejected.error.issues[0]!.message, 'Cannot convert input');
+  assert(!Limited.codec.safeParse('-1').success);
+  const Positive = Limited.codec.refine(
+    (v) => z.encode(Limited.codec, v) !== '0',
+    'Must be positive',
+  );
+  assert(!z.safeEncode(Positive, Limited.codec.parse('0')).success);
+  assert.equal(z.encode(Positive, Positive.parse('2')), '2');
+});
+
+test('semantic collections use normalized encoding and preserve original keys', () => {
+  const a = UserId.codec.parse('usr_0123456789abcdef');
+  const b = UserId.codec.parse('usr_0123456789abcdef');
+  const map = UserId.map<number>().set(a, 1).set(b, 2);
+  assert.equal(map.size, 1);
+  assert.equal(map.get(a), 2);
+  assert.equal([...map.keys()][0], a);
+  const entry = [...map.entries()][0]!;
+  entry[1] = 999;
+  assert.equal(map.get(b), 2);
+  map.forEach((v, k, m) => {
+    assert.equal(v, 2);
+    assert.equal(k, a);
+    assert.equal(m, map);
+  });
+  assert(map.has(b));
+  assert(map.delete(b));
+  assert.equal(map.size, 0);
+  map.set(a, 1);
+  map.clear();
+  assert.equal(map.size, 0);
+  const set = UserId.set().add(a).add(b);
+  assert.equal(set.size, 1);
+  assert(set.has(b));
+  assert.throws(() => map.set({} as any, 1), TypeError);
+});
+
+test('instances, kinds, prototypes, and lazy view facades have frozen surfaces', () => {
+  const Parts = defineKind({
+    kind: 'runtime/view',
+    schema: z.object({ rows: z.array(z.number()) }),
+  })
+    .view({ rows: (p) => [...p.rows] })
+    .seal();
+  const input = { rows: [1, 2] };
+  const value = Parts.codec.parse(input);
+  input.rows.push(3);
+  assert.deepEqual(value.view.rows, [1, 2]);
+  value.view.rows.push(4);
+  assert.deepEqual(value.view.rows, [1, 2]);
+  for (const target of [Parts, value, Object.getPrototypeOf(value), value.view]) {
+    assert(Object.isFrozen(target));
+    assert(!Reflect.set(target, 'extra', 1));
+    assert.throws(() => Object.setPrototypeOf(target, {}), TypeError);
+  }
+  assert.equal(value.view, value.view);
+  assert.equal(Object.getPrototypeOf(value.view), null);
+  assert.deepEqual(Object.keys(value.view), ['rows']);
+  assert.deepEqual({ ...value }, {});
   assert.throws(
     () =>
-      new (Object.getPrototypeOf(v).constructor)(
-        Symbol('sealed-semantics/construct'),
+      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(value), 'view')!.get!.call(
         {},
       ),
     TypeError,
   );
-  assert.throws(() => Object.getPrototypeOf(v).canonical.call(fake), TypeError);
-  assert.throws(() => v.equals(fake), TypeError);
-  assert.throws(() => Object.getPrototypeOf(v).encode.call(fake), TypeError);
-  assert.deepEqual(Reflect.ownKeys(v), []);
-  assert.deepEqual(Object.keys(api).sort(), ['defineDerived', 'defineKind']);
-  for (const name of [
-    'parts',
-    'raw',
-    'unwrap',
-    'fromParts',
-    'indexKey',
-    'seal',
-    'hasBrand',
-    'unseal',
-  ]) {
-    assert(!(name in UserId));
-    assert(!(name in v));
-  }
-  assert(!UserId.is(structuredClone(v)));
+  for (const attempt of [
+    () => JSON.stringify(value),
+    () => String(value),
+    () => +value,
+    () => value.valueOf(),
+  ])
+    assert.throws(attempt, /z.encode/);
+  assert(!('view' in UserId.codec.parse('usr_0123456789abcdef')));
 });
-test('ProducerResult parse preserves producer error while codec emits a custom issue', () => {
+
+test('minted construction preserves errors, identity, and producer-owned copies', () => {
+  const input = { rows: [], content: [] };
+  const a = PreparedWrite.mint(input),
+    b = PreparedWrite.mint(input);
+  assert(a.ok && b.ok);
+  assert(!a.value.equals(b.value));
+  assert(a.value.equals(a.value));
+  assert.equal(PreparedWrite.set().add(a.value).add(b.value).size, 2);
+  assert(!('codec' in PreparedWrite));
+  assert(!('encode' in a.value));
+  assert.throws(() => JSON.stringify(a.value), /no external representation/);
+  assert.deepEqual(a.value.view.rows, []);
   const error = {
-    kind: 'test/reject',
-    reason: 'invalid_parts' as const,
-    issues: ['producer detail'],
+    kind: 'runtime/rejection',
+    reason: 'invalid_input' as const,
+    issues: ['No'],
   };
-  const Reject = defineKind({
-    kind: 'test/reject',
-    schema: z.string(),
-    decode: () => err(error),
-    encode: () => '',
+  const Rejected = defineMinted({
+    kind: 'runtime/rejection',
+    mint: () => ({ ok: false as const, error }),
   }).seal();
-  const r = Reject.parse('x');
-  assert(!r.ok);
-  assert.equal(r.error, error);
-  const c = z.safeDecode(Reject.codec, 'x');
-  assert(!c.success);
-  assert.equal(c.error.issues[0]?.code, 'custom');
-  assert.match(c.error.message, /producer detail/);
-  assert.throws(() => z.decode(Reject.codec, 'x'), z.ZodError);
-  const invalid = Reject.parse(5);
-  assert(!invalid.ok);
-  assert.equal(invalid.error.reason, 'invalid_wire');
-  const badAllocate = defineKind({
-    kind: 'test/bad-allocate',
+  const result = Rejected.mint(undefined);
+  assert(!result.ok);
+  assert.equal(result.error, error);
+});
+
+test('allocation runs the codec and reports Zod errors', () => {
+  const Allocated = defineKind({
+    kind: 'runtime/allocated',
     schema: z.string().min(2),
-    decode: (w) => ok(w),
-    encode: (p) => p,
-    allocate: () => '',
+    allocate: (s: string) => s,
   }).seal();
-  assert.equal(badAllocate.allocate().ok, false);
-  const D = defineDerived({
-    kind: 'test/derive-error',
-    derive: (_: unknown) => err({ ...error, reason: 'invalid_input' as const }),
+  assert(Allocated.is(Allocated.allocate('ab')));
+  assert.throws(() => Allocated.allocate('x'), z.ZodError);
+  const Zero = defineKind({
+    kind: 'runtime/zero',
+    schema: z.string(),
+    allocate: () => 'ok',
   }).seal();
-  assert.equal(D.derive(null).ok, false);
+  assert.equal(z.encode(Zero.codec, Zero.allocate()), 'ok');
 });
-test('aliases and nested codecs encode the complete raw contract', () => {
-  const a = value(UserId.parse('user:01234567-89ab-cdef-0123-456789abcdef'));
-  const b = value(UserId.parse('usr_0123456789abcdef0123456789abcdef'));
-  assert(a !== b);
-  assert(a.equals(b));
-  assert.deepEqual(a.encode(), b.encode());
-  const w = {
-    namespace_id: 'ns:hello',
-    content_class: 'primary' as const,
-    digest: 'ab'.repeat(32),
-  };
-  const address = value(ContentAddress.parse(w));
-  assert(Sha256Digest.is(address.view.digest));
-  assert.deepEqual(address.encode(), w);
-  assert.deepEqual(z.encode(z.object({ address: ContentAddress.codec }), { address }), {
-    address: w,
-  });
-  assert(z.safeDecode(ContentAddress.codec, w).success);
-  assert.deepEqual(z.encode(ContentAddress.codec, address), w);
-});
-test('semantic Map/Set behavior retains original keys without exposing internal strings', () => {
-  const a = value(UserId.parse(raw)),
-    b = value(UserId.parse(raw));
-  const map = UserId.map<number>().set(a, 1).set(b, 2);
-  assert.equal(map.size, 1);
-  assert.equal(map.get(b), 2);
-  assert.equal([...map.keys()][0], a);
-  const entry = [...map][0]!;
-  entry[1] = 99;
-  assert.equal(map.get(a), 2);
-  const context = { called: 0 };
-  map.forEach(function (this: typeof context, v, k, m) {
-    assert.equal(this, context);
-    assert.equal(v, 2);
-    assert.equal(k, a);
-    assert.equal(m, map);
-    this.called++;
-  }, context);
-  assert.equal(context.called, 1);
-  const set = UserId.set().add(a).add(b);
-  assert.equal(set.size, 1);
-  assert.deepEqual([...set.entries()], [[a, a]]);
-  assert.throws(() => map.has(Object.create(Object.getPrototypeOf(a))), TypeError);
-  assert.throws(
-    () => set.add(value(Sha256Digest.parse('ab'.repeat(32))) as any),
-    TypeError,
-  );
-  assert(map.delete(b));
-  assert(!map.has(a));
-  set.clear();
-  assert.equal(set.size, 0);
-});
-test('derived identity and producer copy obligations in reference example', () => {
-  const address = value(
-    ContentAddress.parse({
-      namespace_id: 'ns:x',
-      content_class: 'primary',
-      digest: 'ab'.repeat(32),
-    }),
-  );
-  const input = { rows: [{ id: 'first', content: address }], content: [address] };
-  const a = value(PreparedWrite.derive(input)),
-    b = value(PreparedWrite.derive(input));
-  input.rows[0]!.id = 'changed';
-  input.content.length = 0;
-  assert.equal(a.view.rows[0]!.id, 'first');
-  assert.equal(a.view.contentToRetain[0], address);
-  assert(!a.equals(b));
-  assert(a.equals(a));
-  const map = PreparedWrite.map<number>().set(a, 1).set(b, 2);
-  assert.equal(map.size, 2);
-  const digest = value(Sha256Digest.parse('ab'.repeat(32)));
-  digest.canonical().value.fill(0);
-  assert.equal(digest.encode(), 'ab'.repeat(32));
-});
-test('duplicate definitions and invalid declarations fail', () => {
-  assert.throws(
-    () =>
-      defineKind({
-        kind: 'example/user-id',
-        schema: z.string(),
-        decode: (w) => ok(w),
-        encode: (p) => p,
-      }).seal(),
-    /Duplicate kind/,
-  );
-  assert.throws(
-    () => defineDerived({ kind: 'example/user-id', derive: () => ok(1) }).seal(),
-    /Duplicate kind/,
-  );
-  assert.throws(
-    () => defineDerived({ kind: 'unqualified', derive: () => ok(1) }).seal(),
-    /namespaced/,
-  );
-  assert.throws(
-    () =>
-      defineDerived({ kind: 'test/reserved', derive: () => ok(1) }).view({
-        is: (p: number) => p,
-      } as any),
-    /Field name "is" is reserved/,
-  );
-});
-test('deterministic JSON validates the entire runtime domain and preserves -0', () => {
-  assert.equal(
-    stableWireKey({ z: 1, a: [-0, '\n', true, null] }),
-    '{"a":[-0,"\\n",true,null],"z":1}',
-  );
-  assert(Object.is(JSON.parse(stableWireKey(-0)), -0));
+
+test('deterministic keys validate JSON data and preserve negative zero', () => {
+  assert.equal(stableWireKey({ b: 2, a: 1 }), '{"a":1,"b":2}');
+  assert.equal(stableWireKey(-0), '-0');
+  assert.notEqual(stableWireKey(-0), stableWireKey(0));
+  assert.equal(stableWireKey(['a', true, null]), '["a",true,null]');
+  const cycle: any = {};
+  cycle.self = cycle;
   for (const bad of [
     NaN,
     Infinity,
-    -Infinity,
     undefined,
     1n,
-    Symbol(),
-    () => 0,
     new Date(),
-    new Uint8Array(1),
-    [undefined],
-    Array(1),
-    { n: Infinity },
-    Object.defineProperty({}, 'x', {
-      get() {
-        throw Error('getter must not run');
+    new Uint8Array(),
+    () => 0,
+    cycle,
+    [, 1],
+    {
+      get x() {
+        return 1;
       },
-      enumerable: true,
-    }),
+    },
+    { [Symbol()]: 1 },
+    Object.defineProperty({}, 'x', { value: 1 }),
   ])
     assert.throws(() => stableWireKey(bad), TypeError);
-  const cyclic: any = {};
-  cyclic.self = cyclic;
-  assert.throws(() => stableWireKey(cyclic), TypeError);
-  const shared = { a: 1 };
-  assert.equal(stableWireKey([shared, shared]), '[{"a":1},{"a":1}]');
+  const shared = { x: 1 };
+  assert.equal(stableWireKey([shared, shared]), '[{"x":1},{"x":1}]');
+  assert.equal(stableWireKey(Object.assign(Object.create(null), { x: 1 })), '{"x":1}');
 });
-test('reference callbacks preserve observations across repeated calls', () => {
-  const digest = value(Sha256Digest.parse('ab'.repeat(32)));
-  const user = value(UserId.parse(raw));
-  const address = value(
-    ContentAddress.parse({
-      namespace_id: 'ns:x',
-      content_class: 'primary',
-      digest: 'ab'.repeat(32),
-    }),
-  );
-  const plan = value(
-    PreparedWrite.derive({
-      rows: [{ id: 'row', content: address }],
-      content: [address],
-    }),
-  );
-  const before = {
-    user: user.encode(),
-    digest: digest.encode(),
-    address: address.encode(),
-    rows: plan.view.rows,
-    content: plan.view.contentToRetain,
-  };
-  for (let i = 0; i < 5; i++) {
-    user.canonical();
-    user.debug();
-    user.equals(value(UserId.parse(raw)));
-    digest.canonical();
-    digest.debug();
-    digest.equals(value(Sha256Digest.parse('ab'.repeat(32))));
-    address.view.namespace;
-    address.view.contentClass;
-    address.view.digest;
-    address.debug();
-    plan.debug();
-    plan.view.rows;
-    plan.view.contentToRetain;
-  }
-  assert.deepEqual(
-    {
-      user: user.encode(),
-      digest: digest.encode(),
-      address: address.encode(),
-      rows: plan.view.rows,
-      content: plan.view.contentToRetain,
-    },
-    before,
-  );
-  assert.equal(UserId.parse('user:' + '-'.repeat(36)).ok, false);
-});
-test('view is lazy, stable, frozen, read-only, and absent without declared view', () => {
-  let calls = 0;
-  const K = defineKind({
-    kind: 'amendment/view',
-    schema: z.string(),
-    decode: (w) => ok({ text: w }),
-    encode: (p) => p.text,
+
+test('one-way transforms require a codec for encoding; async schemas use Zod async APIs', async () => {
+  const OneWay = defineKind({
+    kind: 'runtime/one-way',
+    schema: z.string().transform((s) => s.length),
+  }).seal();
+  const value = OneWay.codec.parse('abc');
+  assert(OneWay.is(value));
+  assert.throws(() => z.encode(OneWay.codec, value), /unidirectional transform/i);
+  const Async = defineKind({
+    kind: 'runtime/async',
+    schema: z.string().refine(async (s) => s.length > 0),
   })
-    .view({
-      text: (p) => {
-        calls++;
-        return p.text;
-      },
-    })
+    .view({ count: (s) => s.length })
     .seal();
-  const a = value(K.parse('a')),
-    b = value(K.parse('b'));
-  const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(a), 'view')!;
-  assert.equal(descriptor.enumerable, false);
-  assert.equal(descriptor.set, undefined);
-  assert.equal(calls, 0);
-  const view = a.view;
-  assert.equal(calls, 0);
-  assert.equal(view, a.view);
-  assert.notEqual(view, b.view);
-  assert.equal(Object.getPrototypeOf(view), null);
-  assert(Object.isFrozen(view));
-  assert.deepEqual(Reflect.ownKeys(view), ['text']);
-  assert.deepEqual(Reflect.ownKeys(a), []);
-  assert.throws(
-    () => Object.defineProperty(view, 'raw', { value: () => 0 }),
-    TypeError,
-  );
-  const detached = view.text;
-  assert.equal(detached, 'a');
-  assert.equal(calls, 1);
-  assert.equal(view.text, 'a');
-  assert.equal(calls, 2);
-  const projection = Object.getOwnPropertyDescriptor(view, 'text')!;
-  assert.equal(projection.set, undefined);
-  assert.equal(projection.enumerable, true);
-  assert.equal(Reflect.set(view, 'text', 'changed'), false);
-  assert.throws(
-    () => descriptor.get!.call(Object.create(Object.getPrototypeOf(a))),
-    TypeError,
-  );
-  assert.throws(() => descriptor.get!.call(value(UserId.parse(raw))), TypeError);
-  assert.throws(() => descriptor.get!.call(new Proxy(a, {})), TypeError);
-  assert.deepEqual({ ...a }, {});
-  assert.deepEqual(Object.keys(a), []);
-  assert(!K.is(structuredClone(a)));
-  assert(!('text' in K));
-  assert(!('text' in a));
-  assert(!('canonical' in K));
-  assert(!('view' in value(UserId.parse(raw)))); // canonical alone does not add view
-  const Empty = defineDerived({ kind: 'amendment/empty', derive: () => ok(0) })
-    .view({})
-    .seal();
-  assert(!('view' in value(Empty.derive(undefined))));
-});
-test('zero-argument allocator still validates and normalizes its wire output', () => {
-  const K = defineKind({
-    kind: 'amendment/allocate',
-    schema: z.string().regex(/^user:|^usr_/),
-    decode: (w) => ok(w.replace('user:', 'usr_')),
-    encode: (p) => p,
-    allocate: () => 'user:abc',
-  }).seal();
-  const v = value(K.allocate());
-  assert(K.is(v));
-  assert.equal(v.encode(), 'usr_abc');
-  assert.equal(
-    K.map<number>()
-      .set(v, 1)
-      .get(value(K.parse('usr_abc'))),
-    1,
-  );
-});
-test('all reserved field names are rejected with a descriptive error', () => {
-  for (const name of [
-    'docs',
-    'documentation',
-    'view',
-    'map',
-    'set',
-    'get',
-    'value',
-    'kind',
-    'is',
-    'parse',
-    'parseOrThrow',
-    'derive',
-    'wire',
-    'allocate',
-    'canonical',
-    'encode',
-    'equals',
-    'debug',
-    'parts',
-    'raw',
-    'unwrap',
-    'fromParts',
-    'indexKey',
-    '__proto__',
-    'constructor',
-    'prototype',
-    'then',
-    'toJSON',
-    'valueOf',
-    'toString',
-  ]) {
-    const view = Object.fromEntries([[name, (p: number) => p]]);
-    assert.throws(
-      () =>
-        defineDerived({ kind: `amendment/reserved-${name}`, derive: () => ok(1) }).view(
-          view as any,
-        ),
-      {
-        name: 'TypeError',
-        message: `Field name "${name}" is reserved. Choose a different projection name.`,
-      },
-    );
-  }
-});
-
-test('view cannot introduce a Symbol.toPrimitive projection', () => {
-  assert.throws(
-    () =>
-      defineDerived({ kind: 'amendment/symbol', derive: () => ok(1) }).view({
-        [Symbol.toPrimitive]: () => 1,
-      } as any),
-    /Symbol-named projections are not supported/,
-  );
-});
-test('instances and their prototypes have immutable public surfaces', () => {
-  const semantic = value(
-    ContentAddress.parse({
-      namespace_id: 'ns:x',
-      content_class: 'primary',
-      digest: 'ab'.repeat(32),
-    }),
-  );
-  const derived = value(PreparedWrite.derive({ rows: [], content: [] }));
-  for (const v of [semantic, derived]) {
-    assert(Object.isFrozen(v));
-    assert(!Object.isExtensible(v));
-    assert.equal(Reflect.set(v, 'extra', 123), false);
-    assert.throws(() => Object.defineProperty(v, 'extra', { value: 123 }), TypeError);
-    assert.throws(() => Object.setPrototypeOf(v, {}), TypeError);
-    const p = Object.getPrototypeOf(v);
-    assert(Object.isFrozen(p));
-    assert.equal(
-      Reflect.set(p, 'debug', () => 'changed'),
-      false,
-    );
-    assert.throws(() => Object.setPrototypeOf(p, {}), TypeError);
-    assert.equal(Reflect.deleteProperty(p, 'equals'), false);
-    const facade = v.view;
-    assert.equal(facade, v.view);
-    assert(Object.isFrozen(facade));
-    assert.deepEqual({ ...v }, {});
-  }
-  assert.equal(semantic.view.contentClass, 'primary');
-  assert.deepEqual(derived.view.rows, []);
-});
-test('derived serialization errors do not recommend a nonexistent encoder', () => {
-  const plan = value(PreparedWrite.derive({ rows: [], content: [] }));
-  for (const operation of [
-    () => JSON.stringify(plan),
-    () => String(plan),
-    () => `${plan}`,
-    () => +plan,
-    () => plan.valueOf(),
-  ]) {
-    assert.throws(operation, {
-      name: 'TypeError',
-      message:
-        'example/prepared-write has no external representation and cannot be serialized',
-    });
-  }
-});
-test('kinds and builders cannot have acquisition or collection operations replaced', () => {
-  const builder = defineKind({
-    kind: 'hardening/frozen-kind',
-    schema: z.string(),
-    decode: (w) => ok(w),
-    encode: (p) => p,
-    allocate: () => 'allocated',
-  });
-  const derivedBuilder = defineDerived({
-    kind: 'hardening/frozen-derived',
-    derive: (s: string) => ok(s),
-  });
-  for (const b of [builder, derivedBuilder]) {
-    assert(Object.isFrozen(b));
-    assert.equal(
-      Reflect.set(b, 'seal', () => null),
-      false,
-    );
-    assert.throws(() => Object.setPrototypeOf(b, {}), TypeError);
-  }
-  const K = builder.seal();
-  const D = derivedBuilder.seal();
-  for (const kind of [K, D]) {
-    assert(Object.isFrozen(kind));
-    for (const key of Object.keys(kind)) {
-      const original = Reflect.get(kind, key);
-      assert.equal(
-        Reflect.set(kind, key, () => null),
-        false,
-      );
-      assert.equal(Reflect.deleteProperty(kind, key), false);
-      assert.equal(Reflect.get(kind, key), original);
-    }
-    assert.throws(() => Object.setPrototypeOf(kind, {}), TypeError);
-    assert.equal(Reflect.set(kind, 'extra', 1), false);
-  }
-  const v = value(K.allocate());
-  assert.equal(v.encode(), 'allocated');
-  assert.equal(
-    K.map<number>()
-      .set(v, 1)
-      .get(value(K.parse('allocated'))),
-    1,
-  );
-  assert(D.is(value(D.derive('input'))));
-});
-
-test('parseOrThrow uses normal acquisition and preserves rejection details', () => {
-  const parsed = UserId.parseOrThrow('user:01234567-89ab-cdef-0123-456789abcdef');
-  assert(UserId.is(parsed));
-  assert.equal(parsed.encode(), 'usr_0123456789abcdef0123456789abcdef');
-  const failure = UserId.parse(123);
-  assert(!failure.ok);
-  assert.throws(
-    () => UserId.parseOrThrow(123),
-    (error) => {
-      assert(error instanceof TypeError);
-      assert.match(error.message, /invalid_wire/);
-      assert.deepEqual(error.cause, failure.error);
-      return true;
-    },
-  );
-  const rejected = {
-    kind: 'runtime/parse-or-throw',
-    reason: 'invalid_parts' as const,
-    issues: ['Rejected spelling'],
-  };
-  let calls = 0;
-  const Kind = defineKind({
-    kind: 'runtime/parse-or-throw',
-    schema: z.string(),
-    decode: (_input: string): ProducerResult<string> => {
-      calls++;
-      return err(rejected);
-    },
-    encode: (p) => p,
-  }).seal();
-  const detached = Kind.parseOrThrow;
-  assert.throws(
-    () => detached('x'),
-    (error) => {
-      assert(error instanceof TypeError);
-      assert.equal(
-        error.message,
-        'runtime/parse-or-throw: invalid_parts: Rejected spelling',
-      );
-      assert.equal(error.cause, rejected);
-      return true;
-    },
-  );
-  assert.equal(calls, 1);
-  assert(!('parseOrThrow' in PreparedWrite));
+  const asynchronous = await Async.codec.parseAsync('3');
+  assert(Async.is(asynchronous));
+  assert.equal(asynchronous.view.count, 1);
+  assert.equal(await z.encodeAsync(Async.codec, asynchronous), '3');
 });

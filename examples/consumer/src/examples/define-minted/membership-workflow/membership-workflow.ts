@@ -15,11 +15,11 @@ export async function saveMembershipBatch(
   if (!MembershipBatch.is(batch))
     throw new TypeError('Expected a validated MembershipBatch');
 
-  // One project and one entry per user are already established by derive.
+  // One project and one entry per user are already established by mint.
   // Convert to database strings only when writing.
   await database.insertMembers(
-    batch.view.projectId.encode(),
-    batch.view.plans.map((plan) => plan.view.userId.encode()),
+    z.encode(ProjectId.codec, batch.view.projectId),
+    batch.view.plans.map((plan) => z.encode(UserId.codec, plan.view.userId)),
   );
   return { added: batch.view.count };
 }
@@ -38,7 +38,7 @@ export async function addProjectMembers(body: unknown, database: MembershipDatab
 
   const plans: PreparedMembership[] = [];
   for (const userId of request.data.user_ids) {
-    const plan = PreparedMembership.derive({
+    const plan = PreparedMembership.mint({
       userId,
       projectId: request.data.project_id,
     });
@@ -46,7 +46,7 @@ export async function addProjectMembers(body: unknown, database: MembershipDatab
     plans.push(plan.value);
   }
 
-  const batch = MembershipBatch.derive(plans);
+  const batch = MembershipBatch.mint(plans);
   if (!batch.ok) return { status: 400, body: { error: batch.error.issues.join(' ') } };
 
   const result = await saveMembershipBatch(batch.value, database);

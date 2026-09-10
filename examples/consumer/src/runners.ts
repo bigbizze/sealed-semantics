@@ -1,13 +1,14 @@
+import { z } from 'zod';
 import assert from 'node:assert/strict';
 import { ProjectId, UserId, type PreparedMembership } from './definitions/index.ts';
 import { fakeServer } from './examples/define-value/http-contract.ts';
 import type { Profile } from './examples/define-value/profile-cache.ts';
-import { MembershipBatch } from './examples/define-derived/membership-workflow/membership-batch.ts';
+import { MembershipBatch } from './examples/define-minted/membership-workflow/membership-batch.ts';
 import type {
   MembershipDatabase,
   addProjectMembers,
   saveMembershipBatch,
-} from './examples/define-derived/membership-workflow/membership-workflow.ts';
+} from './examples/define-minted/membership-workflow/membership-workflow.ts';
 
 type ParsedResponse = { user_id: UserId; project_id: ProjectId };
 const legacyUser = 'user:01234567-89ab-cdef-0123-456789abcdef';
@@ -51,8 +52,10 @@ export async function runHttpRequestExample() {
         ['ProjectId', zodParseExample.project_id],
       ] as const) {
         console.log(`\nDecoded ${label}`);
-        console.log('  Encoded:', id.encode());
-        console.log('  Canonical:', id.canonical());
+        console.log(
+          '  Encoded:',
+          UserId.is(id) ? z.encode(UserId.codec, id) : z.encode(ProjectId.codec, id),
+        );
         console.log('  Display suffix:', id.view.suffix);
       }
       assert(
@@ -99,9 +102,9 @@ export async function runInvalidInputExample() {
   return {
     invalidUser,
     next(error: unknown) {
-      if (!(error instanceof TypeError)) throw error;
-      console.log('\nUserId.parseOrThrow throws:', error.message);
-      console.log('Original error in cause:', error.cause);
+      if (!(error instanceof z.ZodError)) throw error;
+      console.log('\nUserId.codec.parse throws:', error.message);
+      console.log('Validation issues:', error.issues);
     },
   };
 }
@@ -109,12 +112,15 @@ export async function runInvalidInputExample() {
 export function runProfileCacheExample() {
   let reads = 0;
   let previousReads = 0;
-  const alice = UserId.parseOrThrow(currentUser);
+  const alice = UserId.codec.parse(currentUser);
   return {
     spellings: [legacyUser, currentUser, secondUser, secondUser],
     async loadFromDatabase(id: UserId): Promise<Profile> {
       reads++;
-      console.log('  Database read:', id.encode());
+      console.log(
+        '  Database read:',
+        UserId.is(id) ? z.encode(UserId.codec, id) : z.encode(ProjectId.codec, id),
+      );
       return { displayName: id.equals(alice) ? 'Alice' : 'Bob' };
     },
     next(user: UserId, profile: Profile | undefined) {
@@ -130,7 +136,7 @@ export function runProfileCacheExample() {
   };
 }
 
-export function runDerivedBatchExample() {
+export function runMintedBatchExample() {
   const selectedSpellings = [legacyUser, currentUser, secondUser];
   console.log('Selected users:', selectedSpellings);
   let writes = 0;
@@ -141,8 +147,8 @@ export function runDerivedBatchExample() {
     },
   };
   return {
-    userIds: selectedSpellings.map((spelling) => UserId.parseOrThrow(spelling)),
-    projectId: ProjectId.parseOrThrow(project),
+    userIds: selectedSpellings.map((spelling) => UserId.codec.parse(spelling)),
+    projectId: ProjectId.codec.parse(project),
     database,
     getWriteCount: () => writes,
     next(
@@ -152,10 +158,10 @@ export function runDerivedBatchExample() {
     ) {
       console.log('\nPrepared plans:', plans.length);
       console.log('Accepted distinct users:', batch.view.count);
-      console.log('Batch project:', batch.view.projectId.encode());
+      console.log('Batch project:', z.encode(ProjectId.codec, batch.view.projectId));
       console.log(
         'Batch users:',
-        batch.view.plans.map((plan) => plan.view.userId.encode()),
+        batch.view.plans.map((plan) => z.encode(UserId.codec, plan.view.userId)),
       );
       console.log('Correct batch brand:', MembershipBatch.is(batch));
       console.log(
@@ -174,16 +180,16 @@ export function runDerivedBatchExample() {
 }
 
 export function runRejectedBatchExample(
-  demo: ReturnType<typeof runDerivedBatchExample>,
+  demo: ReturnType<typeof runMintedBatchExample>,
 ) {
   const writesBefore = demo.getWriteCount();
   return {
-    otherUserId: UserId.parseOrThrow(secondUser),
-    otherProjectId: ProjectId.parseOrThrow('prj_0123456789abcdef'),
+    otherUserId: UserId.codec.parse(secondUser),
+    otherProjectId: ProjectId.codec.parse('prj_0123456789abcdef'),
     emptyRequest: { project_id: project, user_ids: [] },
     invalidRequest: { project_id: project, user_ids: ['invalid'] },
     next(
-      mixed: ReturnType<typeof MembershipBatch.derive>,
+      mixed: ReturnType<typeof MembershipBatch.mint>,
       empty: Awaited<ReturnType<typeof addProjectMembers>>,
       invalid: Awaited<ReturnType<typeof addProjectMembers>>,
     ) {

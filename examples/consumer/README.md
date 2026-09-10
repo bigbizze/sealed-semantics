@@ -20,17 +20,17 @@ From this directory, use `npm test`, `npm start`, or `npm run examples`. `npm ru
 | [src/runners.ts](src/runners.ts) | Request fixtures, fake database adapters, detailed logging, and result checks. |
 | [src/definitions](src/definitions) | `UserId`, `ProjectId`, and `PreparedMembership` definitions. |
 | [src/examples/define-value](src/examples/define-value) | HTTP validation and profile caching. |
-| [src/examples/define-derived/membership-workflow](src/examples/define-derived/membership-workflow) | A checked batch and the save function that requires it. |
+| [src/examples/define-minted/membership-workflow](src/examples/define-minted/membership-workflow) | A checked batch and the save function that requires it. |
 | [test](test) | Runtime rejection tests and compile-time checks, including exact projection types. |
 | [src/index.ts](src/index.ts) | Runs the demonstration and re-exports the definitions. |
 
 The seven sections demonstrate:
 
-1. Decode an HTTP response through a Zod schema or individual `parseOrThrow()` calls.
+1. Decode an HTTP response through a Zod schema or individual `Kind.codec.parse()` calls.
 2. Compare independently parsed values with `.equals()` and encode the response again.
 3. Handle invalid input as an HTTP response, a result object, or an exception.
 4. Reuse a cached profile across accepted spellings of one user ID.
-5. Derive a plan from both ID types, derive a batch, and pass it to a function that requires it.
+5. Mint a plan from both ID types, mint a batch, and pass it to a function that requires it.
 6. Reject mixed projects, empty selections, and invalid IDs before a database write.
 7. Process a complete add-members request.
 

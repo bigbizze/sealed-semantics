@@ -5,47 +5,41 @@ import { resolve } from 'node:path';
 
 test('autocomplete suggests only configured documentation and law capabilities', () => {
   const filename = resolve('test/completion-fixture.ts');
-  const source = `import {defineKind,defineDerived} from '../src/index.js';
-    import {assertValueLaws,assertDerivedLaws} from '../src/laws.js';
+  const source = `import {defineKind,defineMinted} from '../src/index.js';
+    import {assertValueLaws,assertMintedLaws} from '../src/laws.js';
     import * as fc from 'fast-check';
     import {z} from 'zod';
     const ok = <T,>(value:T) => ({ok:true as const,value});
     const BasicBuilder=defineKind({kind:'completion/basic',
-schema:z.string(),
-decode:value=>ok(value),
-encode:p=>p});
+schema:z.string()});
 const Basic=BasicBuilder.seal();
     const FullBuilder=defineKind({kind:'completion/full',
 schema:z.string(),
-decode:value=>ok(value),
-encode:p=>p,
-canonical:p=>({text:p}),
 allocate:()=>''}).view({suffix:p=>p.slice(-6)});
 const Full=FullBuilder.seal();
-    const DerivedBuilder=defineDerived({kind:'completion/derived',
-derive:(s:string)=>ok(s)});
-const Derived=DerivedBuilder.seal();
-    const ViewedBuilder=defineDerived({kind:'completion/viewed',
-derive:(s:string)=>ok(s)}).view({suffix:p=>p.slice(-6)});
+    const MintedBuilder=defineMinted({kind:'completion/minted',
+mint:(s:string)=>ok(s)});
+const Minted=MintedBuilder.seal();
+    const ViewedBuilder=defineMinted({kind:'completion/viewed',
+mint:(s:string)=>ok(s)}).view({suffix:p=>p.slice(-6)});
 const Viewed=ViewedBuilder.seal();
     BasicBuilder.docs({ /*basic*/ }).seal();
     FullBuilder.docs({ /*full*/ }).seal();
-    DerivedBuilder.docs({ /*derived*/ }).seal();
+    MintedBuilder.docs({ /*minted*/ }).seal();
     ViewedBuilder.docs({ /*viewed*/ }).seal();
     FullBuilder.docs({view:{ /*names*/ }}).seal();
     BasicBuilder.docs({examples:[{ /*basicExample*/ }]}).seal();
     FullBuilder.docs({examples:[{ /*fullExample*/ }],view:{suffix:{description:'Suffix'}}}).seal();
-    FullBuilder.docs({examples:[{input:'x',encoded:'x',canonical:{text:'x'}}],view:{suffix:{ /*projectionDoc*/ }}}).seal();
+    FullBuilder.docs({examples:[{input:'x',encoded:'x'}],view:{suffix:{ /*projectionDoc*/ }}}).seal();
     assertValueLaws(Basic,{validWire:fc.string(), /*basicLaws*/ });
     assertValueLaws(Full,{validWire:fc.string(), /*fullLaws*/ });
-    assertDerivedLaws(Derived,{validInput:fc.string(), /*derivedLaws*/ });
-    assertDerivedLaws(Viewed,{validInput:fc.string(), /*viewedLaws*/ });
-    assertValueLaws(Basic,{validWire:fc.string(),projectionMutators:{ /*basicMutators*/ }});
+    assertMintedLaws(Minted,{validInput:fc.string(), /*mintedLaws*/ });
+    assertMintedLaws(Viewed,{validInput:fc.string(), /*viewedLaws*/ });
     assertValueLaws(Full,{validWire:fc.string(),projectionMutators:{ /*fullMutators*/ }});
-    assertDerivedLaws(Viewed,{validInput:fc.string(),projectionMutators:{ /*viewedMutators*/ }});
-    assertDerivedLaws(Viewed,{validInput:fc.string(),projectionMutators:{view:{ /*viewNames*/ }}});
+    assertMintedLaws(Viewed,{validInput:fc.string(),projectionMutators:{ /*viewedMutators*/ }});
+    assertMintedLaws(Viewed,{validInput:fc.string(),projectionMutators:{view:{ /*viewNames*/ }}});
     defineKind({ /*definition*/ });
-    defineDerived({ /*derivedDefinition*/ });
+    defineMinted({ /*mintedDefinition*/ });
     BasicBuilder./*builder*/;
     Basic./*kind*/;
     BasicBuilder.docs({examples:[{input:'x',encoded:'x'}]})./*documentedBuilder*/;
@@ -87,39 +81,29 @@ const Viewed=ViewedBuilder.seal();
       );
     }
     const expected: Record<string, string[]> = {
-      definition: [
-        'kind',
-        'schema',
-        'decode',
-        'encode',
-        'canonical',
-        'allocate',
-        'equals',
-        'debug',
-      ],
-      derivedDefinition: ['kind', 'derive', 'debug'],
+      definition: ['kind', 'schema', 'allocate', 'equals', 'debug'],
+      mintedDefinition: ['kind', 'mint', 'debug'],
       builder: ['view', 'docs', 'seal'],
-      kind: ['kind', 'is', 'parse', 'parseOrThrow', 'codec', 'map', 'set'],
+      kind: ['kind', 'is', 'codec', 'map', 'set'],
       documentedBuilder: ['docs', 'seal'],
       basic: ['description', 'examples'],
       full: ['description', 'examples', 'view'],
-      derived: ['description'],
+      minted: ['description'],
       viewed: ['description', 'view'],
       names: ['suffix'],
       basicExample: ['input', 'encoded'],
-      fullExample: ['input', 'encoded', 'canonical'],
+      fullExample: ['input', 'encoded'],
       projectionDoc: ['description', 'example'],
-      basicLaws: ['equivalentAliases', 'projectionMutators', 'sealedKinds'],
+      basicLaws: ['equivalentAliases', 'sealedKinds'],
       fullLaws: [
         'equivalentAliases',
         'allocateArgs',
         'projectionMutators',
         'sealedKinds',
       ],
-      derivedLaws: ['sealedKinds'],
+      mintedLaws: ['sealedKinds'],
       viewedLaws: ['projectionMutators', 'sealedKinds'],
-      basicMutators: ['encode'],
-      fullMutators: ['encode', 'canonical', 'view'],
+      fullMutators: ['view'],
       viewedMutators: ['view'],
       viewNames: ['suffix'],
     };

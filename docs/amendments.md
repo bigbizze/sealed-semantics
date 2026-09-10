@@ -1,49 +1,14 @@
-# Accepted amendments to revision 5
+# API amendments
 
-This document records the accepted amendments and the decisions made during implementation. For current usage, start with the [README](../README.md), [guarantees](guarantees.md), and [producer results](producer-results.md). Dated verification counts below are historical evidence, not current test counts. It takes precedence over the historical revision 5 specification. All unamended construction, ownership, error, codec, and equality guarantees remain in force.
+The [current specification](specification.md) replaces the original revision-5 API.
 
-1. Definitions use `defineKind({kind, schema, decode, encode, ...}).view(projections).docs(metadata).seal()` or `defineDerived({kind, derive, debug?}).view(projections).docs(metadata).seal()`. View and documentation stages are optional. Only `.seal()` completes and registers a kind. Derivation input types must be declared; the compiler cannot infer an external input domain from a callback body.
-2. When a definition declares nonempty `view`, instances MUST expose a non-enumerable prototype `view` getter. The getter MUST validate the actual private brand and lazily return a stable, frozen, null-prototype facade. Its only properties MUST be read-only getters for the declared projections. The facade MUST be privately cached per instance. Empty or absent view MUST expose no view member at runtime or in the inferred TypeScript type. Canonical alone MUST NOT create view.
-3. Kinds, builders, instances, and their per-definition prototypes are frozen, as well as the library-created facade. Freezing the instance does not prevent later assignment of its private view cache. Parts and projection results remain governed by producer ownership and copy obligations. This is a narrow exception to the original no-freezing rule. Generic representation access remains prohibited; naming a projection does not prove that its producer avoids leaking mutable Parts.
-4. No standard method lives under view. All standard top-level names and generic-access names are reserved as field names: docs, documentation, view, map, set, get, value, kind, is, parse, parseOrThrow, derive, wire, schema, codec, seal, allocate, canonical, encode, equals, debug, parts, raw, unwrap, fromParts, indexKey, __proto__, constructor, prototype, then, toJSON, valueOf, and toString. Symbol-named projections, including Symbol.toPrimitive, are also prohibited. Invalid names MUST produce a diagnostic at the configured field that names the restriction and directs the author to choose another projection name.
-5. When configured, canonical MUST be exposed only as `value.canonical()`, with its exact declared result type. encode() still returns complete RawWire; canonical() returns the declared protocol representation. Derived values have neither operation.
-6. Field projections MUST be exposed only as `value.view.<declaredName>`. No old kind-level field or canonical aliases remain. Domain names such as suffix have no special meaning in the library.
-7. The allocator belongs to the definition. A zero-argument allocator supports `Kind.allocate()`; dependency-taking allocators retain their exact declared arguments. All allocated raw output MUST pass through the normal validation, decode, and seal path.
-8. Both semantic and derived kinds MUST expose `Kind.map<V>()` and `Kind.set()`. Semantic keys use deterministic encoded equality. Derived keys use object identity. Both MUST reject keys that fail the supplied kind's is predicate. Collection constructors remain internal; ValueMap and ValueSet are type-only public exports. There is no indexer registry or single-copy restriction.
-9. Derived values certify that the designated producer successfully ran, subject to the existing ownership contract. They do not certify existence, authorization, currentness, persistence, or transaction success. Pass sealed semantic values directly into derivations. Encode only when a representation boundary needs raw data.
-10. `.value` belongs to a successful ProducerResult, not to a sealed instance. Examples MUST narrow the result before accessing its value. The instance has no generic value, parts, raw, unwrap, or fromParts operation.
+- `defineKind({ kind, schema })` uses the schema output as private Parts. Put conversions in a Zod codec.
+- Zod is the semantic boundary API. Removed library parsing methods, definition conversion callbacks, instance encoding, and canonical operations have no aliases.
+- `defineMinted({ kind, mint })` replaces the derived construction family. It provides evidence that the configured producer succeeded.
+- Optional `.view(...)` declares read-only projection properties. Optional `.docs(...)` follows it. Required `.seal()` completes the kind.
+- Instances, prototypes, builders, kinds, and view facades are frozen. Parts remain producer-owned private state.
+- A realm-wide registry rejects duplicate completed names across package copies. No executable scanner is shipped.
+- Documentation validates linked `input` and `encoded` examples during sealing. No docs CLI is shipped.
+- Property laws use Zod codecs and explicit mutators for custom, function, or accessor projections. Fast-check is an optional test peer.
 
-The erased brand remains per kind. Full instance assignability also depends on declared wire, canonical, and view signatures. Renaming a kind remains a type change; putting methods on the instance does not insert kind into data.
-
-Validation: the inference suite checks exact instance projections, conditional members, allocator tuples, wrong-kind collection keys, and removed kind-level methods. Runtime tests and the law harness cover all reference examples, facade descriptors, private-brand rejection, frozen and stable facades, repeated getter reads, absent views, projection mutation, and preserved spread/cloning behavior. The package consumer check compiles and runs the README and verifies cross-copy behavior using the actual tarball. The compiler diagnostic test checks readable reserved-field errors.
-
-Verified implementation: all 19 tests and the build pass with the locked Zod 4.1.0 dependency. Type assertions pass on TypeScript 7.0.2 and 5.7.3. Isolated tarball consumers pass with Zod 4.1.0 and current Zod 4, including README compilation/execution, emitted declaration constraints, cross-copy composition and collections, the law entry, and the shipped CLI. Those checks describe the initial amendment commit. The hardening changes below supersede its source-size rule and extend the test suite.
-
-## Runtime hardening and auditability
-
-Instances MUST be frozen after private Parts initialization. The per-definition prototype MUST be frozen after installing view, canonical, and encode. Parts and projection results MUST NOT be frozen by the library. Runtime configuration validation MUST reject unknown keys, invalid required or configured optional callbacks, malformed view, and invalid wire schemas before registering the kind. Invalid definitions MUST NOT consume the kind name.
-
-Derived implicit serialization MUST throw `<kind> has no external representation and cannot be serialized`. Semantic errors retain their explicit-encoding guidance. The law harness MUST test the corresponding message for each kind.
-
-The public laws entry declares fast-check ^4.9.0 as an optional peer. The main entry MUST work without it. The source LOC gate is removed; source is formatted normally and formatting is checked in CI. The separate README length requirement remains.
-
-The law harness no longer identifies sealed objects by their public method shape. Tests may supply `sealedKinds` containing real kind predicates for sealed children. Unrecognized custom objects require explicit mutators and domain-specific observations where their private state is invisible to generic snapshots. Passing sampled laws is not a proof of ownership or callback purity.
-
-Hardening verification: all 27 tests pass on Node 22.14.0 and 24.21.0. Type checks pass with TypeScript 7.0.2 and 5.7.3. Isolated consumers pass with the minimum Zod 4.1.0 and current Zod 4; the main entry runs without fast-check installed, and the laws entry runs after installing that optional peer. The consumer check also accepts schemas from a second physical Zod copy. The adjacent local-path example project still compiles and runs.
-
-Optional `.docs(metadata)` configures a new frozen builder. `.seal()` returns the completed kind. Metadata is exposed as `Kind.documentation`; it does not configure semantics. See [documentation metadata](documentation.md) for typed samples and synchronous validation.
-
-The producer/result contract is named `ProducerResult<T, E = ValueError>`. Runtime `ok` and `err` exports are removed. Producers return the structural success/failure shape directly or use consumer-owned compatible helpers. This supersedes the historical specification’s result API; error preservation is unchanged. See [producer results](producer-results.md).
-
-Documentation uses non-empty linked `examples` with required raw `input` and normalized `encoded`, and required `canonical` iff configured. The independent example fields are removed. Every declared projection requires a description. `.docs()` remains optional. `.seal()` validates supplied documentation and executes semantic examples before registering the kind. There is no docs CLI.
-
-Realm and documentation enforcement supersede the earlier scanner and docs-checker workflow: kind names are registered across package copies in one realm, `.seal()` validates supplied documentation before returning, and the only package entry points are the main API and laws. Both executables and public docs-checker functions are removed.
-
-Runtime Zod integration is centralized in internal `src/zod-codec.ts`: codec construction, wire encoding, parsing, decoding, and schema recognition. Public types continue to use Zod directly. Zod >=4.1 remains required; no adapter API or legacy fallback is introduced.
-
-
-## Acquisition convenience and executable consumer
-
-Semantic kinds expose `parseOrThrow(input)`, which calls the same acquisition path as `parse` and returns the sealed value. A rejected input throws a TypeError with kind, reason, and issues in the message and the original ValueError as cause. Producer exceptions propagate unchanged. `parse` and `derive` retain plain structural results; no unwrap method or derived throwing convenience is added.
-
-The consumer now lives in `examples/consumer`, with an independent lockfile and compiler configuration. Its local file dependency is installed as a package copy to avoid an ancestor-directory symlink. Build and test hooks refresh it. The executable examples demonstrate boundary schemas, individual parsing, semantic equality, caching, and derived inputs required by downstream functions. Root checks include this consumer; published-package smoke tests remain separate.
+See [release notes](releasing.md) for migration from the published API.

@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import { validateDefinition, validateView } from './definition.js';
 import { documentedKind, type Metadata } from './documentation.js';
 import { makeSeal } from './seal.js';
-import { makeWireCodec, encodeWire, parseWire } from './zod-codec.js';
+import { makeWireCodec, encodeWire, parseCodec } from './zod-codec.js';
 import { stableWireKey } from './keying.js';
 import type {
   ProducerResult,
@@ -11,7 +11,7 @@ import type {
   ConfigurationError,
   AnyKind,
   ValueBuilder,
-  DerivedBuilder,
+  MintedBuilder,
 } from './types.js';
 export type {
   ProducerResult,
@@ -22,12 +22,11 @@ export type {
   ValueDocumentation,
   ValueExample,
   ProjectionDocumentation,
-  DerivedDocumentation,
+  MintedDocumentation,
 } from './types.js';
 import { ValueMap, ValueSet } from './collections.js';
 export type { ValueMap, ValueSet } from './collections.js';
 const ok = <T>(value: T): ProducerResult<T, never> => ({ ok: true, value });
-const err = <E>(error: E): ProducerResult<never, E> => ({ ok: false, error });
 import { register } from './registry.js';
 function collections<K extends AnyKind>(kind: K) {
   return { map: <V>() => new ValueMap<K, V>(kind), set: () => new ValueSet(kind) };
@@ -70,125 +69,74 @@ function builder(
     },
   });
 }
-declare const absentCanonical: unique symbol;
-type AbsentCanonical = typeof absentCanonical;
-type SameType<A, B> =
-  (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
-type Operations<C, A extends unknown[]> = (SameType<C, AbsentCanonical> extends true
-  ? {}
-  : { canonical: () => C }) &
-  ([A] extends [never] ? {} : { allocate: (...args: A) => unknown });
 export function defineKind<
   const K extends string,
   W extends z.ZodType,
-  P,
-  C = AbsentCanonical,
   A extends unknown[] = never,
   const Keys extends PropertyKey = never,
 >(
   spec: {
     kind: LiteralKind<K>;
     schema: W & JsonSchema<W>;
-    decode: (w: z.output<W>) => ProducerResult<P>;
-    encode: (parts: NoInfer<P>) => NoInfer<z.output<W>>;
-    canonical?: (parts: NoInfer<P>) => C;
     allocate?: (...args: A) => NoInfer<z.input<W>>;
-    equals?: (a: NoInfer<P>, b: NoInfer<P>) => boolean;
-    debug?: (parts: NoInfer<P>) => string;
+    equals?: (a: NoInfer<z.output<W>>, b: NoInfer<z.output<W>>) => boolean;
+    debug?: (parts: NoInfer<z.output<W>>) => string;
   } & Record<Keys, unknown> & {
       [
-        N in Exclude<
-          Keys,
-          | 'kind'
-          | 'schema'
-          | 'decode'
-          | 'encode'
-          | 'canonical'
-          | 'allocate'
-          | 'equals'
-          | 'debug'
-        >
+        N in Exclude<Keys, 'kind' | 'schema' | 'allocate' | 'equals' | 'debug'>
       ]: ConfigurationError<
-        N extends string
-          ? `Unknown definition option "${N}". Use .view(...) for projections and .docs(...) for documentation.`
-          : 'Symbol-named options are not supported.'
+        N extends 'decode' | 'encode' | 'canonical'
+          ? 'Configure conversion in a Zod codec passed as schema. Expose observations with .view(...).'
+          : N extends string
+            ? `Unknown definition option "${N}". Use .view(...) for projections and .docs(...) for documentation.`
+            : 'Symbol-named options are not supported.'
       >;
     },
-): ValueBuilder<K, W, P, Operations<C, A>> {
+): ValueBuilder<
+  K,
+  W,
+  z.output<W>,
+  [A] extends [never] ? {} : { allocate: (...args: A) => unknown }
+> {
   validateDefinition(spec, true);
-  const {
-    kind,
-    schema,
-    decode,
-    encode: encodeParts,
-    equals,
-    debug,
-    allocate,
-    canonical,
-  } = spec;
+  const { kind, schema, equals, debug, allocate } = spec;
   return builder((view, metadata) => {
-    const encode = (p: P) => encodeWire(schema, encodeParts(p));
-    const bridge = makeSeal(kind, {
-      encode,
+    const bridge = makeSeal<z.output<W>>(kind, {
+      semantic: true,
       debug,
-      canonical,
       view,
       equals:
-        equals ?? ((a, b) => stableWireKey(encode(a)) === stableWireKey(encode(b))),
+        equals ??
+        ((a, b) =>
+          stableWireKey(encodeWire(schema, a)) ===
+          stableWireKey(encodeWire(schema, b))),
     });
-    const parse = (input: unknown) => {
-      const parsed = parseWire(schema, input);
-      if (!parsed.success)
-        return err({
-          kind,
-          reason: 'invalid_wire' as const,
-          issues: parsed.error.issues.map((i) => i.message),
-        });
-      const produced = decode(parsed.data);
-      return produced.ok ? ok(bridge.seal(produced.value)) : produced;
-    };
-    const result = {
-      kind,
-      is: bridge.is,
-      parse,
-      parseOrThrow: (input: unknown) => {
-        const result = parse(input);
-        if (result.ok) return result.value;
-        const error = result.error;
-        throw new TypeError(
-          `${error.kind}: ${error.reason}: ${error.issues.join('; ')}`,
-          { cause: error },
-        );
-      },
-      codec: makeWireCodec(
-        schema,
-        kind,
-        decode,
-        bridge.seal,
-        bridge.is,
-        bridge.read,
-        encodeParts,
-      ),
-    };
+    const codec = makeWireCodec(schema, kind, bridge.seal, bridge.is, bridge.read);
+    const result = { kind, is: bridge.is, codec };
     if (allocate)
       Object.assign(result, {
-        allocate: (...args: Parameters<typeof allocate>) => parse(allocate(...args)),
+        allocate: (...args: A) => parseCodec(codec, allocate(...args)),
       });
     Object.assign(result, collections(result as unknown as AnyKind));
     const completed = documentedKind(
       result,
-      {
-        semantic: true,
-        canonical: !!canonical,
-        view: Object.keys(view),
-      },
+      { semantic: true, view: Object.keys(view) },
       metadata,
     );
     register(kind);
     return completed;
-  }) as ValueBuilder<K, W, P, Operations<C, A>>;
+  }) as ValueBuilder<
+    K,
+    W,
+    z.output<W>,
+    [A] extends [never] ? {} : { allocate: (...args: A) => unknown }
+  >;
 }
-export function defineDerived<
+/**
+ * Creates a builder for values whose configured mint producer must succeed.
+ * Establishes the construction path, not producer correctness or external facts.
+ */
+export function defineMinted<
   const K extends string,
   I,
   P,
@@ -196,27 +144,27 @@ export function defineDerived<
 >(
   spec: {
     kind: LiteralKind<K>;
-    derive: (input: I) => ProducerResult<P>;
+    mint: (input: I) => ProducerResult<P>;
     debug?: (parts: NoInfer<P>) => string;
   } & Record<Keys, unknown> & {
-      [N in Exclude<Keys, 'kind' | 'derive' | 'debug'>]: ConfigurationError<
-        N extends 'canonical' | 'encode' | 'allocate' | 'equals' | 'schema'
-          ? `Derived definitions cannot configure ${N}. Only semantic definitions support this option.`
+      [N in Exclude<Keys, 'kind' | 'mint' | 'debug'>]: ConfigurationError<
+        N extends 'allocate' | 'equals' | 'schema'
+          ? `Minted definitions cannot configure ${N}. Only semantic definitions support this option.`
           : N extends string
             ? `Unknown definition option "${N}". Use .view(...) for projections and .docs(...) for documentation.`
             : 'Symbol-named options are not supported.'
       >;
     },
-): DerivedBuilder<K, I, P> {
+): MintedBuilder<K, I, P> {
   validateDefinition(spec, false);
-  const { kind, derive, debug } = spec;
+  const { kind, mint, debug } = spec;
   return builder((view, metadata) => {
     const bridge = makeSeal<P>(kind, { debug, view });
     const result = {
       kind,
       is: bridge.is,
-      derive: (input: I) => {
-        const produced = derive(input);
+      mint: (input: I) => {
+        const produced = mint(input);
         return produced.ok ? ok(bridge.seal(produced.value)) : produced;
       },
     };
@@ -225,12 +173,11 @@ export function defineDerived<
       result,
       {
         semantic: false,
-        canonical: false,
         view: Object.keys(view),
       },
       metadata,
     );
     register(kind);
     return completed;
-  }) as DerivedBuilder<K, I, P>;
+  }) as MintedBuilder<K, I, P>;
 }

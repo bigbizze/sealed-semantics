@@ -3,8 +3,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import * as fc from 'fast-check';
 import { z } from 'zod';
-import { assertValueLaws, assertDerivedLaws } from '../src/laws.js';
-import { defineKind, defineDerived } from '../src/index.js';
+import { assertValueLaws, assertMintedLaws } from '../src/laws.js';
+import { defineKind, defineMinted } from '../src/index.js';
 import {
   UserId,
   Sha256Digest,
@@ -48,13 +48,11 @@ test('all semantic reference laws, aliases, and allocation', () => {
     sealedKinds: [NamespaceId, Sha256Digest],
   });
 });
-test('derived reference laws include copies of graphs with sealed nodes', () => {
+test('minted reference laws include copies of graphs with sealed nodes', () => {
   const sealed = address.map((w) => {
-    const r = ContentAddress.parse(w);
-    if (!r.ok) throw Error();
-    return r.value;
+    return ContentAddress.codec.parse(w);
   });
-  assertDerivedLaws(PreparedWrite, {
+  assertMintedLaws(PreparedWrite, {
     sealedKinds: [ContentAddress],
     validInput: fc.record({
       rows: fc.array(fc.record({ id: fc.string(), content: sealed })),
@@ -63,21 +61,19 @@ test('derived reference laws include copies of graphs with sealed nodes', () => 
   });
 });
 test('law harness detects shallow-copy leaks and incorrect equality', () => {
-  const Leak = defineDerived({
+  const Leak = defineMinted({
     kind: 'law/leak',
-    derive: (x: number) => ok({ nested: { x } }),
+    mint: (x: number) => ok({ nested: { x } }),
   })
     .view({ bad: (p) => ({ nested: p.nested }) })
     .seal();
   assert.throws(
-    () => assertDerivedLaws(Leak, { validInput: fc.integer() }),
+    () => assertMintedLaws(Leak, { validInput: fc.integer() }),
     (e: any) => /projection leaked/.test(String(e.cause)),
   );
   const Wrong = defineKind({
     kind: 'law/wrong-equality',
     schema: z.int(),
-    decode: (w) => ok(w),
-    encode: (p) => p,
     equals: () => true,
   }).seal();
   assert.throws(
@@ -86,17 +82,17 @@ test('law harness detects shallow-copy leaks and incorrect equality', () => {
   );
 });
 test('custom mutable types require and support explicit mutators', () => {
-  const Dates = defineDerived({
+  const Dates = defineMinted({
     kind: 'law/dates',
-    derive: (x: number) => ok({ time: x }),
+    mint: (x: number) => ok({ time: x }),
   })
     .view({ date: (p) => new Date(p.time) })
     .seal();
   assert.throws(
-    () => assertDerivedLaws(Dates, { validInput: fc.integer() }),
+    () => assertMintedLaws(Dates, { validInput: fc.integer() }),
     (e: any) => /projectionMutator/.test(String(e.cause)),
   );
-  assertDerivedLaws(Dates, {
+  assertMintedLaws(Dates, {
     validInput: fc.integer(),
     projectionMutators: { view: { date: (d) => d.setTime(0) } },
   });
@@ -105,8 +101,6 @@ test('law harness rejects non-finite wire numbers and preserves negative zero', 
   const Numbers = defineKind({
     kind: 'law/numbers',
     schema: z.custom<number>((x) => typeof x === 'number'),
-    decode: (w) => ok(w),
-    encode: (p) => p,
   }).seal();
   assertValueLaws(Numbers, { validWire: fc.constantFrom(-0, 0, 1, -1) });
   for (const bad of [NaN, Infinity, -Infinity])
@@ -131,23 +125,23 @@ test('objects resembling sealed instances are not silently skipped', () => {
       this.#count++;
     }
   }
-  const K = defineDerived({ kind: 'law/lookalike', derive: () => ok(new Lookalike()) })
+  const K = defineMinted({ kind: 'law/lookalike', mint: () => ok(new Lookalike()) })
     .view({ custom: (p) => p })
     .seal();
   assert.throws(
-    () => assertDerivedLaws(K, { validInput: fc.constant(undefined) }),
+    () => assertMintedLaws(K, { validInput: fc.constant(undefined) }),
     (e: any) => /projectionMutator/.test(String(e.cause)),
   );
 });
 test('sealed children require explicit private-brand predicates', () => {
-  const Child = defineDerived({
+  const Child = defineMinted({
     kind: 'law/child',
-    derive: (n: number) => ok(n),
+    mint: (n: number) => ok(n),
   }).seal();
-  const Parent = defineDerived({
+  const Parent = defineMinted({
     kind: 'law/parent',
-    derive: (n: number) => {
-      const r = Child.derive(n);
+    mint: (n: number) => {
+      const r = Child.mint(n);
       if (!r.ok) throw Error();
       return ok({ child: r.value });
     },
@@ -155,34 +149,30 @@ test('sealed children require explicit private-brand predicates', () => {
     .view({ child: (p) => p.child })
     .seal();
   assert.throws(
-    () => assertDerivedLaws(Parent, { validInput: fc.integer() }),
+    () => assertMintedLaws(Parent, { validInput: fc.integer() }),
     (e: any) => /sealedKinds/.test(String(e.cause)),
   );
-  assertDerivedLaws(Parent, { validInput: fc.integer(), sealedKinds: [Child] });
+  assertMintedLaws(Parent, { validInput: fc.integer(), sealedKinds: [Child] });
 });
-test('frozen detached canonical objects and field containers satisfy mutation laws', () => {
+test('frozen detached view objects and containers satisfy mutation laws', () => {
   const K = defineKind({
-    kind: 'law/frozen-canonical',
+    kind: 'law/frozen-view',
     schema: z.string(),
-    decode: (w) => ok({ text: w }),
-    encode: (p) => p.text,
-    canonical: (p) => Object.freeze({ type: 'utf8' as const, value: p.text }),
   })
     .view({
-      list: (p) => Object.freeze([{ text: p.text }]),
-      nested: (p) => Object.freeze({ child: { text: p.text } }),
-      sealed: (p) => Object.seal([p.text]),
-      fixedLength: (p) =>
-        Object.defineProperty([p.text], 'length', { writable: false }),
+      list: (p) => Object.freeze([{ text: p }]),
+      nested: (p) => Object.freeze({ child: { text: p } }),
+      sealed: (p) => Object.seal([p]),
+      fixedLength: (p) => Object.defineProperty([p], 'length', { writable: false }),
     })
     .seal();
   assertValueLaws(K, { validWire: fc.string() });
 });
 test('frozen outer objects and arrays do not hide mutable child aliases', () => {
   for (const shape of ['object', 'array'] as const) {
-    const K = defineDerived({
+    const K = defineMinted({
       kind: `law/frozen-leak-${shape}`,
-      derive: (n: number) => ok({ child: { n } }),
+      mint: (n: number) => ok({ child: { n } }),
     })
       .view({
         leak: (p) =>
@@ -192,21 +182,21 @@ test('frozen outer objects and arrays do not hide mutable child aliases', () => 
       })
       .seal();
     assert.throws(
-      () => assertDerivedLaws(K, { validInput: fc.integer() }),
+      () => assertMintedLaws(K, { validInput: fc.integer() }),
       (e: any) => /projection leaked/.test(String(e.cause)),
     );
   }
 });
 test('functions require mutators and function property aliases are observed', () => {
   const makeFunction = (n: number) => Object.assign(() => {}, { child: { n } });
-  const Safe = defineDerived({
+  const Safe = defineMinted({
     kind: 'law/function-copy',
-    derive: (n: number) => ok(n),
+    mint: (n: number) => ok(n),
   })
     .view({ callback: (p) => makeFunction(p) })
     .seal();
   assert.throws(
-    () => assertDerivedLaws(Safe, { validInput: fc.integer() }),
+    () => assertMintedLaws(Safe, { validInput: fc.integer() }),
     (e: any) => /Function-valued projections require/.test(String(e.cause)),
   );
   const mutation = {
@@ -216,38 +206,38 @@ test('functions require mutators and function property aliases are observed', ()
       },
     },
   };
-  assertDerivedLaws(Safe, { validInput: fc.integer(), projectionMutators: mutation });
-  const Leak = defineDerived({
+  assertMintedLaws(Safe, { validInput: fc.integer(), projectionMutators: mutation });
+  const Leak = defineMinted({
     kind: 'law/function-leak',
-    derive: (n: number) => ok(makeFunction(n)),
+    mint: (n: number) => ok(makeFunction(n)),
   })
     .view({ callback: (p) => p })
     .seal();
   assert.throws(
     () =>
-      assertDerivedLaws(Leak, {
+      assertMintedLaws(Leak, {
         validInput: fc.integer(),
         projectionMutators: mutation,
       }),
     (e: any) => /projection leaked/.test(String(e.cause)),
   );
-  const Nested = defineDerived({
+  const Nested = defineMinted({
     kind: 'law/function-nested',
-    derive: (n: number) => ok(n),
+    mint: (n: number) => ok(n),
   })
     .view({ callback: (p) => Object.freeze({ fn: makeFunction(p) }) })
     .seal();
   assert.throws(
-    () => assertDerivedLaws(Nested, { validInput: fc.integer() }),
+    () => assertMintedLaws(Nested, { validInput: fc.integer() }),
     (e: any) => /Function-valued projections require/.test(String(e.cause)),
   );
 });
 
 test('accessor projections require a mutator before getters can run', () => {
   let reads = 0;
-  const K = defineDerived({
+  const K = defineMinted({
     kind: 'law/accessor-required',
-    derive: (n: number) => ok({ child: { n } }),
+    mint: (n: number) => ok({ child: { n } }),
   })
     .view({
       child: (p) =>
@@ -260,7 +250,7 @@ test('accessor projections require a mutator before getters can run', () => {
     })
     .seal();
   assert.throws(
-    () => assertDerivedLaws(K, { validInput: fc.integer() }),
+    () => assertMintedLaws(K, { validInput: fc.integer() }),
     (e: any) =>
       /Accessor-containing projections require an explicit projectionMutator/.test(
         String(e.cause),
@@ -269,7 +259,7 @@ test('accessor projections require a mutator before getters can run', () => {
   assert.equal(reads, 0);
   assert.throws(
     () =>
-      assertDerivedLaws(K, {
+      assertMintedLaws(K, {
         validInput: fc.integer(),
         projectionMutators: {
           view: {
@@ -284,9 +274,9 @@ test('accessor projections require a mutator before getters can run', () => {
 });
 
 test('explicit accessor mutators support detached getters and nested accessor graphs', () => {
-  const Safe = defineDerived({
+  const Safe = defineMinted({
     kind: 'law/accessor-copy',
-    derive: (n: number) => ok({ n }),
+    mint: (n: number) => ok({ n }),
   })
     .view({
       child: (p) => ({
@@ -299,10 +289,10 @@ test('explicit accessor mutators support detached getters and nested accessor gr
     })
     .seal();
   assert.throws(
-    () => assertDerivedLaws(Safe, { validInput: fc.integer() }),
+    () => assertMintedLaws(Safe, { validInput: fc.integer() }),
     (e: any) => /Accessor-containing projections/.test(String(e.cause)),
   );
-  assertDerivedLaws(Safe, {
+  assertMintedLaws(Safe, {
     validInput: fc.integer(),
     projectionMutators: {
       view: {
@@ -312,14 +302,14 @@ test('explicit accessor mutators support detached getters and nested accessor gr
       },
     },
   });
-  const Setter = defineDerived({
+  const Setter = defineMinted({
     kind: 'law/setter-required',
-    derive: (n: number) => ok(n),
+    mint: (n: number) => ok(n),
   })
     .view({ child: () => Object.defineProperty({}, 'hidden', { set(_x: unknown) {} }) })
     .seal();
   assert.throws(
-    () => assertDerivedLaws(Setter, { validInput: fc.integer() }),
+    () => assertMintedLaws(Setter, { validInput: fc.integer() }),
     (e: any) => /Accessor-containing projections/.test(String(e.cause)),
   );
 });

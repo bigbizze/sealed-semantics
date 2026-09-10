@@ -5,12 +5,9 @@ import { defineKind, type ValueOf } from 'sealed-semantics';
 export const ProjectId = defineKind({
   kind: 'sealed-semantics-test/project-id',
   schema: z.string().regex(/^prj_[a-f0-9]{16,}$/),
-  decode: (spelling) => ({ ok: true, value: { spelling } }),
-  encode: (parts) => parts.spelling,
-  canonical: (parts) => ({ type: 'utf8' as const, value: parts.spelling }),
 })
   .view({
-    suffix: (parts) => parts.spelling.slice(-6),
+    suffix: (parts) => parts.slice(-6),
   })
   .docs({
     description: 'A project identifier.',
@@ -18,7 +15,6 @@ export const ProjectId = defineKind({
       {
         input: 'prj_fedcba9876543210',
         encoded: 'prj_fedcba9876543210',
-        canonical: { type: 'utf8', value: 'prj_fedcba9876543210' },
       },
     ],
     view: { suffix: { description: 'The final six characters.', example: '543210' } },

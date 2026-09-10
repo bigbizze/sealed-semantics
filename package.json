@@ -1,7 +1,7 @@
 {
   "name": "sealed-semantics",
   "version": "0.2.0",
-  "description": "Explicitly encoded semantic values and local derived proofs",
+  "description": "Runtime nominal identity and private semantic values for Zod codecs",
   "type": "module",
   "license": "MIT",
   "engines": {

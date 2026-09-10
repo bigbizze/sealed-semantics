@@ -8,14 +8,13 @@ assert.equal = (actual: unknown, expected: unknown, message: string) =>
 assert.deepEqual = (actual: unknown, expected: unknown, message: string) =>
   assert(documentationEqual(actual, expected), message);
 import type { z } from 'zod';
-import { decodeWire } from './zod-codec.js';
+import { decodeWire, encodeWire } from './zod-codec.js';
 import type { DocumentationShape } from './documentation.js';
 import { stableWireKey } from './keying.js';
-import type { AnyKind, ProducerResult } from './types.js';
+import type { AnyKind } from './types.js';
 
 type Semantic = AnyKind & {
-  parse(input: unknown): ProducerResult<any>;
-  codec: z.ZodType;
+  codec: z.ZodType<import('./types.js').Proof<string>, any>;
 };
 function record(value: unknown, label: string): Record<string, any> {
   assert(
@@ -71,7 +70,7 @@ function metadata(kind: AnyKind, shape: DocumentationShape) {
   }
   return { doc, shape };
 }
-/** Validate every documented input through both acquisition paths and compare its outputs. */
+/** Validate every documented input through the codec and compare its outputs. */
 export function validateDocumentation(kind: AnyKind, shape: DocumentationShape): void {
   const { doc } = metadata(kind, shape);
   if (!shape.semantic) return;
@@ -83,48 +82,33 @@ export function validateDocumentation(kind: AnyKind, shape: DocumentationShape):
   for (let i = 0; i < doc.examples.length; i++) {
     const label = `${kind.kind}: examples[${i}]`;
     const example = record(doc.examples[i], label);
-    keys(
-      example,
-      ['input', 'encoded', ...(shape.canonical ? ['canonical'] : [])],
-      label,
-    );
-    for (const key of ['input', 'encoded', ...(shape.canonical ? ['canonical'] : [])]) {
+    keys(example, ['input', 'encoded'], label);
+    for (const key of ['input', 'encoded']) {
       assert(Object.hasOwn(example, key), `${label}.${key} is required`);
     }
     const decoded = decodeWire(semantic.codec, example.input);
     assert(decoded.success, `${label}.input was rejected by codec.safeDecode`);
-    assert(kind.is(decoded.data), `${label}: codec returned an invalid brand`);
-    const parsed = semantic.parse(example.input);
-    assert(parsed.ok, `${label}.input was rejected by parse`);
-    if (!parsed.ok) continue;
-    assert(kind.is(parsed.value), `${label}: parse returned an invalid brand`);
-    const value: any = parsed.value;
-    const raw = value.encode();
-    assert.deepEqual(raw, example.encoded, `${label}.encoded does not match encode()`);
+    if (!decoded.success) continue;
+    const value: any = decoded.data;
+    assert(kind.is(value), `${label}: codec returned an invalid brand`);
+    const raw = encodeWire(semantic.codec, value);
+    assert.deepEqual(
+      raw,
+      example.encoded,
+      `${label}.encoded does not match codec encoding`,
+    );
     assert.equal(
       stableWireKey(raw),
       stableWireKey(example.encoded),
       `${label}.encoded is not valid JSON wire data`,
     );
-    assert(value.equals(decoded.data), `${label}: codec and parse disagree`);
-    if (shape.canonical) {
-      assert.deepEqual(
-        value.canonical(),
-        example.canonical,
-        `${label}.canonical does not match canonical()`,
-      );
-      assert.deepEqual(
-        (decoded.data as any).canonical(),
-        example.canonical,
-        `${label}: codec canonical does not match`,
-      );
-    }
-    const reparsed = semantic.parse(raw);
-    assert(reparsed.ok, `${label}: encoded output was rejected by parse`);
-    if (!reparsed.ok) continue;
-    assert(value.equals(reparsed.value), `${label}: round trip changed equality`);
+    const reparsed = decodeWire(semantic.codec, raw);
+    assert(reparsed.success, `${label}: encoded output was rejected by codec`);
+    if (!reparsed.success) continue;
+    assert(kind.is(reparsed.data), `${label}: round trip returned an invalid brand`);
+    assert(value.equals(reparsed.data), `${label}: round trip changed equality`);
     assert.deepEqual(
-      reparsed.value.encode(),
+      encodeWire(semantic.codec, reparsed.data),
       example.encoded,
       `${label}: round trip changed encoding`,
     );

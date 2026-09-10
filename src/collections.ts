@@ -1,3 +1,5 @@
+import type { z } from 'zod';
+import { encodeWire } from './zod-codec.js';
 import { stableWireKey } from './keying.js';
 import type { AnyKind, ValueOf } from './types.js';
 export class ValueMap<Kd extends AnyKind, V> implements Iterable<[ValueOf<Kd>, V]> {
@@ -6,13 +8,15 @@ export class ValueMap<Kd extends AnyKind, V> implements Iterable<[ValueOf<Kd>, V
   #entries = new Map<unknown, [ValueOf<Kd>, V]>();
   constructor(kind: Kd) {
     this.#kind = kind;
-    this.#semantic = 'codec' in kind && 'parse' in kind;
+    this.#semantic = 'codec' in kind;
   }
   #key(value: ValueOf<Kd>): unknown {
     if (!this.#kind.is(value))
       throw new TypeError(`${this.#kind.kind} sealed key expected`);
     return this.#semantic
-      ? stableWireKey((value as unknown as { encode(): unknown }).encode())
+      ? stableWireKey(
+          encodeWire((this.#kind as Kd & { codec: z.ZodType }).codec, value),
+        )
       : value;
   }
   get size(): number {

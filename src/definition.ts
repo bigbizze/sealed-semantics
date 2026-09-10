@@ -12,7 +12,7 @@ const reservedFields = new Set([
   'is',
   'parse',
   'parseOrThrow',
-  'derive',
+  'mint',
   'wire',
   'schema',
   'codec',
@@ -86,17 +86,8 @@ export function validateDefinition(spec: unknown, semantic: boolean): void {
   keys(
     input,
     semantic
-      ? [
-          'kind',
-          'schema',
-          'decode',
-          'encode',
-          'canonical',
-          'allocate',
-          'equals',
-          'debug',
-        ]
-      : ['kind', 'derive', 'debug'],
+      ? ['kind', 'schema', 'allocate', 'equals', 'debug']
+      : ['kind', 'mint', 'debug'],
     'definition',
   );
   if (
@@ -106,9 +97,8 @@ export function validateDefinition(spec: unknown, semantic: boolean): void {
   ) {
     throw new TypeError('kind must be a namespaced string literal');
   }
-  callback(input, semantic ? 'decode' : 'derive', 'definition');
-  if (semantic) callback(input, 'encode', 'definition');
-  for (const name of ['canonical', 'allocate', 'equals', 'debug']) {
+  if (!semantic) callback(input, 'mint', 'definition');
+  for (const name of ['allocate', 'equals', 'debug']) {
     if (Object.hasOwn(input, name)) callback(input, name, 'definition');
   }
   if (semantic && (!Object.hasOwn(input, 'schema') || !isWireSchema(input.schema))) {

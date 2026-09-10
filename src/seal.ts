@@ -2,8 +2,7 @@ const CONSTRUCT: unique symbol = Symbol('sealed-semantics/construct');
 export function makeSeal<P>(
   kind: string,
   ops: {
-    encode?: (parts: P) => unknown;
-    canonical?: ((parts: P) => unknown) | undefined;
+    semantic?: boolean;
     view?: Record<string, (parts: P) => unknown> | undefined;
     equals?: (a: P, b: P) => boolean;
     debug?: ((parts: P) => string) | undefined;
@@ -18,8 +17,8 @@ export function makeSeal<P>(
   let unseal!: (x: unknown) => P;
   const trap = (): never => {
     throw new TypeError(
-      ops.encode
-        ? `${kind} cannot be serialized implicitly; use value.encode() or encode the enclosing contract schema`
+      ops.semantic
+        ? `${kind} cannot be serialized implicitly; use z.encode(Kind.codec, value) or z.encode with the enclosing contract schema`
         : `${kind} has no external representation and cannot be serialized`,
     );
   };
@@ -75,18 +74,6 @@ export function makeSeal<P>(
       return trap();
     }
   }
-  if (ops.canonical)
-    Object.defineProperty(Sealed.prototype, 'canonical', {
-      value: function (this: Sealed) {
-        return ops.canonical!(unseal(this));
-      },
-    });
-  if (ops.encode)
-    Object.defineProperty(Sealed.prototype, 'encode', {
-      value: function (this: Sealed) {
-        return ops.encode!(unseal(this));
-      },
-    });
   Object.freeze(Sealed.prototype);
   return {
     is: hasBrand,

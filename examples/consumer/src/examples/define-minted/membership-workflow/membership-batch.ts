@@ -1,12 +1,12 @@
-import { defineDerived, type ValueOf } from 'sealed-semantics';
+import { defineMinted, type ValueOf } from 'sealed-semantics';
 import { UserId, PreparedMembership } from '../../../definitions/index.ts';
 
 // saveMembershipBatch accepts this type so every caller must first pass these checks:
 // at least one plan, all for the same project, with only one plan per user.
 // Store a new array and return copies so callers cannot change the accepted list.
-export const MembershipBatch = defineDerived({
+export const MembershipBatch = defineMinted({
   kind: 'sealed-semantics-test/examples/membership-batch',
-  derive: (plans: readonly PreparedMembership[]) => {
+  mint: (plans: readonly PreparedMembership[]) => {
     if (
       // Check runtime input without narrowing the typed readonly array to any[].
       !Array.isArray(plans as unknown) ||

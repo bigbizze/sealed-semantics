@@ -1,3 +1,5 @@
+import type { z } from 'zod';
+import { encodeWire, parseCodec } from './zod-codec.js';
 // Test-only entry point. Consumers install fast-check as a development dependency.
 import assert from 'node:assert/strict';
 import * as fc from 'fast-check';
@@ -8,39 +10,31 @@ type CollectionKind = AnyKind & {
   set(): { add(k: any): any; size: number };
 };
 type SemanticKind = CollectionKind & {
-  parse(input: unknown): ProducerResult<any>;
-  codec: unknown;
+  codec: z.ZodType<import('./types.js').Proof<string>, any>;
 };
-type Derived = CollectionKind & { derive(input: any): ProducerResult<any> };
-type Return<K, N extends PropertyKey> =
-  K extends Record<N, (...args: any[]) => infer R> ? R : never;
+type Minted = CollectionKind & { mint(input: any): ProducerResult<any> };
 type Mutator<T> = (value: T) => void;
-type Mutators<K extends AnyKind> = {
-  [N in Extract<keyof ValueOf<K>, 'encode' | 'canonical'>]?: Mutator<
-    Return<ValueOf<K>, N>
-  >;
-} & (ValueOf<K> extends { readonly view: infer V }
-  ? { view?: { [N in keyof V]?: Mutator<V[N]> } }
-  : {});
+type Mutators<K extends AnyKind> =
+  ValueOf<K> extends { readonly view: infer V }
+    ? { view?: { [N in keyof V]?: Mutator<V[N]> } }
+    : {};
 type CommonLawOptions<K extends AnyKind> = {
   sealedKinds?: readonly AnyKind[];
 } & (keyof Mutators<K> extends never ? {} : { projectionMutators?: Mutators<K> });
 type ValueLawOptions<K extends SemanticKind> = CommonLawOptions<K> & {
-  validWire: fc.Arbitrary<Return<ValueOf<K>, 'encode'>>;
-  equivalentAliases?: fc.Arbitrary<
-    [Return<ValueOf<K>, 'encode'>, Return<ValueOf<K>, 'encode'>]
-  >;
+  validWire: fc.Arbitrary<z.input<K['codec']>>;
+  equivalentAliases?: fc.Arbitrary<[z.input<K['codec']>, z.input<K['codec']>]>;
 } & (K extends { allocate(...args: infer A): unknown }
     ? { allocateArgs?: fc.Arbitrary<A> }
     : {});
-type DerivedLawOptions<K extends Derived> = CommonLawOptions<K> & {
-  validInput: fc.Arbitrary<Parameters<K['derive']>[0]>;
+type MintedLawOptions<K extends Minted> = CommonLawOptions<K> & {
+  validInput: fc.Arbitrary<Parameters<K['mint']>[0]>;
 };
 type OptionAt<O, N extends PropertyKey> = N extends keyof O ? NonNullable<O[N]> : {};
 type CheckedMutators<P, A> = P & {
   [N in Exclude<keyof P, keyof A>]: ConfigurationError<
     N extends 'encode' | 'canonical'
-      ? `projectionMutators.${N} requires a declared ${N} operation. Remove this mutator.`
+      ? 'Only declared view projections accept mutators. Encoding is checked through the codec; canonical was removed.'
       : N extends 'view'
         ? 'projectionMutators.view requires declared view projections. Add projections or remove this mutator.'
         : 'Unknown projection mutator. Use a declared operation or view projection.'
@@ -88,8 +82,6 @@ type CheckedLawOptions<P, A> = P & {
     : unknown);
 // Runtime access is broader than any one kind's capability-specific public type.
 type RuntimeMutators = {
-  encode?: Mutator<any>;
-  canonical?: Mutator<any>;
   view?: Record<string, Mutator<any>>;
 };
 function acquire<T>(result: ProducerResult<T>): T {
@@ -195,10 +187,10 @@ function mutate(
     'Supply a projectionMutator for this mutable projection type, or list its sealed kind in sealedKinds',
   );
 }
-function projections(value: any): Record<string, () => any> {
+function projections(kind: AnyKind, value: any): Record<string, () => any> {
   const result: Record<string, () => any> = {};
-  if ('encode' in value) result.encode = () => value.encode();
-  if ('canonical' in value) result.canonical = () => value.canonical();
+  if ('codec' in kind)
+    result.encoded = () => encodeWire((kind as SemanticKind).codec, value);
   for (const name of Object.keys(value.view ?? {}))
     result[`view.${name}`] = () => value.view[name];
   return result;
@@ -218,8 +210,8 @@ function shared<K extends AnyKind>(
   assert(!kind.is(Object.create(prototype)), 'prototype forgery');
   assert.throws(() => new prototype.constructor(), TypeError);
   const message =
-    'encode' in value
-      ? `${kind.kind} cannot be serialized implicitly; use value.encode() or encode the enclosing contract schema`
+    'codec' in kind
+      ? `${kind.kind} cannot be serialized implicitly; use z.encode(Kind.codec, value) or z.encode with the enclosing contract schema`
       : `${kind.kind} has no external representation and cannot be serialized`;
   for (const attempt of [
     () => JSON.stringify(value),
@@ -233,7 +225,7 @@ function shared<K extends AnyKind>(
   assert.deepEqual(Object.keys(value), []);
   assert(!kind.is(structuredClone(value)));
   const runtimeMutators = mutators;
-  const all = projections(value);
+  const all = projections(kind, value);
   const customFor = (name: string): Mutator<any> | undefined =>
     name.startsWith('view.')
       ? runtimeMutators.view?.[name.slice(5)]
@@ -267,29 +259,28 @@ export function assertValueLaws<
       options.validWire,
       options.validWire,
       (wa, wb, wc) => {
-        const [a, b, c] = [wa, wb, wc].map((w) => acquire(kind.parse(w)));
+        const a = parseCodec(kind.codec, wa),
+          b = parseCodec(kind.codec, wb),
+          c = parseCodec(kind.codec, wc);
         shared(kind, a, options.projectionMutators, options.sealedKinds);
-        const raw = a.encode(),
+        const raw = encodeWire(kind.codec, a),
           key = stableWireKey(raw);
         assert.deepEqual(
           JSON.parse(key),
           raw,
           'JSON domain and negative-zero round trip',
         );
-        assert(acquire(kind.parse(raw)).equals(a), 'encode/parse round trip');
+        assert(parseCodec(kind.codec, raw).equals(a), 'encode/parse round trip');
         assert.equal(
           a.equals(b),
-          key === stableWireKey(b.encode()),
+          key === stableWireKey(encodeWire(kind.codec, b)),
           'custom equality must agree with keys',
         );
         assert(a.equals(a));
         assert.equal(a.equals(b), b.equals(a));
         if (a.equals(b) && b.equals(c)) assert(a.equals(c));
-        if (a.equals(b) && 'canonical' in a)
-          assert.deepEqual(a.canonical(), b.canonical());
-        const copy = acquire(kind.parse(raw));
+        const copy = parseCodec(kind.codec, raw);
         assert(a.equals(copy));
-        if ('canonical' in a) assert.deepEqual(a.canonical(), copy.canonical());
         const map = kind.map<number>().set(a, 1);
         assert.equal(map.get(copy), 1);
         assert.equal(kind.set().add(a).add(copy).size, 1);
@@ -299,34 +290,33 @@ export function assertValueLaws<
   if (options.equivalentAliases)
     fc.assert(
       fc.property(options.equivalentAliases, ([wa, wb]) => {
-        const a = acquire(kind.parse(wa)),
-          b = acquire(kind.parse(wb));
+        const a = parseCodec(kind.codec, wa),
+          b = parseCodec(kind.codec, wb);
         assert(a.equals(b));
-        assert.deepEqual(a.encode(), b.encode());
-        if ('canonical' in a) assert.deepEqual(a.canonical(), b.canonical());
+        assert.deepEqual(encodeWire(kind.codec, a), encodeWire(kind.codec, b));
       }),
     );
   if (options.allocateArgs)
     fc.assert(
       fc.property(options.allocateArgs as fc.Arbitrary<any[]>, (args) => {
         assert('allocate' in kind, 'allocateArgs requires an allocator');
-        const value = acquire((kind as any).allocate(...args));
+        const value = (kind as any).allocate(...args);
         shared(kind, value, options.projectionMutators, options.sealedKinds);
-        assert(acquire(kind.parse((value as any).encode())).equals(value));
+        assert(parseCodec(kind.codec, encodeWire(kind.codec, value)).equals(value));
       }),
     );
 }
-export function assertDerivedLaws<
-  K extends Derived,
-  const O extends InferLawOptions<O, DerivedLawOptions<NoInfer<K>>>,
->(kind: K, checked: CheckedLawOptions<O, DerivedLawOptions<K>>): void {
-  const options = checked as DerivedLawOptions<K> & {
+export function assertMintedLaws<
+  K extends Minted,
+  const O extends InferLawOptions<O, MintedLawOptions<NoInfer<K>>>,
+>(kind: K, checked: CheckedLawOptions<O, MintedLawOptions<K>>): void {
+  const options = checked as MintedLawOptions<K> & {
     projectionMutators?: RuntimeMutators;
   };
   fc.assert(
     fc.property(options.validInput, (input) => {
-      const a = acquire(kind.derive(input)),
-        b = acquire(kind.derive(input));
+      const a = acquire(kind.mint(input)),
+        b = acquire(kind.mint(input));
       shared(kind, a, options.projectionMutators, options.sealedKinds);
       assert(a.equals(a));
       assert(!a.equals(b));

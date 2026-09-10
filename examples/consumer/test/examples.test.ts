@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { UserId } from '../src/definitions/user-id.ts';
 import { ProjectId } from '../src/definitions/project-id.ts';
 import { PreparedMembership } from '../src/definitions/prepared-membership.ts';
-import { MembershipBatch } from '../src/examples/define-derived/membership-workflow/membership-batch.ts';
+import { MembershipBatch } from '../src/examples/define-minted/membership-workflow/membership-batch.ts';
 import {
   fakeServer,
   readMembershipRequest,
@@ -14,19 +14,19 @@ import {
   addProjectMembers,
   saveMembershipBatch,
   type MembershipDatabase,
-} from '../src/examples/define-derived/membership-workflow/membership-workflow.ts';
+} from '../src/examples/define-minted/membership-workflow/membership-workflow.ts';
 
 const legacy = 'user:01234567-89ab-cdef-0123-456789abcdef';
 const current = 'usr_0123456789abcdef0123456789abcdef';
 const projectWire = 'prj_fedcba9876543210';
 
 function plan(userWire = current, project = projectWire) {
-  const userId = UserId.parse(userWire);
-  const projectId = ProjectId.parse(project);
-  assert(userId.ok && projectId.ok);
-  const result = PreparedMembership.derive({
-    userId: userId.value,
-    projectId: projectId.value,
+  const userId = UserId.codec.safeParse(userWire);
+  const projectId = ProjectId.codec.safeParse(project);
+  assert(userId.success && projectId.success);
+  const result = PreparedMembership.mint({
+    userId: userId.data,
+    projectId: projectId.data,
   });
   assert(result.ok);
   return result.value;
@@ -63,12 +63,12 @@ test('legacy and current identifiers share a cached profile', async () => {
     reads++;
     return { displayName: 'Alice' };
   });
-  const a = UserId.parse(legacy);
-  const b = UserId.parse(current);
-  assert(a.ok && b.ok);
-  assert.notEqual(a.value, b.value);
-  assert.equal((await lookup(a.value))?.displayName, 'Alice');
-  assert.equal((await lookup(b.value))?.displayName, 'Alice');
+  const a = UserId.codec.safeParse(legacy);
+  const b = UserId.codec.safeParse(current);
+  assert(a.success && b.success);
+  assert.notEqual(a.data, b.data);
+  assert.equal((await lookup(a.data))?.displayName, 'Alice');
+  assert.equal((await lookup(b.data))?.displayName, 'Alice');
   assert.equal(reads, 1);
 });
 
@@ -103,20 +103,20 @@ test('batch validation rejects mixed projects and preserves its private list', (
   const first = plan(legacy);
   const duplicate = plan(current);
   const input = [first, duplicate];
-  const batch = MembershipBatch.derive(input);
+  const batch = MembershipBatch.mint(input);
   assert(batch.ok);
   assert.equal(batch.value.view.count, 1);
   assert.equal(batch.value.view.plans[0], first);
   input.length = 0;
   batch.value.view.plans.pop();
   assert.equal(batch.value.view.plans.length, 1);
-  assert.equal(MembershipBatch.derive(new Array<PreparedMembership>(1)).ok, false);
-  const mixed = MembershipBatch.derive([first, plan(current, 'prj_0123456789abcdef')]);
+  assert.equal(MembershipBatch.mint(new Array<PreparedMembership>(1)).ok, false);
+  const mixed = MembershipBatch.mint([first, plan(current, 'prj_0123456789abcdef')]);
   assert(!mixed.ok);
   assert.deepEqual(mixed.error.issues, ['All plans must belong to the same project.']);
 });
 
-test('saving requires a derived batch, not a matching object', async () => {
+test('saving requires a minted batch, not a matching object', async () => {
   const member = plan();
   const lookalike = {
     view: { projectId: member.view.projectId, plans: [member], count: 1 },

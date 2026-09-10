@@ -1,4 +1,4 @@
-import { defineDerived, type ValueOf } from 'sealed-semantics';
+import { defineMinted, type ValueOf } from 'sealed-semantics';
 import { UserId } from './user-id.ts';
 import { ProjectId } from './project-id.ts';
 
@@ -8,9 +8,9 @@ export interface MembershipInput {
 }
 
 /** A local plan to associate a user with a project; it does not grant access. */
-export const PreparedMembership = defineDerived({
+export const PreparedMembership = defineMinted({
   kind: 'sealed-semantics-test/prepared-membership',
-  derive: (input: MembershipInput) => {
+  mint: (input: MembershipInput) => {
     // Also reject raw strings and wrong-kind objects from JavaScript callers.
     if (!UserId.is(input?.userId) || !ProjectId.is(input?.projectId)) {
       return {

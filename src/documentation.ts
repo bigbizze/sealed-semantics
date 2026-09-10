@@ -2,7 +2,6 @@ import { validateDocumentation } from './docs.js';
 import type { AnyKind } from './types.js';
 export type DocumentationShape = Readonly<{
   semantic: boolean;
-  canonical: boolean;
   view: readonly string[];
 }>;
 export type Metadata = {
@@ -10,7 +9,6 @@ export type Metadata = {
   readonly examples?: readonly {
     readonly input: unknown;
     readonly encoded: unknown;
-    readonly canonical?: unknown;
   }[];
   readonly view?: Readonly<
     Record<

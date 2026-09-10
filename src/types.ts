@@ -22,9 +22,6 @@ export interface Proof<K extends string> {
   valueOf(): never;
   [Symbol.toPrimitive](): never;
 }
-export interface Value<K extends string, R> extends Proof<K> {
-  encode(): R;
-}
 export interface AnyKind {
   readonly kind: string;
   is(x: unknown): x is Proof<string>;
@@ -45,23 +42,13 @@ type Views<O> = O extends { view: infer F }
         };
       }
   : {};
-type Canonical<O> = O extends { canonical: (...args: any[]) => infer C }
-  ? { canonical(): C }
-  : {};
-export type SemanticValue<K extends string, W extends z.ZodType, O> = Value<
-  K,
-  z.input<W>
-> &
-  Views<O> &
-  Canonical<O>;
-export type DerivedValue<K extends string, O> = Proof<K> & Views<O>;
+export type SemanticValue<K extends string, W extends z.ZodType, O> = Proof<K> &
+  Views<O>;
+export type MintedValue<K extends string, O> = Proof<K> & Views<O>;
 export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
   {
     readonly kind: K;
     is(x: unknown): x is SemanticValue<K, W, O>;
-    parse(input: unknown): ProducerResult<SemanticValue<K, W, O>>;
-    /** Return the sealed value, or throw a TypeError with the ValueError as cause. */
-    parseOrThrow(input: unknown): SemanticValue<K, W, O>;
     readonly codec: z.ZodCodec<
       W,
       z.ZodType<SemanticValue<K, W, O>, SemanticValue<K, W, O>>
@@ -69,15 +56,15 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
     map<V>(): ValueMap<ValueKind<K, W, O>, V>;
     set(): ValueSet<ValueKind<K, W, O>>;
   } & (O extends { allocate: (...args: infer A) => unknown }
-    ? { allocate(...args: A): ProducerResult<SemanticValue<K, W, O>> }
+    ? { allocate(...args: A): SemanticValue<K, W, O> }
     : {})
 >;
-export type DerivedKind<K extends string, I, O> = Readonly<{
+export type MintedKind<K extends string, I, O> = Readonly<{
   readonly kind: K;
-  is(x: unknown): x is DerivedValue<K, O>;
-  derive(input: I): ProducerResult<DerivedValue<K, O>>;
-  map<V>(): ValueMap<DerivedKind<K, I, O>, V>;
-  set(): ValueSet<DerivedKind<K, I, O>>;
+  is(x: unknown): x is MintedValue<K, O>;
+  mint(input: I): ProducerResult<MintedValue<K, O>>;
+  map<V>(): ValueMap<MintedKind<K, I, O>, V>;
+  set(): ValueSet<MintedKind<K, I, O>>;
 }>;
 export type JsonSchema<W extends z.ZodType> = 0 extends 1 & z.input<W>
   ? ConfigurationError<'Wire schema input must not be any. Use a schema with a specific JSON input type.'>
@@ -101,7 +88,7 @@ export type ReservedField =
   | 'is'
   | 'parse'
   | 'parseOrThrow'
-  | 'derive'
+  | 'mint'
   | 'wire'
   | 'schema'
   | 'codec'
@@ -147,23 +134,20 @@ export type ProjectionDocumentation<O> = Readonly<{ description?: string }> &
           };
         }
     : {});
-export type DerivedDocumentation<O> = ProjectionDocumentation<O>;
+export type MintedDocumentation<O> = ProjectionDocumentation<O>;
 export type ValueExample<W extends z.ZodType, O> = Readonly<{
   input: z.input<W>;
   encoded: z.input<W>;
-}> &
-  (O extends { canonical: (...args: any[]) => infer C }
-    ? Readonly<{ canonical: C }>
-    : {});
+}>;
 export type ValueDocumentation<W extends z.ZodType, O> = ProjectionDocumentation<O> &
   Readonly<{
     examples: readonly [ValueExample<W, O>, ...ValueExample<W, O>[]];
   }>;
 
 type DocumentationMessage<N> = N extends 'exampleCanonical' | 'exampleWire'
-  ? 'Separate exampleWire/exampleCanonical fields were replaced by examples: [{ input, encoded, canonical }].'
+  ? 'Separate exampleWire/exampleCanonical fields were replaced by examples: [{ input, encoded }].'
   : N extends 'examples'
-    ? 'Derived definitions have no wire examples. Remove examples.'
+    ? 'Minted definitions have no wire examples. Remove examples.'
     : N extends 'view'
       ? 'docs.view requires declared projections. Add projections to .view({ ... }) first.'
       : N extends 'views'
@@ -175,8 +159,8 @@ type ExampleAt<A> = A extends { readonly examples: readonly (infer E)[] } ? E : 
 type CheckedExample<P, A> = P & {
   [N in Exclude<keyof P, keyof A>]: ConfigurationError<
     N extends 'canonical'
-      ? 'Example canonical requires canonical in defineKind(...). Add canonical or remove the example canonical.'
-      : 'Unknown example property. Use input, encoded, and canonical when configured.'
+      ? 'Canonical examples are no longer supported. Use input and encoded codec examples.'
+      : 'Unknown example property. Use input and encoded.'
   >;
 };
 type DocumentationInput<P, A> = A &
@@ -225,12 +209,12 @@ export interface ValueBuilder<
   readonly seal: () => Documented<ValueKind<K, W, O>, D>;
 }
 /** Configuration only. Call .seal() to create the completed kind. */
-export interface DerivedBuilder<K extends string, I, P, O = {}, D = undefined> {
+export interface MintedBuilder<K extends string, I, P, O = {}, D = undefined> {
   readonly view: <const F extends Record<string, (parts: P) => unknown>>(
     projections: CheckedView<F>,
-  ) => DerivedBuilder<K, I, P, Omit<O, 'view'> & { view: F }>;
-  readonly docs: <const M extends DocumentationInput<M, DerivedDocumentation<O>>>(
-    metadata: CheckedDocumentation<M, DerivedDocumentation<O>>,
-  ) => Omit<DerivedBuilder<K, I, P, O, DerivedDocumentation<O>>, 'view'>;
-  readonly seal: () => Documented<DerivedKind<K, I, O>, D>;
+  ) => MintedBuilder<K, I, P, Omit<O, 'view'> & { view: F }>;
+  readonly docs: <const M extends DocumentationInput<M, MintedDocumentation<O>>>(
+    metadata: CheckedDocumentation<M, MintedDocumentation<O>>,
+  ) => Omit<MintedBuilder<K, I, P, O, MintedDocumentation<O>>, 'view'>;
+  readonly seal: () => Documented<MintedKind<K, I, O>, D>;
 }

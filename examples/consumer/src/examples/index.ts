@@ -1,9 +1,9 @@
 import { createProfileLookup } from './define-value/profile-cache.ts';
-import { MembershipBatch } from './define-derived/membership-workflow/membership-batch.ts';
+import { MembershipBatch } from './define-minted/membership-workflow/membership-batch.ts';
 import {
   addProjectMembers,
   saveMembershipBatch,
-} from './define-derived/membership-workflow/membership-workflow.ts';
+} from './define-minted/membership-workflow/membership-workflow.ts';
 import {
   section,
   sectionDescription,
@@ -11,7 +11,7 @@ import {
   compareParsingExamples,
   runInvalidInputExample,
   runProfileCacheExample,
-  runDerivedBatchExample,
+  runMintedBatchExample,
   runRejectedBatchExample,
   runAddMembersExample,
 } from '../runners.ts';
@@ -21,7 +21,7 @@ import { z } from 'zod';
 // ############################################################
 section('1. HTTP request: JSON strings become sealed IDs');
 sectionDescription(
-  `You can decode individual properties yourself with UserId.parseOrThrow and ProjectId.parseOrThrow.
+  `You can decode individual properties yourself with UserId.codec.parse and ProjectId.codec.parse.
 
 The suggested API for this is to just use zod schema parse though.
 For e.g. with a complete request or response, a Zod schema is more convenient: declare each
@@ -48,8 +48,8 @@ const zodParseExample = decoded.data;
 
 const manualParseExample: PostResponse = {
   ...responseBody,
-  user_id: UserId.parseOrThrow(responseBody.user_id),
-  project_id: ProjectId.parseOrThrow(responseBody.project_id),
+  user_id: UserId.codec.parse(responseBody.user_id),
+  project_id: ProjectId.codec.parse(responseBody.project_id),
 };
 
 httpRequestNext({ manualParseExample, zodParseExample });
@@ -68,9 +68,12 @@ compareParsingExamples({
 // ############################################################
 section('3. Invalid input: an HTTP error, a result, or an exception');
 const invalidDemo = await runInvalidInputExample();
-console.log('UserId.parse returns:', UserId.parse(invalidDemo.invalidUser));
+console.log(
+  'UserId.codec.safeParse returns:',
+  UserId.codec.safeParse(invalidDemo.invalidUser),
+);
 try {
-  UserId.parseOrThrow(invalidDemo.invalidUser);
+  UserId.codec.parse(invalidDemo.invalidUser);
 } catch (error) {
   invalidDemo.next(error);
 }
@@ -81,23 +84,23 @@ const cacheDemo = runProfileCacheExample();
 const findProfile = createProfileLookup(cacheDemo.loadFromDatabase);
 for (const spelling of cacheDemo.spellings) {
   console.log('\nLookup input:', spelling);
-  const user = UserId.parseOrThrow(spelling);
+  const user = UserId.codec.parse(spelling);
   const profile = await findProfile(user);
   cacheDemo.next(user, profile);
 }
 cacheDemo.finish();
 
 // ############################################################
-section('5. Derived batch: validate once before saving');
+section('5. Minted batch: validate once before saving');
 sectionDescription(
   `First, PreparedMembership combines a sealed UserId and a sealed ProjectId into
 one membership plan. Both are required. Creating a plan requires calling
-PreparedMembership.derive, which checks the inputs before creating the sealed value.
+PreparedMembership.mint, which checks the inputs before creating the sealed value.
 A function that accepts PreparedMembership can therefore rely on those checks
 having run; an ordinary object with matching properties is not enough.
 
-Next, MembershipBatch.derive takes several of these plans. Each plan has already
-passed PreparedMembership.derive. The batch producer then checks that the list is
+Next, MembershipBatch.mint takes several of these plans. Each plan has already
+passed PreparedMembership.mint. The batch producer then checks that the list is
 non-empty and that every plan refers to the same project, and keeps one plan per user.
 The resulting batch records the outcome of both steps: validation of each plan,
 followed by validation and preparation of the collection.
@@ -105,33 +108,33 @@ followed by validation and preparation of the collection.
 We will pass that batch to saveMembershipBatch, whose input type is MembershipBatch.
 The function can rely on the producer's checks without repeating them. A TypeScript
 object type alone would describe the properties but would not establish that these
-checks ran. The sealed type requires construction through derive; the runtime brand
+checks ran. The sealed type requires construction through mint; the runtime brand
 check also rejects callers that bypass TypeScript.`,
 );
-const membershipDemo = runDerivedBatchExample();
+const membershipDemo = runMintedBatchExample();
 const plans = membershipDemo.userIds.map((userId) => {
-  const plan = PreparedMembership.derive({
+  const plan = PreparedMembership.mint({
     userId,
     projectId: membershipDemo.projectId,
   });
   if (!plan.ok) throw new Error(plan.error.issues.join(' '));
   return plan.value;
 });
-const derived = MembershipBatch.derive(plans);
-if (!derived.ok) throw new Error(derived.error.issues.join(' '));
-const batch = derived.value;
+const minted = MembershipBatch.mint(plans);
+if (!minted.ok) throw new Error(minted.error.issues.join(' '));
+const batch = minted.value;
 const saved = await saveMembershipBatch(batch, membershipDemo.database);
 membershipDemo.next(batch, plans, saved);
 
 // ############################################################
 section('6. Rejected batches never reach the database');
 const rejectionDemo = runRejectedBatchExample(membershipDemo);
-const otherPlan = PreparedMembership.derive({
+const otherPlan = PreparedMembership.mint({
   userId: rejectionDemo.otherUserId,
   projectId: rejectionDemo.otherProjectId,
 });
 if (!otherPlan.ok) throw new Error(otherPlan.error.issues.join(' '));
-const mixed = MembershipBatch.derive([...batch.view.plans, otherPlan.value]);
+const mixed = MembershipBatch.mint([...batch.view.plans, otherPlan.value]);
 const empty = await addProjectMembers(
   rejectionDemo.emptyRequest,
   membershipDemo.database,

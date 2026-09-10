@@ -1,7 +1,7 @@
 const succeed = <T>(value: T) => ({ ok: true as const, value });
 const fail = <E>(error: E) => ({ ok: false as const, error });
 import { z } from 'zod';
-import { defineKind, defineDerived, type ValueOf } from '../src/index.js';
+import { defineKind, defineMinted, type ValueOf } from '../src/index.js';
 export const normalizeUserSpelling = (w: string) =>
   w.startsWith('user:') ? `usr_${w.slice(5).replaceAll('-', '')}` : w;
 export const hexToBytes = (hex: string) =>
@@ -16,20 +16,15 @@ export function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
 }
 export const UserId = defineKind({
   kind: 'example/user-id',
-  schema: z.string().regex(/^(usr_[a-f0-9]{16,}|user:[0-9a-f-]{36})$/),
-  decode: (w) => {
-    const spelling = normalizeUserSpelling(w);
-    return /^usr_[a-f0-9]{16,}$/.test(spelling)
-      ? succeed({ spelling })
-      : fail({
-          kind: 'example/user-id',
-          reason: 'invalid_parts',
-          issues: ['Invalid alias'],
-        } as const);
-  },
-  encode: (p) => p.spelling,
+  schema: z.codec(
+    z.string().regex(/^(usr_[a-f0-9]{16,}|user:[0-9a-f-]{36})$/),
+    z.object({ spelling: z.string().regex(/^usr_[a-f0-9]{16,}$/) }),
+    {
+      decode: (w) => ({ spelling: normalizeUserSpelling(w) }),
+      encode: (p) => p.spelling,
+    },
+  ),
   allocate: (gen: () => string) => `user:${gen()}`,
-  canonical: (p) => ({ type: 'utf8', value: p.spelling }),
   debug: (p) => `user(…${p.spelling.slice(-6)})`,
 })
   .docs({
@@ -37,7 +32,6 @@ export const UserId = defineKind({
       {
         input: 'user:550e8400-e29b-41d4-a716-446655440000',
         encoded: 'usr_550e8400e29b41d4a716446655440000',
-        canonical: { type: 'utf8', value: 'usr_550e8400e29b41d4a716446655440000' },
       },
     ],
   })
@@ -45,18 +39,21 @@ export const UserId = defineKind({
 export type UserId = ValueOf<typeof UserId>;
 export const Sha256Digest = defineKind({
   kind: 'example/sha256',
-  schema: z.string().regex(/^[a-f0-9]{64}$/),
-  decode: (hex) => succeed({ bytes: hexToBytes(hex) }),
-  encode: (p) => bytesToHex(p.bytes),
+  schema: z.codec(
+    z.string().regex(/^[a-f0-9]{64}$/),
+    z.object({ bytes: z.instanceof(Uint8Array) }),
+    {
+      decode: (hex) => ({ bytes: hexToBytes(hex) }),
+      encode: (p) => bytesToHex(p.bytes),
+    },
+  ),
   equals: (a, b) => constantTimeEqual(a.bytes, b.bytes),
-  canonical: (p) => ({ type: 'bytes', value: p.bytes.slice() }),
 })
   .docs({
     examples: [
       {
         input: 'ab'.repeat(32),
         encoded: 'ab'.repeat(32),
-        canonical: { type: 'bytes', value: new Uint8Array(32).fill(0xab) },
       },
     ],
   })
@@ -64,8 +61,6 @@ export const Sha256Digest = defineKind({
 export const NamespaceId = defineKind({
   kind: 'example/namespace-id',
   schema: z.string().regex(/^ns:[a-z]+$/),
-  decode: (w) => succeed(w),
-  encode: (p) => p,
 })
   .docs({ examples: [{ input: 'ns:example', encoded: 'ns:example' }] })
   .seal();
@@ -76,8 +71,6 @@ export const ContentAddress = defineKind({
     content_class: z.enum(['primary', 'attachment']),
     digest: Sha256Digest.codec,
   }),
-  decode: (w) => succeed(w),
-  encode: (p) => p,
 })
   .view({
     namespace: (p) => p.namespace_id,
@@ -115,9 +108,9 @@ export type WriteRows = { id: string; content: ContentAddress }[];
 export const copyWriteRows = (rows: WriteRows): WriteRows =>
   rows.map((row) => ({ ...row }));
 // Kept module-private in application code; exported here for the package's law tests.
-export const PreparedWrite = defineDerived({
+export const PreparedWrite = defineMinted({
   kind: 'example/prepared-write',
-  derive: (input: PrepareInput) => {
+  mint: (input: PrepareInput) => {
     if (!input || !Array.isArray(input.rows) || !Array.isArray(input.content))
       return fail({
         kind: 'example/prepared-write',
@@ -141,4 +134,4 @@ export const PreparedWrite = defineDerived({
     },
   })
   .seal();
-export const prepareWrite = PreparedWrite.derive;
+export const prepareWrite = PreparedWrite.mint;
