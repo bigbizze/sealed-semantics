@@ -43,6 +43,7 @@ function metadata(kind: AnyKind, shape: DocumentationShape) {
       'description',
       ...(shape.semantic ? ['examples'] : []),
       ...(shape.view.length ? ['view'] : []),
+      ...(shape.to.length ? ['to'] : []),
     ],
     kind.name,
   );
@@ -52,19 +53,20 @@ function metadata(kind: AnyKind, shape: DocumentationShape) {
       'string',
       `${kind.name}.description must be a string`,
     );
-  if (shape.view.length) {
-    const view = record(doc.view, `${kind.name}.view`);
-    keys(view, shape.view, `${kind.name}.view`);
-    for (const name of shape.view) {
+  for (const namespace of ['view', 'to'] as const) {
+    if (!shape[namespace].length) continue;
+    const entries = record(doc[namespace], `${kind.name}.${namespace}`);
+    keys(entries, shape[namespace], `${kind.name}.${namespace}`);
+    for (const name of shape[namespace]) {
       assert(
-        Object.hasOwn(view, name),
-        `${kind.name}: view.${name} missing description`,
+        Object.hasOwn(entries, name),
+        `${kind.name}: ${namespace}.${name} missing description`,
       );
-      const field = record(view[name], `${kind.name}.view.${name}`);
-      keys(field, ['description', 'example'], `${kind.name}.view.${name}`);
+      const field = record(entries[name], `${kind.name}.${namespace}.${name}`);
+      keys(field, ['description', 'example'], `${kind.name}.${namespace}.${name}`);
       assert(
         typeof field.description === 'string' && field.description.trim().length > 0,
-        `${kind.name}: view.${name} missing description`,
+        `${kind.name}: ${namespace}.${name} missing description`,
       );
     }
   }
@@ -92,6 +94,7 @@ export function validateDocumentation(kind: AnyKind, shape: DocumentationShape):
     const value: any = decoded.data;
     assert(kind.is(value), foreignValue(kind.name, value, `${label}: docs`));
     for (const name of shape.view) void (value as any).view[name];
+    for (const name of shape.to) (value as any).to[name]();
     const raw = encodeWire(semantic.codec, value);
     assert.deepEqual(
       raw,

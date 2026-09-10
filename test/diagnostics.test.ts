@@ -83,7 +83,7 @@ test('configuration errors explain identity and capability constraints', () => {
     ],
     [
       `B.docs({examples:[{input:'x',encoded:'x'}],view:{}}).seal();`,
-      'Documentation must match the final view.',
+      'Documentation must match the final view and conversions.',
     ],
     [
       `B.docs({examples:[{input:'x',encoded:'x'}],views:{}});`,

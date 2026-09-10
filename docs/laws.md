@@ -17,3 +17,5 @@ Minted laws check distinct successful events and the same construction and obser
 A sealed value belongs to exactly one completed definition instance. Same-label definitions are unrelated. Property generators must produce inputs accepted by the tested definition. Tests use reference equality, not enumeration of private objects.
 
 The harness samples behavior. It does not prove that a key captures the intended domain semantics, that producers never mutate aliases, or that checks establish external facts. Production collision assertions protect against different supported Parts sharing a live key. Add domain-specific examples for normalization and intended identity.
+
+For configured conversions, laws check the stable bound facade, equivalent contents across calls, independent object graphs, and isolation after mutating one result. These checks sample deterministic conversions and do not measure copying performance.

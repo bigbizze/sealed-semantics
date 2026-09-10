@@ -1,3 +1,4 @@
+import { ownedCopy } from './copy.js';
 import { makeInterner } from './interner.js';
 import { NAME_LABEL, foreignValue, SealedLeaf, LEAF_TOKEN } from './sealed-leaf.js';
 import { dataGraph, sameParts, immutableView } from './structure.js';
@@ -7,6 +8,7 @@ function makeSeal<P>(
   definitionName: string,
   ops: {
     semantic?: boolean;
+    to?: Record<string, (parts: P) => unknown> | undefined;
     view?: Record<string, (parts: P) => unknown> | undefined;
     debug?: ((parts: P) => string) | undefined;
   },
@@ -16,6 +18,7 @@ function makeSeal<P>(
   seal: (parts: P) => object;
 } {
   const view = Object.entries(ops.view ?? {});
+  const conversions = Object.entries(ops.to ?? {});
   let hasBrand!: (x: unknown) => x is Sealed;
   let unseal!: (x: unknown, operation?: string) => P;
   const trap = (): never => {
@@ -28,6 +31,7 @@ function makeSeal<P>(
   class Sealed extends SealedLeaf {
     #parts: P;
     #view?: Readonly<Record<string, unknown>>;
+    #to?: Readonly<Record<string, () => unknown>>;
     constructor(token: typeof CONSTRUCT, parts: P) {
       if (token !== CONSTRUCT)
         throw new TypeError(`${definitionName} cannot be constructed directly`);
@@ -36,6 +40,38 @@ function makeSeal<P>(
       Object.freeze(this);
     }
     static {
+      if (conversions.length)
+        Object.defineProperty(this.prototype, 'to', {
+          get: function (this: Sealed) {
+            unseal(this, 'to');
+            if (!this.#to) {
+              const facade = Object.create(null) as Record<string, () => unknown>;
+              for (const [name, convert] of conversions) {
+                let computing = false;
+                Object.defineProperty(facade, name, {
+                  enumerable: true,
+                  value: () => {
+                    if (computing)
+                      throw new TypeError(
+                        `${definitionName}.to.${name}: recursive conversion`,
+                      );
+                    computing = true;
+                    try {
+                      return ownedCopy(
+                        convert(unseal(this, `to.${name}`)),
+                        `${definitionName}.to.${name}`,
+                      );
+                    } finally {
+                      computing = false;
+                    }
+                  },
+                });
+              }
+              this.#to = Object.freeze(facade);
+            }
+            return this.#to;
+          },
+        });
       if (view.length)
         Object.defineProperty(this.prototype, 'view', {
           get: function (this: Sealed) {
@@ -119,6 +155,7 @@ function makeSeal<P>(
 export function makeMintedSeal<P>(
   definitionName: string,
   ops: {
+    to?: Record<string, (parts: P) => unknown>;
     view?: Record<string, (parts: P) => unknown>;
     debug?: ((parts: P) => string) | undefined;
   },
@@ -138,6 +175,7 @@ function semanticKey(value: unknown, definitionName: string): SemanticKey {
 export function makeSemanticSeal<P>(
   definitionName: string,
   ops: {
+    to?: Record<string, (parts: P) => unknown>;
     view?: Record<string, (parts: P) => unknown>;
     debug?: ((parts: P) => string) | undefined;
     key: (parts: P) => SemanticKey;

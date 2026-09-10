@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { defineSeal } from 'sealed-semantics';
 // Executable examples. Each @ts-expect-error also verifies a compiler error.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -86,3 +87,18 @@ test('mint rejects kind definitions instead of sealed instances', () => {
   const result = PreparedMembership.mint({ userId: UserId, projectId: ProjectId });
   assertInvalid(result);
 });
+
+// Conversions use the installed package surface and return caller-owned data.
+const Binary = defineSeal({
+  name: 'consumer/binary',
+  schema: z.string(),
+  key: (s) => s,
+})
+  .view({ text: (s) => s })
+  .to({ bytes: (s) => new TextEncoder().encode(s) })
+  .seal();
+const binary = Binary.codec.parse('abc');
+const firstBytes = binary.to.bytes();
+firstBytes[0] = 0;
+assert.equal(binary.to.bytes()[0], 97);
+assert.equal(binary.view.text, 'abc');

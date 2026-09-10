@@ -37,9 +37,82 @@ type Views<O> = O extends { view: infer F }
         };
       }
   : {};
+/** An owned conversion removes readonly containers; built-in data keeps its type. */
+export type Owned<T> = T extends Date | ArrayBuffer | ArrayBufferView
+  ? T
+  : T extends ReadonlyMap<infer K, infer V>
+    ? Map<Owned<K>, Owned<V>>
+    : T extends ReadonlySet<infer V>
+      ? Set<Owned<V>>
+      : T extends object
+        ? { -readonly [K in keyof T]: Owned<T[K]> }
+        : T;
+type CopyCheck<T> = T extends
+  Proof<string> | SharedArrayBuffer | symbol | ((...args: any[]) => any)
+  ? never
+  : T extends
+        | Date
+        | ArrayBuffer
+        | Uint8Array
+        | Int8Array
+        | Uint8ClampedArray
+        | Int16Array
+        | Uint16Array
+        | Int32Array
+        | Uint32Array
+        | Float32Array
+        | Float64Array
+        | BigInt64Array
+        | BigUint64Array
+        | DataView
+    ? T
+    : T extends ReadonlyMap<infer K, infer V>
+      ? ReadonlyMap<CopyCheck<K>, CopyCheck<V>>
+      : T extends ReadonlySet<infer V>
+        ? ReadonlySet<CopyCheck<V>>
+        : T extends WeakMap<any, any> | WeakSet<any> | Promise<any> | SharedArrayBuffer
+          ? never
+          : T extends object
+            ? { [K in keyof T]: K extends symbol ? never : CopyCheck<T[K]> }
+            : T;
+type ConversionResult =
+  | Date
+  | ArrayBuffer
+  | ArrayBufferView
+  | ReadonlyMap<unknown, unknown>
+  | ReadonlySet<unknown>;
+export type CheckedConversions<F> = F & {
+  [N in keyof F]: F[N] extends (...args: any[]) => infer R
+    ? unknown extends R
+      ? unknown
+      : [R] extends [ConversionResult & CopyCheck<R>]
+        ? unknown
+        : ConfigurationError<'Conversions must return Date, Map, Set, ArrayBuffer, or a typed array/DataView. Use view for primitives, arrays, and plain objects; functions, sealed values, and shared memory cannot be copied.'>
+    : unknown;
+} & {
+  [
+    N in Extract<keyof F, 'then' | '__proto__' | 'constructor' | 'prototype' | 'toJSON'>
+  ]: ConfigurationError<'This conversion name is reserved.'>;
+} & {
+  [
+    N in Extract<keyof F, symbol>
+  ]: ConfigurationError<'Symbol-named conversions are not supported.'>;
+};
+type Conversions<O> = O extends { to: infer F }
+  ? keyof F extends never
+    ? {}
+    : {
+        readonly to: {
+          readonly [N in keyof F]: F[N] extends (...args: any[]) => infer R
+            ? () => Owned<R>
+            : never;
+        };
+      }
+  : {};
 export type SemanticValue<K extends string, W extends z.ZodType, O> = Proof<K> &
-  Views<O>;
-export type MintedValue<K extends string, O> = Proof<K> & Views<O>;
+  Views<O> &
+  Conversions<O>;
+export type MintedValue<K extends string, O> = Proof<K> & Views<O> & Conversions<O>;
 export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
   {
     readonly name: K;
@@ -73,6 +146,7 @@ export type ReservedField =
   | 'docs'
   | 'documentation'
   | 'view'
+  | 'to'
   | 'is'
   | 'mint'
   | 'schema'
@@ -134,21 +208,24 @@ export type CheckedView<F> = F & {
 };
 
 /** Examples are validated when .seal() is called; they do not configure the producer. */
-export type ProjectionDocumentation<O> = Readonly<{ description?: string }> &
-  (O extends { view: infer F }
+type ObservationDocumentation<O, N extends 'view' | 'to'> =
+  O extends Record<N, infer F>
     ? keyof F extends never
       ? {}
       : {
-          readonly view: {
-            readonly [N in keyof F]: Readonly<{
+          readonly [S in N]: {
+            readonly [K in keyof F]: Readonly<{
               description: string;
-              example?: F[N] extends (...args: any[]) => infer R
+              example?: F[K] extends (...args: any[]) => infer R
                 ? DeepReadonly<R>
                 : never;
             }>;
           };
         }
-    : {});
+    : {};
+export type ProjectionDocumentation<O> = Readonly<{ description?: string }> &
+  ObservationDocumentation<O, 'view'> &
+  ObservationDocumentation<O, 'to'>;
 export type MintedDocumentation<O> = ProjectionDocumentation<O>;
 export type ValueExample<W extends z.ZodType, O> = Readonly<{
   input: z.input<W>;
@@ -201,28 +278,36 @@ export type CheckedDocumentation<Provided, Allowed> = Provided & {
     : unknown);
 
 // Before projections are configured, their names and sample types are checked at seal.
-type BuilderDocumentation<O, A> = O extends { view: unknown }
-  ? A
-  : A & {
-      readonly view?: Readonly<
-        Record<string, { readonly description: string; readonly example?: unknown }>
-      >;
-    };
+type PendingDocumentation<O, N extends 'view' | 'to'> =
+  O extends Record<N, unknown>
+    ? {}
+    : {
+        readonly [K in N]?: Readonly<
+          Record<string, { readonly description: string; readonly example?: unknown }>
+        >;
+      };
+type BuilderDocumentation<O, A> = A &
+  PendingDocumentation<O, 'view'> &
+  PendingDocumentation<O, 'to'>;
+type ExtraDocumentedNames<D, A, N extends 'view' | 'to'> =
+  D extends Record<N, infer V>
+    ? A extends Record<N, infer AV>
+      ? Exclude<keyof V, keyof AV>
+      : keyof V | N
+    : never;
 type SealDocumentation<D, A> = [D] extends [undefined]
   ? unknown
   : D extends A
-    ? Exclude<keyof D, keyof A> extends never
-      ? D extends { view: infer V }
-        ? A extends { readonly view: infer AV }
-          ? Exclude<keyof V, keyof AV> extends never
-            ? unknown
-            : InvalidFinalDocumentation
-          : InvalidFinalDocumentation
-        : unknown
+    ? [
+        | Exclude<keyof D, keyof A>
+        | ExtraDocumentedNames<D, A, 'view'>
+        | ExtraDocumentedNames<D, A, 'to'>,
+      ] extends [never]
+      ? unknown
       : InvalidFinalDocumentation
     : InvalidFinalDocumentation;
 type InvalidFinalDocumentation =
-  ConfigurationError<'Documentation must match the final view. Document every projection, remove unknown names, and use examples with the projection output type before calling .seal().'>;
+  ConfigurationError<'Documentation must match the final view and conversions. Document every member, remove unknown names, and use examples with its output type before calling .seal().'>;
 
 type Documented<T, D> = D extends undefined ? T : T & { readonly documentation: D };
 /** Configuration only. Call .seal() to create the completed kind. */
@@ -233,6 +318,9 @@ export interface ValueBuilder<
   O = {},
   D = undefined,
 > {
+  readonly to: <const F extends Record<string, (parts: P) => unknown>>(
+    conversions: F & CheckedConversions<NoInfer<F>>,
+  ) => ValueBuilder<K, W, P, Omit<O, 'to'> & { to: F }, D>;
   readonly view: <const F extends Record<string, (parts: P) => unknown>>(
     projections: CheckedView<F>,
   ) => ValueBuilder<K, W, P, Omit<O, 'view'> & { view: F }, D>;
@@ -253,6 +341,9 @@ export interface ValueBuilder<
 }
 /** Configuration only. Call .seal() to create the completed kind. */
 export interface MintedBuilder<K extends string, I, P, E, O = {}, D = undefined> {
+  readonly to: <const F extends Record<string, (parts: P) => unknown>>(
+    conversions: F & CheckedConversions<NoInfer<F>>,
+  ) => MintedBuilder<K, I, P, E, Omit<O, 'to'> & { to: F }, D>;
   readonly view: <const F extends Record<string, (parts: P) => unknown>>(
     projections: CheckedView<F>,
   ) => MintedBuilder<K, I, P, E, Omit<O, 'view'> & { view: F }, D>;

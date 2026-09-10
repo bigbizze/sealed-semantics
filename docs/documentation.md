@@ -1,6 +1,6 @@
 # Executable documentation
 
-Call `.docs(...)` and `.view(...)` in either order, then call `.seal()` last. Completed definitions have no builder methods. Documentation is optional. When present, it is checked synchronously at sealing, including during module initialization.
+Call `.docs(...)`, `.view(...)`, and `.to(...)` in any order, then call `.seal()` last. Completed definitions have no builder methods. Documentation is optional. When present, it is checked synchronously at sealing, including during module initialization.
 
 ```ts
 const UserId = defineSeal({
@@ -28,3 +28,5 @@ Completed kinds expose the frozen metadata as `Kind.documentation`. Metadata con
 Factory metadata cannot generate genuine JSDoc comments for TypeScript hovers. Add JSDoc at declaration sites. Tooling could consume the metadata to generate documentation or declarations later.
 
 Sealing also evaluates declared views for each semantic input example. This checks their runtime output domain. A projection description sample is illustrative metadata, not a linked assertion for every input. Minted docs do not run the mint producer. First-access view validation always remains active.
+
+If conversions exist, `to` must document exactly their names, each with a non-empty `description` and optional typed `example`. As with views, `.seal()` checks the final names and sample types even when docs were supplied first. Semantic input examples exercise each conversion and validate its output domain. Minted docs do not execute the producer or its conversions. Conversion samples are illustrative, not linked expected results for every input.
