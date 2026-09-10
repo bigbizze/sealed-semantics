@@ -4,16 +4,6 @@ import { z } from 'zod';
 import { defineKind, defineMinted, type ValueOf } from '../src/index.js';
 export const normalizeUserSpelling = (w: string) =>
   w.startsWith('user:') ? `usr_${w.slice(5).replaceAll('-', '')}` : w;
-export const hexToBytes = (hex: string) =>
-  Uint8Array.from(hex.match(/../g)!, (pair) => parseInt(pair, 16));
-export const bytesToHex = (bytes: Uint8Array) =>
-  [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('');
-export function constantTimeEqual(a: Uint8Array, b: Uint8Array): boolean {
-  if (a.length !== b.length) return false;
-  let diff = 0;
-  for (let i = 0; i < a.length; i++) diff |= a[i]! ^ b[i]!;
-  return diff === 0;
-}
 export const UserId = defineKind({
   kind: 'example/user-id',
   schema: z.codec(
@@ -24,6 +14,7 @@ export const UserId = defineKind({
       encode: (p) => p.spelling,
     },
   ),
+  key: (p) => p.spelling,
   allocate: (gen: () => string) => `user:${gen()}`,
   debug: (p) => `user(…${p.spelling.slice(-6)})`,
 })
@@ -41,15 +32,16 @@ export const Sha256Digest = defineKind({
   kind: 'example/sha256',
   schema: z.codec(
     z.string().regex(/^[a-f0-9]{64}$/),
-    z.object({ bytes: z.instanceof(Uint8Array) }),
+    z.string().regex(/^[a-f0-9]{64}$/),
     {
-      decode: (hex) => ({ bytes: hexToBytes(hex) }),
-      encode: (p) => bytesToHex(p.bytes),
+      decode: (hex) => hex,
+      encode: (p) => p,
     },
   ),
-  equals: (a, b) => constantTimeEqual(a.bytes, b.bytes),
 })
+  .view({ hex: (p) => p })
   .docs({
+    view: { hex: { description: 'Hexadecimal digest.' } },
     examples: [
       {
         input: 'ab'.repeat(32),
@@ -62,10 +54,15 @@ export const NamespaceId = defineKind({
   kind: 'example/namespace-id',
   schema: z.string().regex(/^ns:[a-z]+$/),
 })
-  .docs({ examples: [{ input: 'ns:example', encoded: 'ns:example' }] })
+  .view({ name: (p) => p })
+  .docs({
+    examples: [{ input: 'ns:example', encoded: 'ns:example' }],
+    view: { name: { description: 'Namespace name.' } },
+  })
   .seal();
 export const ContentAddress = defineKind({
   kind: 'example/content-address',
+  key: (p) => `${p.namespace_id.view.name}:${p.content_class}:${p.digest.view.hex}`,
   schema: z.object({
     namespace_id: NamespaceId.codec,
     content_class: z.enum(['primary', 'attachment']),
@@ -124,12 +121,12 @@ export const PreparedWrite = defineMinted({
   },
 })
   .view({
-    rows: (p) => copyWriteRows(p.rows) as Readonly<WriteRows>,
-    contentToRetain: (p) => [...p.contentToRetain] as readonly ContentAddress[],
+    rows: (p) => p.rows,
+    contentToRetain: (p) => p.contentToRetain,
   })
   .docs({
     view: {
-      rows: { description: 'Detached rows to write.' },
+      rows: { description: 'Immutable rows to write.' },
       contentToRetain: { description: 'Sealed content addresses to retain.' },
     },
   })

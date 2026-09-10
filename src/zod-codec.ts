@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { foreignValue } from './sealed-leaf.js';
 export function makeWireCodec<W extends z.ZodType, V>(
   schema: W,
   kind: string,
@@ -6,10 +7,16 @@ export function makeWireCodec<W extends z.ZodType, V>(
   is: (x: unknown) => boolean,
   read: (x: V) => z.output<W>,
 ) {
-  return z.codec(schema, z.custom<V>(is, `${kind} sealed value expected`), {
-    decode: seal,
-    encode: read,
-  });
+  return z.codec(
+    schema,
+    z.custom<V>(is, {
+      error: (issue) => foreignValue(kind, issue.input, 'codec encode/validation'),
+    }),
+    {
+      decode: seal,
+      encode: read,
+    },
+  );
 }
 // Runtime Zod integration. Consumers use Zod's public boundary operations.
 export function encodeWire<W extends z.ZodType>(wire: W, value: z.output<W>) {

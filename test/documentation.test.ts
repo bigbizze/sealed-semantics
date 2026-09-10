@@ -2,7 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 import { defineKind, defineMinted } from '../src/index.js';
-import { documentationEqual } from '../src/documentation-equal.js';
 import {
   UserId,
   Sha256Digest,
@@ -36,15 +35,15 @@ test('docs validate every input and normalized encoding at seal', () => {
   assert(Object.isFrozen(K.documentation.examples[0]));
 });
 
-test('docs reject schema failures, missing properties, obsolete canonical, and empty examples', () => {
+test('docs reject schema failures, missing properties, unknown fields, and empty examples', () => {
   const B = defineKind({ kind: 'docs/strict', schema: z.string().regex(/^id_/) });
   for (const docs of [
     {},
     { examples: [] },
     { examples: [{ input: 'id_x' }] },
     { examples: [{ input: 'bad', encoded: 'bad' }] },
-    { examples: [{ input: 'id_x', encoded: 'id_x', canonical: 'x' }] },
-    { exampleWire: 'id_x' },
+    { examples: [{ input: 'id_x', encoded: 'id_x', surprise: 'x' }] },
+    { typo: 'id_x' },
     { examples: [{ input: 'id_x', encoded: 'id_x' }], extra: true },
   ])
     assert.throws(() => B.docs(docs as any).seal(), TypeError);
@@ -52,9 +51,12 @@ test('docs reject schema failures, missing properties, obsolete canonical, and e
 });
 
 test('docs round trips use the codec, including nested kinds', () => {
-  const Child = defineKind({ kind: 'docs/child', schema: z.string() }).seal();
+  const Child = defineKind({ kind: 'docs/child', schema: z.string() })
+    .view({ text: (p) => p })
+    .seal();
   const Parent = defineKind({
     kind: 'docs/parent',
+    key: (p) => p.child.view.text,
     schema: z.object({ child: Child.codec }),
   })
     .docs({ examples: [{ input: { child: 'x' }, encoded: { child: 'x' } }] })
@@ -115,6 +117,7 @@ test('docs samples remain caller-owned; metadata containers are frozen', () => {
   const sample = { data: [1, 2] };
   const K = defineKind({
     kind: 'docs/samples',
+    key: (p) => p.data.join(','),
     schema: z.object({ data: z.array(z.number()) }),
   })
     .docs({ examples: [{ input: sample, encoded: { data: [1, 2] } }] })
@@ -129,15 +132,16 @@ test('reference definitions carry executable documentation', () => {
     assert('documentation' in K);
 });
 
-test('documentation comparison handles bytes, collections, cycles, and descriptors', () => {
-  assert(documentationEqual(new Uint8Array([1, 2]), new Uint8Array([1, 2])));
-  assert(!documentationEqual(new Uint8Array([1]), new Uint8Array([2])));
-  assert(documentationEqual(new Map([['x', 1]]), new Map([['x', 1]])));
-  assert(documentationEqual(new Set([1]), new Set([1])));
-  const a: any = {};
-  const b: any = {};
-  a.self = a;
-  b.self = b;
-  assert(documentationEqual(a, b));
-  assert(!documentationEqual(-0, 0));
+test('semantic documentation exercises views and rejects unsafe outputs at completion', () => {
+  const B = defineKind({ kind: 'docs/view-domain', schema: z.string() }).view({
+    bad: () => new Date(),
+  } as any);
+  assert.throws(
+    () =>
+      B.docs({
+        examples: [{ input: 'x', encoded: 'x' }],
+        view: { bad: { description: 'Invalid date' } },
+      }).seal(),
+    /unsupported object/,
+  );
 });

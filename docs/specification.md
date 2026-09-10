@@ -1,69 +1,43 @@
-# Current API specification
+# Public contract
 
-The package exposes `defineKind` and `defineMinted`. Zod owns validation, parsing, decoding, encoding, composition, and boundary errors. The package owns private runtime identity, controlled construction, projections, equality, collections, documentation, and property laws.
+The main entry exports `defineKind` and `defineMinted`, plus TypeScript types. The optional Node-only `sealed-semantics/laws` entry exports `assertValueLaws` and `assertMintedLaws`.
 
-## Semantic kinds
+## Semantic definitions
 
-```ts
-const Id = defineKind({
-  kind: 'app/id',
-  schema: z.string().min(1),
-})
-  .view({ length: text => text.length })
-  .docs({
-    examples: [{ input: 'abc', encoded: 'abc' }],
-    view: { length: { description: 'Identifier length.', example: 3 } },
-  })
-  .seal();
-```
+`defineKind({ kind, schema, key?, allocate?, debug? })` creates a builder. Schema output is private Parts. Schema input must be JSON-compatible and cannot be `any`. The kind label must be a non-empty string literal.
 
-The required declaration properties are `kind` and `schema`. Optional properties are `equals`, `debug`, and `allocate`. `kind` must be a namespaced string literal. The schema input must be JSON-compatible and cannot be `any`. Its output is the private representation, called Parts in the implementation. Views, equality, and debug callbacks receive this exact output type.
+Entirely primitive Parts use their own value as identity. The domain is `string | number | bigint | boolean | null | undefined`. Supplying `key` for that type is a compile error. A union containing a non-primitive alternative requires `key(parts)`, returning that primitive domain.
 
-Use a Zod codec as the schema when input and Parts differ. The library wraps it in another codec: its forward operation seals the schema output, and its backward operation privately reads Parts. A custom output schema verifies the actual ES private-field brand before the backward operation runs. No internal read function is exported.
+For explicit keys, the runtime validates every decoded Parts graph before computing identity, including the first creation. Supported structures are primitives, dense arrays, plain data objects, Dates without own properties, and sealed leaves. Cycles, symbol keys, accessors, hidden properties, and other objects fail. Shared acyclic subgraphs are allowed.
 
-There are no library `parse`, `parseOrThrow`, `parseSafe`, `decode`, `encode`, or `canonical` methods, and no definition-level conversion callbacks. Consumers use `Kind.codec.parse` or `safeParse` for unknown input, `z.decode` or `z.safeDecode` for typed input, and `z.encode` for output. Nested contracts use the same Zod operations. Conversion failures use Zod errors.
+Each completed definition owns a private weak table. After Zod normalization, the key selects an existing live instance or a new one. An explicit-key hit must also pass structural collision comparison. Arrays compare in order, plain properties by name independent of insertion order, Dates by timestamp, and sealed leaves by identity. Numeric properties compare with `Object.is`; only identity keys use SameValueZero. Differing Parts for the same live key throw.
 
-An optional `allocate` callback produces schema input. `Kind.allocate(...args)` parses it through the codec and returns the sealed value. Invalid allocation throws a Zod error. Argument types are preserved. For asynchronous schemas, use Zod's asynchronous boundary APIs; allocation and executable docs are synchronous.
+Weak cleanup removes an entry only if it still contains the exact reference associated with the finalized object. Cleanup timing is unspecified. No public control changes interning. This is an identity guarantee, not a speed guarantee.
 
-## Minted kinds
+The completed kind exposes `kind`, `is`, `codec`, and `allocate` only when configured. Allocation sends its generated input through the same codec and intern table. Zod provides parsing, validation, composition, and encoding. Async schemas use Zod's async APIs; allocation and documentation are synchronous.
 
-```ts
-const Plan = defineMinted({
-  kind: 'app/plan',
-  mint: (input: Input) => ({ ok: true, value: prepare(input) }),
-}).view({ rows: parts => copyRows(parts.rows) }).seal();
-```
+## Minted definitions
 
-Required properties are `kind` and `mint`; `debug` is optional. `mint` returns `ProducerResult<Parts>`: `{ ok: true, value }` or `{ ok: false, error }`. Failure is returned unchanged. Each success creates a new instance. Minted kinds have no codec or allocator, and their equality is identity.
+`defineMinted({ kind, mint, debug? })` creates a builder. The producer returns `ProducerResult<Parts>`. Failure passes through unchanged. Every success creates a fresh instance without an intern table. The completed definition exposes `kind`, `is`, and `mint`.
 
-A minted value establishes that its configured producer succeeded. It does not establish that the producer is correct, or certify existence, authorization, currentness, or persistence.
+## Completion
 
-## Construction and observation
+Optional `.view(projections)` returns a builder with that projection map. Optional `.docs(metadata)` follows views. Every `.seal()` call creates a new frozen definition instance from the captured configuration. Calling `.seal()` recursively during completion fails. There is nothing to publish globally.
 
-Builders are immutable. Optional `.view(...)` supplies the complete projection map; a later call replaces it. Optional `.docs(...)` follows view configuration. `.seal()` completes a definition, validates documentation, registers its name, and freezes the kind. Repeating `.seal()` on the same builder returns the same kind. A failed completion does not reserve the name. Recursive completion fails.
+A sealed value belongs to exactly one completed definition instance. `is` checks its ES private-field brand and returns a boolean. Definitions with the same label are permitted and unrelated. No global or module-level mutable table tracks names or instances.
 
-The per-definition class has private Parts and a private lazy view cache. A private construction token prevents callers from creating genuine instances through a recovered constructor. Forged prototypes, proxies, casts, and structured clones do not obtain the brand.
+The stateless `Symbol.for('sealed-semantics.kind')` protocol reports the label across package copies. It never grants a definition's brand. Foreign codec inputs receive an operation-specific diagnostic. Matching labels explain module re-execution and duplicate package installation as likely causes.
 
-Instances and per-definition prototypes are frozen. Parts are not generically copied, traversed, or frozen. If projections exist, a non-enumerable prototype getter validates the actual brand and returns a stable, frozen, null-prototype facade. Its only properties are the declared read-only projection getters. Each access runs the configured projection; mutable results must be detached copies. No projections means no instance view member.
+## Instances and views
 
-All instances provide `equals` and `debug`. Implicit JSON, string, and numeric coercion throw. Semantic errors direct callers to Zod encoding. Minted errors explain that no external representation exists. Spreading an instance yields an empty object.
+Instances have frozen ordinary surfaces, frozen prototypes, ES private Parts, and a guarded constructor. Standard observations are explicit `debug()` and optional `view`. Implicit JSON, numeric, and string conversion throw. Node inspection and `Symbol.toStringTag` expose only the kind label.
 
-## Equality and collections
+The view facade is lazy, frozen, and null-prototype. Each projection separately validates, deeply freezes, and caches its first successful result. Results allow primitives, plain data objects, dense arrays, and sealed leaves. Dates and other classes, functions, accessors, hidden properties, symbol keys, and cycles are rejected. Validation precedes any freezing. Recursive projection access throws. Failed evaluation or validation does not populate the cache.
 
-Semantic equality defaults to equality of deterministic keys computed from Zod-encoded JSON. Custom equality must agree with those keys. Object keys are sorted; array order, string escaping, and negative zero are preserved. Unsupported JSON values fail keying rather than being silently coerced.
+`DeepReadonly<T>` retains precise nested types and treats sealed types as terminal. Runtime validation remains necessary for class prototypes and descriptors, which TypeScript cannot reliably distinguish from plain data shapes.
 
-`Kind.map()` and `Kind.set()` reject invalid runtime brands. Semantic collections key by codec-encoded JSON; minted collections key by instance identity. Replacing a semantic map entry preserves its original key object. Returned entry containers do not expose internal storage.
+Private Parts are logically immutable. The library does not freeze all Parts at construction, but it freezes any graph exposed through a view. Producers must own or copy mutable inputs and must not mutate them later.
 
-## Identity scope
+## Scope
 
-A realm-wide registry under `Symbol.for('sealed-semantics/kinds')` rejects duplicate completed names, including separate installed package copies. It stores names, not Parts or definitions. It does not scan unloaded modules or coordinate separate realms.
-
-TypeScript identity uses the literal kind string. It is not a fresh nominal identity minted by each factory call. `any` and assertions can bypass static restrictions; runtime brand checks remain authoritative.
-
-## Documentation and laws
-
-Semantic docs require a non-empty `examples` array with typed `input` and `encoded` on every entry. Sealing validates inputs, compares actual codec output, reparses it, and checks equality and stable encoding. There are no canonical examples. Minted docs have no wire examples. If views exist, docs require exactly those view names, each with a non-empty description and optional typed example.
-
-`sealed-semantics/laws` is a Node-only optional test entry requiring fast-check. It checks codec round trips, equality, collections, frozen surfaces, brands, coercion, and projection alias safety. Function and accessor projections require explicit mutators; sealed children require explicit kind predicates. Tests sample behavior and cannot prove producer correctness or exclusive ownership. See [laws](laws.md) and [guarantees](guarantees.md).
-
-Default semantic equality, semantic collections, executable docs, allocation, and the law harness require synchronous bidirectional schema operations. Zod async parsing can still create branded values from async refinements, but it does not make those synchronous operations async.
+Identity is local to a completed definition and its JavaScript realm. Encode and decode across worker, server/client, network, or process boundaries. A module re-execution makes new definitions; previous values remain valid only for their original definitions. See [frameworks](frameworks.md).

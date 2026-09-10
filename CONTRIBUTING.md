@@ -20,10 +20,10 @@ npm run test:package
 - `src`: library runtime and public types. Runtime Zod operations belong in `zod-codec.ts`.
 - `test` and `spike`: runtime checks, compiler diagnostics, completion checks, and inference checks.
 - `examples/consumer`: a separate consumer package with practical examples and its own tests.
-- `docs`: current guarantees, API guidance, and clearly marked design history.
+- `docs`: current guarantees, API guidance, and framework guidance.
 
 When changing public types, test both accepted inference and rejected configurations. Invalid capabilities should not appear as available operations. When changing a producer example, verify its exact projection types as well as its runtime behavior.
 
-Keep the producer's rules separate from the library's construction guarantees. Do not expose private Parts or introduce mutable aliases. Use `.equals()` for semantic equality, and explicit encoding at representation boundaries. Kind names must be unique among definitions loaded together; tests should use distinct names except when testing rejection.
+Keep the producer's rules separate from the library's construction guarantees. Do not expose private Parts or introduce mutable aliases. Use `===` for identity, and explicit encoding at representation boundaries. Each completed definition has its own runtime identity, even when labels match.
 
 Update documentation and executable examples with behavior changes. Avoid generated output, local archives, IDE configuration, credentials, and unrelated edits in pull requests. The project uses the MIT license; contributions are made under that license.

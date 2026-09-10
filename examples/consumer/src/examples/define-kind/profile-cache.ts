@@ -7,7 +7,7 @@ export interface Profile {
 export function createProfileLookup(
   loadFromDatabase: (id: UserId) => Promise<Profile | undefined>,
 ) {
-  const cache = UserId.map<Profile>();
+  const cache = new Map<UserId, Profile>();
 
   return async function findProfile(id: UserId): Promise<Profile | undefined> {
     // Legacy and current spellings of the same ID share a cache entry.
