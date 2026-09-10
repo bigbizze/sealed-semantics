@@ -33,10 +33,9 @@ This comes from two distinct things: semantic kinds, which are values, and seman
 
 ```ts
 const UserId = defineSeal({
-  key: id => id,
+  key: id => id, // key for checking equality between instances of this kind. `schema` can be an object, or anything, meaning complex keys can be needed for reference
   name: 'app/user-id', // globally unique namespace for this kind.
   schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/), // regular zod schema for handling serialization
-  key: id => id // key for checking equality between instances of this kind. `schema` can be an object, or anything, meaning complex keys can be needed for reference
 })
   .view({ // You can define methods on the kind here. 
     suffix: id => id.slice(-6),
