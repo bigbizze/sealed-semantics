@@ -1,6 +1,7 @@
 # sealed-semantics
 
 ## Why
+
 Typescript types mostly govern syntax:
 
 Is this a string or not? If this is an object instead of a number, then this property on that object needs this type. etc.
@@ -28,13 +29,25 @@ The goal of this repository is to create two new semantic datatype producers and
 This comes from two distinct things: semantic kinds, which are values, and semantic mints, which are datatypes that include a contract about rules and transformations any value of this mint type has undergone. 
 
 
-defineKind create kinds. They differ from  only using typescript types because kinds have much stronger guarantees around the provenance of their data. Once a definition for a kind is provided, the only place that can create new values of that kind is Zod parse. The only methods that can be used to interact with a value of that kind are those in the definition. This allows you to distinguish between something that was merely produced, from something that is legitimately entitled to be relied upon.
+**defineKind** create kinds. They differ from  only using typescript types because kinds have much stronger guarantees around the provenance of their data. Once a definition for a kind is provided, the only place that can create new values of that kind is Zod parse. The only methods that can be used to interact with a value of that kind are those in the definition. This allows you to distinguish between something that was merely produced from something that is legitimately entitled to be relied upon.
 
-defineMint creates contracts that couple a typescript types to some set of rules specified in its definition. This means that when a function wants to only accept Payment objects, where payment object really means "Only payment objects that are validated, authorized and time-stamped through the officially sanctioned paths for doing such things in this repo", having PaymentObject be defined as just a typescript types which has these 3 string properties and one boolean is obviously not ideal. If PaymentObject were a minted datatype, those requirements could be added to it's mint function, it's value guaranteed to have been run through them, and only values produced by `mint()` be allowed to be passed to functions expecting PaymentObject.
+kinds are meant to trasit across serialization boundaries with no issues. they use zod for encoding and decoding as you already would.
+
+**defineMint** creates contracts that couple a typescript types to some set of rules specified in its definition. This means that when a function wants to only accept Payment objects, where payment object really means "Only payment objects that are validated, authorized and time-stamped through the officially sanctioned paths for doing such things in this repo", having PaymentObject be defined as just a typescript types which has these 3 string properties and one boolean is obviously not ideal. If PaymentObject were a minted datatype, those requirements could be added to it's mint function, it's value guaranteed to have been run through them, and only values produced by `mint()` be allowed to be passed to functions expecting PaymentObject.
 
 You can also create minted datatypes which include kinds, or other mints. This allows the semantic attestations to compose naturally.
 
 One result of this approach is that AI-generated code can't merely discover the shape of an execution-eligible value  and recreate it locally. It has to find the producer that is capable of minting one.
+
+mints should never cross serialization boundaries and are non-serializable. This is because producing a mint from plain JSON means making a claim about the data outside of what its contract can attest to as it's currently constructed. (There are of course some fun ways one might think about making this not an issue! Not for now though.)
+
+___
+
+
+
+
+
+
 
 
 ___
