@@ -34,6 +34,7 @@ defineMint creates contracts that couple a typescript types to some set of rules
 
 You can also create minted datatypes which include kinds, or other mints. This allows the semantic attestations to compose naturally.
 
+One result of this approach is that AI-generated code can't merely discover the shape of an execution-eligible value  and recreate it locally. It has to find the producer that is capable of minting one.
 
 
 ___
