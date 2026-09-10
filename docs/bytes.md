@@ -12,7 +12,7 @@ const Digest = defineSeal({
   key: hex => hex,
 })
   .view({ hex: hex => hex })
-  .to({
+  .copy({
     bytes: hex => Uint8Array.from(
       hex.match(/../g)!,
       pair => Number.parseInt(pair, 16),
@@ -26,29 +26,35 @@ const b = Digest.codec.parse('ab'.repeat(32));
 console.log(a === b); // true: same live semantic value in this definition
 console.log(new Map<Digest, string>([[a, 'stored']]).get(b)); // stored
 
-const x = a.to.bytes();
-const y = a.to.bytes();
+const x = a.copy.bytes();
+const y = a.copy.bytes();
 console.log(x === y); // false: separate buffers with equal contents
 x[0] = 0;
 console.log(y[0]); // 171: changing x does not change y or the digest
 ```
 
-This conversion returns a fresh mutable buffer. Its contents represent the sealed value, but its object identity has no semantic meaning. Use the seal or canonical string as a native `Map`/`Set` key. A second byte conversion does not retrieve an entry keyed by the first buffer.
+`copy.bytes()` returns independently owned mutable bytes. Use the seal or its canonical string as a native `Map`/`Set` key. A second copy has a different reference and does not retrieve an entry keyed by the first array.
 
-`Uint8Array` and Node `Buffer` are not supported view outputs or semantic Parts. A cached mutable buffer would let a caller change later observations. Returning a fresh buffer on each view access would violate the stable-view contract. Freezing a populated typed array does not provide a solution: `Object.freeze` throws. Keep conversion outside `.view()`.
+## Stable byte observations
 
-Hex decoding takes O(n) work and allocates a new buffer. A 32-byte digest uses 64 hex characters; base64url can represent it in 43 characters without padding. Pick one canonical spelling and validate it. Actual string and buffer memory costs depend on the engine and object overhead; this is not a performance guarantee.
+Configure `.copy({ bytes: ... })` on either `defineSeal` or `defineMint`. Each named producer is lazy. On its first successful call, the library validates the result and copies its bytes into a private snapshot. Each call, including the first, returns a new plain `Uint8Array` copied from that snapshot. The producer result and snapshot are never returned to callers.
 
-If profiling shows repeated conversion matters, convert once in application code and reuse the buffer while consumers only read it. If an API may mutate or retain it, pass `bytes.slice()` to give that call its own copy. The returned buffer belongs to the caller.
+Changing a returned array cannot affect the snapshot, another caller, or future copies. If the producer retained its original array, later changes to that array cannot affect the snapshot either. Each observation has its own snapshot for each sealed instance. Failed computation or validation is not cached; a later call retries. Recursive access to an observation while it is computing throws.
 
-In React, `[digest]` and `[digest.view.hex]` are stable dependencies for an unchanged semantic value. `[digest.to.bytes()]` allocates a different dependency on each render. If a component needs a stable buffer, it can use `useMemo(() => digest.to.bytes(), [digest])`; that buffer remains mutable and must be treated accordingly. See [framework guidance](frameworks.md).
+Only genuine `Uint8Array` output is accepted. Buffer output is accepted as byte input because it is a Uint8Array, but Buffer methods and type are not preserved. Subarrays copy only their visible bytes. Shared-memory-backed arrays are rejected, even if their public `buffer` property is overridden. Detached storage is rejected. Ordinary objects, ArrayBuffer, DataView, other typed arrays, dates, maps, sets, strings, functions, and promises are not copy outputs. No generic cloning facility is provided.
 
-## Owned conversions
+The facade is stable, frozen, and bound to the value; a detached method still works. An absent or empty copy declaration exposes no `copy` member. `.docs()`, `.view()`, and `.copy()` may be used in any order before `.seal()`.
 
-Configure `.to({ bytes: ... })` on either `defineSeal` or `defineMint`. Call `value.to.bytes()` to obtain a fresh mutable result. The facade is stable, frozen, and bound to the value; a detached method still works. Each call runs the callback, validates its output, then deep-clones it with `structuredClone`. Even if the callback returns private state or a cached buffer, the caller receives an independent copy. No buffers are transferred or detached.
+## Meaning and ownership
 
-The top-level return must be `Date`, `Map`, `Set`, `ArrayBuffer`, a standard typed array, or `DataView`. Primitives, arrays, and plain objects belong in `view`, and are compile errors as conversion results. A `to.date()` is the supported way to expose a mutable Date. Functions and promises are rejected everywhere.
+The definition author chooses what the bytes mean. The library enforces stable contents after the first successful computation and independent storage. It cannot prove producer purity, correct encoding, semantic equivalence, absence of side effects, or producer correctness.
 
-Map keys and collection contents may contain primitives, dense arrays, plain objects, and the supported built-ins. Shared references within one result are preserved. Cycles, sealed values, accessors, hidden/symbol properties, custom classes, extra properties on built-ins, and shared-memory buffers are rejected. Use `Uint8Array` instead of Node `Buffer`; application code can call `Buffer.from(digest.to.bytes())` if needed. Runtime checks are authoritative where TypeScript cannot distinguish a custom class structurally.
+Zod codecs remain the external representation boundary. Views remain stable immutable observations. Copy observations only supply fresh mutable byte storage; they do not add a mint codec or change serialization rules.
 
-Deep cloning costs work and allocation proportional to the result graph. If a callback constructs a buffer, cloning adds another copy. Reuse a returned buffer locally when appropriate; conversion results intentionally have no stable reference identity.
+`Uint8Array` and Node Buffer remain unsupported view outputs and semantic Parts. Keep canonical string Parts for digests. Never return a mutable cached buffer through view.
+
+## Cost and reference identity
+
+The first call runs the producer and allocates a private byte snapshot. Every call allocates and fills a fresh Uint8Array. The snapshot remains in memory while its sealed value remains reachable. This storage and copying cost is intentional.
+
+In React, `[digest]` and `[digest.view.hex]` are stable dependencies for an unchanged semantic value. `[digest.copy.bytes()]` creates a different dependency on every render. If a component needs a stable local buffer, it can use `useMemo(() => digest.copy.bytes(), [digest])`; that buffer still belongs to the component and remains mutable. See [framework guidance](frameworks.md).

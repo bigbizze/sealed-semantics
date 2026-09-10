@@ -88,17 +88,17 @@ test('mint rejects kind definitions instead of sealed instances', () => {
   assertInvalid(result);
 });
 
-// Conversions use the installed package surface and return caller-owned data.
+// Copy observations use the installed package surface and return owned bytes.
 const Binary = defineSeal({
   name: 'consumer/binary',
   schema: z.string(),
   key: (s) => s,
 })
   .view({ text: (s) => s })
-  .to({ bytes: (s) => new TextEncoder().encode(s) })
+  .copy({ bytes: (s) => new TextEncoder().encode(s) })
   .seal();
 const binary = Binary.codec.parse('abc');
-const firstBytes = binary.to.bytes();
+const firstBytes = binary.copy.bytes();
 firstBytes[0] = 0;
-assert.equal(binary.to.bytes()[0], 97);
+assert.equal(binary.copy.bytes()[0], 97);
 assert.equal(binary.view.text, 'abc');

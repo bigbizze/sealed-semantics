@@ -26,10 +26,10 @@ const Viewed=ViewedBuilder.seal();
     const Domain=defineMint({name:'completion/domain',mint:()=>({ok:false as const,error:{code:'denied' as const,detail:'reason'}})}).seal();
     const rejected=Domain.mint(undefined);
     if(!rejected.ok) { rejected.error./*domainError*/; }
-    const Converted=BasicBuilder.to({bytes:s=>new TextEncoder().encode(s),date:()=>new Date()});
-    Converted.seal().codec.parse("x").to./*conversions*/;
+    const WithCopies=BasicBuilder.copy({bytes:s=>new TextEncoder().encode(s),signatureBytes:()=>new Uint8Array(0)});
+    WithCopies.seal().codec.parse("x").copy./*copies*/;
     BasicBuilder.docs({ /*basic*/ }).seal();
-    Converted.docs({to:{ /*conversionDocs*/ }});
+    WithCopies.docs({copy:{ /*copyDocs*/ }});
     FullBuilder.docs({ /*full*/ }).seal();
     MintedBuilder.docs({ /*minted*/ }).seal();
     ViewedBuilder.docs({ /*viewed*/ }).seal();
@@ -90,21 +90,21 @@ const Viewed=ViewedBuilder.seal();
     }
     const expected: Record<string, string[]> = {
       domainError: ['code', 'detail'],
-      conversions: ['bytes', 'date'],
-      conversionDocs: ['bytes', 'date'],
+      copies: ['bytes', 'signatureBytes'],
+      copyDocs: ['bytes', 'signatureBytes'],
       definition: ['name', 'schema', 'allocate', 'key', 'debug'],
       primitiveDefinition: ['key', 'allocate', 'debug'],
       objectDefinition: ['key', 'allocate', 'debug'],
       instance: ['debug', 'toJSON', 'valueOf'],
       mintedKind: ['name', 'is', 'mint'],
       mintedDefinition: ['name', 'mint', 'debug'],
-      builder: ['view', 'to', 'docs', 'seal'],
+      builder: ['view', 'copy', 'docs', 'seal'],
       name: ['name', 'is', 'codec'],
-      documentedBuilder: ['docs', 'view', 'to', 'seal'],
-      basic: ['description', 'examples', 'view', 'to'],
-      full: ['description', 'examples', 'view', 'to'],
-      minted: ['description', 'view', 'to'],
-      viewed: ['description', 'view', 'to'],
+      documentedBuilder: ['docs', 'view', 'copy', 'seal'],
+      basic: ['description', 'examples', 'view', 'copy'],
+      full: ['description', 'examples', 'view', 'copy'],
+      minted: ['description', 'view', 'copy'],
+      viewed: ['description', 'view', 'copy'],
       names: ['suffix'],
       basicExample: ['input', 'encoded'],
       fullExample: ['input', 'encoded'],

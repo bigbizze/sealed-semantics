@@ -4,7 +4,7 @@ Semantic values can be used in React state and dependency arrays. Equivalent dec
 
 Server/client, worker, network, and storage boundaries still require Zod encoding and decoding. Sealed objects are not transport data.
 
-Byte conversion is separate from sealed identity. Calling `digest.to.bytes()` creates a fresh mutable object, so do not use a conversion call directly in a dependency array. Depend on the seal or string, or memoize the conversion in application code when needed. See [digests and byte buffers](bytes.md).
+Owned byte storage is separate from sealed identity. Calling `digest.copy.bytes()` creates a fresh mutable object, so do not use a copy call directly in a dependency array. Depend on the seal or string, or memoize an owned copy in application code when needed. See [digests and byte buffers](bytes.md).
 
 Re-executing a module that completes a definition creates a new definition instance. Values created before the edit still work as values but are foreign to the new definition. Its codec rejects them with a diagnostic explaining the likely cause. After editing a definition module, refresh the page or restart the process to clear preserved state.
 

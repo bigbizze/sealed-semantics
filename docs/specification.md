@@ -22,7 +22,7 @@ The completed kind exposes `name`, `is`, `codec`, and `allocate` only when confi
 
 ## Completion
 
-Optional `.view(projections)` returns a builder with that projection map. Optional `.docs(metadata)` and `.to(conversions)` retain the other builder configuration. Every `.seal()` call creates a new frozen definition instance from the captured configuration. Calling `.seal()` recursively during completion fails. There is nothing to publish globally.
+Optional `.view(projections)` returns a builder with that projection map. Optional `.docs(metadata)` and `.copy(observations)` retain the other builder configuration. Every `.seal()` call creates a new frozen definition instance from the captured configuration. Calling `.seal()` recursively during completion fails. There is nothing to publish globally.
 
 A sealed value belongs to exactly one completed definition instance. `is` checks its ES private-field brand and returns a boolean. Definitions with the same label are permitted and unrelated. No global or module-level mutable table tracks names or instances.
 
@@ -44,10 +44,14 @@ Private Parts are logically immutable. The library does not freeze all Parts at 
 
 Identity is local to a completed definition and its JavaScript realm. Encode and decode across worker, server/client, network, or process boundaries. A module re-execution makes new definitions; previous values remain valid only for their original definitions. See [frameworks](frameworks.md).
 
-Builder `.docs()`, `.view()`, and `.to()` calls may appear in any order. Both retain the other configuration. Final documentation must match the final projections when `.seal()` completes the definition; completed definitions expose no builder methods.
+Builder `.docs()`, `.view()`, and `.copy()` calls may appear in any order. Each retains the other configuration. Final documentation must match the final projections when `.seal()` completes the definition; completed definitions expose no builder methods.
 
-## Owned conversions
+## Owned byte observations
 
-`.to(conversions)` declares bound zero-argument methods on a stable frozen null-prototype `value.to` facade. Each invocation evaluates the callback, validates its result, and deep-clones it. No result is cached. An empty conversion map exposes no `to` member. Completed definitions have no builder methods.
+`.copy(observations)` declares bound zero-argument methods on a stable frozen null-prototype `value.copy` facade. On the first successful invocation of each method, its producer runs, its output is validated as a genuine Uint8Array, and its bytes are copied into a private snapshot. The producer result never becomes the snapshot and is never returned to a consumer. Every invocation returns a new plain Uint8Array copied from the snapshot. Empty arrays are cached correctly. Failed production or validation retries on the next call; recursive observation access throws.
 
-Top-level outputs are restricted to Date, Map, Set, ArrayBuffer, standard typed arrays and DataView. Primitives, plain objects and arrays use view. Collection contents may recursively contain plain data or supported built-ins. Cycles, functions, promises, symbols, accessors, hidden properties, custom classes, shared memory and sealed leaves are rejected. Copies have mutable container types through `Owned<T>` and do not share objects with callback state or previous results. This conversion surface does not add minted serialization. See [byte conversions](bytes.md).
+Buffer and cross-realm Uint8Array output qualify as byte input. Only byte contents are copied; subclasses, extra properties, and Buffer methods are not preserved. Shared backing memory and detached storage are rejected through intrinsic checks. Other output types are rejected at compile time where possible and at runtime on access. There is no generic object cloning or public cloning strategy.
+
+The snapshot is private per observation and sealed instance. Consumer writes and later writes to a retained producer result cannot change it. First access costs producer computation plus snapshot copying; every access costs a fresh allocation and byte copy. Snapshots remain while their sealed instances remain reachable.
+
+These guarantees concern storage and observation stability. They do not establish producer purity, absence of side effects, semantic equivalence, correct encoding, or correct units. The author owns those obligations. This facility does not alter Parts, view, codec, or minted identity rules. See [byte observations](bytes.md).

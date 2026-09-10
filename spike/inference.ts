@@ -108,14 +108,14 @@ defineSeal({
   key: (parts) => parts,
   name: 'types/no-decode',
   schema: z.string(),
-  // @ts-expect-error Conversions belong in the schema codec.
+  // @ts-expect-error Copies belong in the schema codec.
   decode: (s: string) => s,
 });
 defineSeal({
   key: (parts) => parts,
   name: 'types/no-encode',
   schema: z.string(),
-  // @ts-expect-error Conversions belong in the schema codec.
+  // @ts-expect-error Copies belong in the schema codec.
   encode: (s: string) => s,
 });
 // @ts-expect-error Schema input must be JSON, not any.
@@ -351,35 +351,53 @@ const CopyExample = defineSeal({
   schema: z.string(),
   key: (s) => s,
 })
-  .to({
+  .copy({
     bytes: (s) => new TextEncoder().encode(s),
-    date: () => new Date(),
-    records: () => new Map([['x', { values: [1] as readonly number[] }]]),
+    signatureBytes: () => Buffer.from([1, 2]),
   })
   .seal();
 const copies = CopyExample.codec.parse('x');
-copies.to.records().get('x')!.values.push(2);
-const bytes: Uint8Array = copies.to.bytes();
-const date: Date = copies.to.date();
-defineSeal({ name: 'copy/string', schema: z.string(), key: (s) => s }).to({
+const bytes: Uint8Array = copies.copy.bytes();
+const signatureBytes: Uint8Array = copies.copy.signatureBytes();
+// @ts-expect-error Buffer producer output is exposed only as Uint8Array.
+const nodeBuffer: Buffer = copies.copy.signatureBytes();
+// @ts-expect-error Undeclared copy observations are absent.
+copies.copy.missing();
+defineSeal({ name: 'copy/string', schema: z.string(), key: (s) => s }).copy({
   // @ts-expect-error Text belongs in view.
   string: (s) => s,
 });
-defineSeal({ name: 'copy/object', schema: z.string(), key: (s) => s }).to({
+defineSeal({ name: 'copy/object', schema: z.string(), key: (s) => s }).copy({
   // @ts-expect-error Plain data belongs in view.
   data: (s) => ({ s }),
 });
-defineSeal({ name: 'copy/array', schema: z.string(), key: (s) => s }).to({
+defineSeal({ name: 'copy/array', schema: z.string(), key: (s) => s }).copy({
   // @ts-expect-error Arrays belong in view.
   data: (s) => [s],
 });
-defineSeal({ name: 'copy/function', schema: z.string(), key: (s) => s }).to({
+defineSeal({ name: 'copy/function', schema: z.string(), key: (s) => s }).copy({
   // @ts-expect-error Functions cannot be copied.
   data: () => () => 1,
 });
-defineSeal({ name: 'copy/shared', schema: z.string(), key: (s) => s }).to({
+defineSeal({ name: 'copy/shared', schema: z.string(), key: (s) => s }).copy({
   // @ts-expect-error Shared memory cannot be copied.
   data: () => new SharedArrayBuffer(1),
 });
 // @ts-expect-error Sealing completes the builder.
-CopyExample.to({});
+CopyExample.copy({});
+
+defineSeal({ name: 'copy/arraybuffer', schema: z.string(), key: (s) => s }).copy({
+  // @ts-expect-error Only Uint8Array is a copy output.
+  bytes: () => new ArrayBuffer(32),
+});
+defineSeal({ name: 'copy/uint32', schema: z.string(), key: (s) => s }).copy({
+  // @ts-expect-error Only Uint8Array is a copy output.
+  bytes: () => new Uint32Array([1, 2]),
+});
+const NoCopies = defineSeal({
+  name: 'copy/absent',
+  schema: z.string(),
+  key: (s) => s,
+}).seal();
+// @ts-expect-error No copy observations were declared.
+NoCopies.codec.parse('x').copy;

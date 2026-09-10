@@ -83,7 +83,7 @@ test('configuration errors explain identity and capability constraints', () => {
     ],
     [
       `B.docs({examples:[{input:'x',encoded:'x'}],view:{}}).seal();`,
-      'Documentation must match the final view and conversions.',
+      'Documentation must match the final view and copies.',
     ],
     [
       `B.docs({examples:[{input:'x',encoded:'x'}],views:{}});`,
@@ -125,22 +125,23 @@ test('configuration errors explain identity and capability constraints', () => {
   assert.equal((output.match(/error TS\d+:/g) ?? []).length, cases.length, output);
 });
 
-test('conversion diagnostics explain the supported return types', () => {
+test('copy diagnostics explain the byte-only output type', () => {
   const output = compile(`
-const B=defineSeal({name:'diagnostic/to',schema:z.string(),key:s=>s});
-B.to({anything:s=>String(s)});
-B.to({anything:s=>({s})});
-B.to({anything:s=>[s]});
-B.to({anything:()=>Promise.resolve(1)});
-B.to({anything:()=>()=>1});
-B.to({string:s=>Buffer.from(s, "base64url")});
-B.to({unknown:():unknown=>"x"});
+const B=defineSeal({name:'diagnostic/copy',schema:z.string(),key:s=>s});
+B.copy({anything:s=>String(s)});
+B.copy({anything:s=>({s})});
+B.copy({anything:s=>[s]});
+B.copy({anything:()=>Promise.resolve(1)});
+B.copy({anything:()=>()=>1});
+B.copy({buffer:()=>new ArrayBuffer(32)});
+B.copy({ints:()=>new Uint32Array([1,2])});
+B.copy({unknown:():unknown=>"x"});
 `);
   assert(
     output.includes(
-      'This conversion returns an unsupported type. Functions defined in the .to method can only return types that .view cannot. Return Date, Map, Set, ArrayBuffer, Uint8Array, another supported typed array, or DataView. Use view for primitives, arrays, and plain objects.',
+      'Copy producers must return Uint8Array. Use view for immutable observations.',
     ),
     output,
   );
-  assert.equal((output.match(/error TS\d+:/g) ?? []).length, 7, output);
+  assert.equal((output.match(/error TS\d+:/g) ?? []).length, 8, output);
 });

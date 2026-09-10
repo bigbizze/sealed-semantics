@@ -18,4 +18,4 @@ A sealed value belongs to exactly one completed definition instance. Same-label 
 
 The harness samples behavior. It does not prove that a key captures the intended domain semantics, that producers never mutate aliases, or that checks establish external facts. Production collision assertions protect against different supported Parts sharing a live key. Add domain-specific examples for normalization and intended identity.
 
-For configured conversions, laws check the stable bound facade, equivalent contents across calls, independent object graphs, and isolation after mutating one result. These checks sample deterministic conversions and do not measure copying performance.
+For configured copy observations, laws check the stable bound facade, equal bytes across calls, independent arrays and backing buffers, and isolation after mutating one result. Focused runtime tests also verify compute-once behavior and isolation from retained producer arrays. These checks do not prove semantic equivalence or producer purity.

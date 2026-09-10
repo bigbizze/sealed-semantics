@@ -43,7 +43,7 @@ function metadata(kind: AnyKind, shape: DocumentationShape) {
       'description',
       ...(shape.semantic ? ['examples'] : []),
       ...(shape.view.length ? ['view'] : []),
-      ...(shape.to.length ? ['to'] : []),
+      ...(shape.copy.length ? ['copy'] : []),
     ],
     kind.name,
   );
@@ -53,7 +53,7 @@ function metadata(kind: AnyKind, shape: DocumentationShape) {
       'string',
       `${kind.name}.description must be a string`,
     );
-  for (const namespace of ['view', 'to'] as const) {
+  for (const namespace of ['view', 'copy'] as const) {
     if (!shape[namespace].length) continue;
     const entries = record(doc[namespace], `${kind.name}.${namespace}`);
     keys(entries, shape[namespace], `${kind.name}.${namespace}`);
@@ -94,7 +94,7 @@ export function validateDocumentation(kind: AnyKind, shape: DocumentationShape):
     const value: any = decoded.data;
     assert(kind.is(value), foreignValue(kind.name, value, `${label}: docs`));
     for (const name of shape.view) void (value as any).view[name];
-    for (const name of shape.to) (value as any).to[name]();
+    for (const name of shape.copy) (value as any).copy[name]();
     const raw = encodeWire(semantic.codec, value);
     assert.deepEqual(
       raw,
