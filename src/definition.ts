@@ -4,7 +4,7 @@ const reservedFields = new Set([
   'docs',
   'documentation',
   'view',
-  'to',
+  'copy',
   'is',
   'mint',
   'schema',
@@ -105,11 +105,11 @@ export function validateView(projections: unknown): void {
   }
 }
 
-export function validateConversions(conversions: unknown): void {
-  const value = record(conversions, 'to');
+export function validateCopies(copies: unknown): void {
+  const value = record(copies, 'copy');
   for (const name of Object.keys(value)) {
     if (['then', '__proto__', 'constructor', 'prototype', 'toJSON'].includes(name))
-      throw new TypeError(`Conversion name "${name}" is reserved.`);
-    callback(value, name, 'to');
+      throw new TypeError(`Copy observation name "${name}" is reserved.`);
+    callback(value, name, 'copy');
   }
 }

@@ -3,13 +3,13 @@ import type { AnyKind } from './types.js';
 export type DocumentationShape = Readonly<{
   semantic: boolean;
   view: readonly string[];
-  to: readonly string[];
+  copy: readonly string[];
 }>;
 type MemberDocs = Readonly<
   Record<string, { readonly description: string; readonly example?: unknown }>
 >;
 export type Metadata = {
-  readonly to?: MemberDocs;
+  readonly copy?: MemberDocs;
   readonly description?: string;
   readonly examples?: readonly {
     readonly input: unknown;
@@ -43,7 +43,7 @@ export function documentedKind<T extends object>(
         metadata.examples.map((example) => Object.freeze({ ...example })),
       );
     }
-    for (const namespace of ['view', 'to'] as const) {
+    for (const namespace of ['view', 'copy'] as const) {
       const members = metadata[namespace];
       if (members !== undefined)
         documentation[namespace] = Object.freeze(

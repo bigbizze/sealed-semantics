@@ -173,7 +173,7 @@ console.log(users.get(b)); // Alice
 
 The schema validates and normalizes input. Its output becomes the private representation, called **Parts**. Interning happens after that normalization. It makes semantic identity coincide with object identity; it is not a promise of faster parsing.
 
-Call `.docs(...)`, `.view(...)`, and `.to(...)` in any order; `.seal()` must come last and checks documentation against the final projections and conversions. Completed definitions have no builder methods.
+Call `.docs(...)`, `.view(...)`, and `.copy(...)` in any order; `.seal()` must come last and checks documentation against the final view and copy observations. Completed definitions have no builder methods.
 
 `ValueOf<typeof UserId>` gives the instance type. A cast cannot construct an instance. `UserId.is(value)` checks the actual private brand.
 
@@ -295,7 +295,7 @@ Each view projection runs lazily. Its first successful result is validated, deep
 
 Views allow primitives, sealed values, dense arrays, and plain data objects. Structured observations are deeply readonly in TypeScript. Functions, Dates, collections, other class instances, accessors, hidden properties, symbol-keyed structures, and cycles are rejected on access. Genuine sealed leaves from this installed package copy retain their exact type and remain usable. An ES-private brand authenticates them. The well-known kind symbol is only a diagnostic label; fake objects and values from another installed copy are rejected as graph leaves.
 
-For digests and other byte-valued data, keep canonical string Parts and declare `.to({ bytes: ... })` to return a fresh `Uint8Array` at the binary API boundary. Buffers are mutable representations, not identity-bearing values or view outputs. See [digests and byte buffers](docs/bytes.md).
+For digests and other byte-valued data, keep canonical string Parts and declare `.copy({ bytes: ... })` for a stable byte observation returned as a fresh `Uint8Array` at the binary API boundary. Buffers are mutable representations, not identity-bearing values or view outputs. See [digests and byte buffers](docs/bytes.md).
 
 The library does not deep-freeze all private Parts merely because they are sealed. Anything exposed through `view` becomes deeply immutable. Parts must remain logically immutable after sealing. If a projection returns an internal array, that array is frozen too. Producers must not retain aliases that they later mutate.
 
@@ -331,8 +331,8 @@ The [consumer walkthrough](examples/src/examples/README.md) demonstrates HTTP re
 
 Read the [guarantees](docs/guarantees.md), [specification](docs/specification.md), [documentation guide](docs/documentation.md), [laws](docs/laws.md), and [error guide](docs/producer-results.md). See [CONTRIBUTING.md](CONTRIBUTING.md), [release checks](docs/releasing.md), and [SECURITY.md](SECURITY.md). Licensed under [MIT](LICENSE).
 
-### Mutable conversions belong in `.to`
+### Owned bytes belong in `.copy`
 
-Use `.view({ hex: ... })` for stable immutable observations and `.to({ bytes: ... })` for caller-owned mutable representations. `digest.to.bytes()` runs the conversion and returns a validated deep clone on every call. `Date`, `Map`, `Set`, `ArrayBuffer`, typed arrays, and `DataView` are supported. Primitives, plain objects, and arrays must use `view` instead. Functions, promises, sealed objects, and shared memory cannot be copied.
+Use `.view({ hex: ... })` for stable immutable observations and `.copy({ bytes: ... })` for fresh owned `Uint8Array` storage. On the first successful `digest.copy.bytes()` call, the producer runs and the library copies its bytes into a private snapshot. Every call returns a new array from that snapshot. Mutating a returned array or a retained producer result cannot change later copies.
 
-This works for both seals and mints. It does not give minted values a codec. See [the complete digest example and copying rules](docs/bytes.md).
+Only Uint8Array is supported. Buffer producer output is accepted but returned as plain Uint8Array. Shared backing memory is rejected. The definition author is responsible for what the bytes mean; the library enforces storage isolation and stable contents, not purity or semantic correctness. Copy observations do not replace Zod encoding or give minted values a codec. See [the complete digest example and copying rules](docs/bytes.md).
