@@ -19,7 +19,7 @@ You can try to solve this with updating CLAUDE.md or AGENTS.md stating:
 
 > “Never call capturePayment unless…”
 
-but then you're relying on the agent to remember. you're also encoding just one rule of the N you'll need with this approach where they're ability to remember decreases proportional to N increasing. 
+but then you're relying on the agent to remember. you're also encoding just one rule of the N you'll need with this approach where their ability to remember decreases proportional to N increasing. 
 
 ___
 
