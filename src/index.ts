@@ -77,20 +77,11 @@ export function defineKind<
   } & IdentityOptions<NoInfer<z.output<W>>> &
     Record<Keys, unknown> & {
       [
-        N in Exclude<
-          Keys,
-          | 'kind'
-          | 'schema'
-          | 'allocate'
-          | 'debug'
-          | ([z.output<W>] extends [import('./types.js').SemanticKey] ? never : 'key')
-        >
+        N in Exclude<Keys, 'kind' | 'schema' | 'allocate' | 'debug' | 'key'>
       ]: ConfigurationError<
-        N extends 'key'
-          ? 'Primitive Parts already define identity. Do not supply key.'
-          : N extends string
-            ? `Unknown definition option "${N}". Use .view(...) for projections and .docs(...) for documentation.`
-            : 'Symbol-named options are not supported.'
+        N extends string
+          ? `Unknown definition option "${N}". Use .view(...) for projections and .docs(...) for documentation.`
+          : 'Symbol-named options are not supported.'
       >;
     },
 ): ValueBuilder<
@@ -100,10 +91,7 @@ export function defineKind<
   [A] extends [never] ? {} : { allocate: (...args: A) => unknown }
 > {
   validateDefinition(spec, true);
-  const { kind, schema, debug, allocate } = spec;
-  const key = (
-    spec as { key?: (parts: z.output<W>) => import('./types.js').SemanticKey }
-  ).key;
+  const { kind, schema, debug, allocate, key } = spec;
   return builder((view, metadata) => {
     const bridge = makeSemanticSeal<z.output<W>>(kind, { debug, view, key });
     const codec = makeWireCodec(schema, kind, bridge.seal, bridge.is, bridge.read);

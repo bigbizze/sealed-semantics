@@ -51,7 +51,7 @@ try {
     [
       '--input-type=module',
       '-e',
-      "import {defineKind} from 'sealed-semantics'; import {z} from 'zod'; const K=defineKind({kind:'consumer/no-test-peer',\nschema:z.string(),}).seal(); if (!K.is(K.codec.parse('x'))) throw Error();",
+      "import {defineKind} from 'sealed-semantics'; import {z} from 'zod'; const K=defineKind({ key: parts => parts,kind:'consumer/no-test-peer',\nschema:z.string(),}).seal(); if (!K.is(K.codec.parse('x'))) throw Error();",
     ],
     temp,
   );
@@ -60,7 +60,7 @@ try {
     join(temp, 'docs-good.mjs'),
     `import {defineKind,defineMinted} from 'sealed-semantics';
     import {z} from 'zod';
-    export const Id=defineKind({kind:'consumer/documented',
+    export const Id=defineKind({ key: parts => parts,kind:'consumer/documented',
 schema:z.string(),
 })
       .docs({examples:[{input:'x',encoded:'x'}]}).seal();
@@ -174,17 +174,17 @@ mint:i=>({ok:true,value:i})}).view({text:p=>p}).docs({view:{}}).seal();
  import { assertValueLaws } from 'sealed-semantics/laws';
  const {z: foreignZod}=await import('zod-copy');
  assert.deepEqual(Object.keys(a).sort(), ['defineKind','defineMinted']);
- const ForeignSchema=a.defineKind({kind:'consumer/foreign-schema',
+ const ForeignSchema=a.defineKind({ key: parts => parts,kind:'consumer/foreign-schema',
 schema:foreignZod.string(),
 }).seal();
  assert(ForeignSchema.is(ForeignSchema.codec.parse('x')));
- const ABuilder=a.defineKind({kind:'consumer/id',schema:z.string()});
+ const ABuilder=a.defineKind({ key: parts => parts,kind:'consumer/id',schema:z.string()});
  const A=ABuilder.view({text:p=>p}).seal();
- const B=b.defineKind({kind:'consumer/other-id',
+ const B=b.defineKind({ key: parts => parts,kind:'consumer/other-id',
 schema:z.string(),
 }).seal();
  const x=A.codec.parse('x'),y=A.codec.parse('x');
- const Same=b.defineKind({kind:'consumer/id',schema:z.string()}).seal();
+ const Same=b.defineKind({ key: parts => parts,kind:'consumer/id',schema:z.string()}).seal();
  assert(!Same.is(x)); assert.notEqual(Same.codec.parse('x'),x);
  assert.throws(()=>z.encode(Same.codec,x),/different definition instance.*re-executed/);
 

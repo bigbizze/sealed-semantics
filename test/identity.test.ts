@@ -9,6 +9,7 @@ import type { SemanticKey } from '../src/types.js';
 
 test('normalized Parts give reference identity, native collection lookup, and allocation identity', () => {
   const Id = defineKind({
+    key: (parts) => parts,
     kind: 'identity/id',
     schema: z.string().toLowerCase(),
     allocate: (s: string) => s,
@@ -22,13 +23,18 @@ test('normalized Parts give reference identity, native collection lookup, and al
   assert.equal(Id.codec.parse(z.encode(Id.codec, a)), a);
   for (let i = 0; i < 100; i++) Id.codec.parse(`usr_${i}`);
   assert.equal(Id.codec.parse('USR_1'), a);
-  const Other = defineKind({ kind: 'identity/other', schema: z.string() }).seal();
+  const Other = defineKind({
+    key: (parts) => parts,
+    kind: 'identity/other',
+    schema: z.string(),
+  }).seal();
   assert.notEqual(Other.codec.parse('usr_1'), a);
 });
 
 test('all primitive key types use Object.is identity after schema conversion', () => {
   const values = [0, -0, NaN, 1n, true, false, null, undefined, 'x'] as const;
   const K = defineKind({
+    key: (parts) => parts,
     kind: 'identity/primitives',
     schema: z.string().transform((s) => values[Number(s)]),
   }).seal();
@@ -37,6 +43,7 @@ test('all primitive key types use Object.is identity after schema conversion', (
     assert.equal(K.codec.parse(String(i)), K.codec.parse(String(i)));
   assert.notEqual(K.codec.parse('4'), K.codec.parse('5'));
   const SymbolParts = defineKind({
+    key: (parts: symbol) => parts,
     kind: 'identity/symbol',
     schema: z.string().transform(() => Symbol()),
   } as any).seal();
@@ -100,11 +107,12 @@ test('keyed Parts are validated on first decode and collisions never substitute 
     assert.throws(() => K.codec.parse('x'), /keyed Parts/);
   });
   assert.equal(reads, 0);
-  const Missing = defineKind({
-    kind: 'identity/missing-runtime-key',
-    schema: z.object({ n: z.number() }),
-  } as any).seal();
-  assert.throws(() => Missing.codec.parse({ n: 1 }), /Non-primitive Parts require key/);
+  for (const schema of [z.string(), z.object({ n: z.number() })]) {
+    assert.throws(
+      () => defineKind({ kind: 'identity/missing-runtime-key', schema } as any),
+      /definition.key must be a function/,
+    );
+  }
   const Wrong = defineKind({
     kind: 'identity/wrong-runtime-key',
     schema: z.object({ n: z.number() }),
@@ -208,13 +216,17 @@ test('missing weak runtime facilities fail at import with actionable diagnostics
 });
 
 test('same-name definitions are independent and foreign diagnostics explain the attempted operation', () => {
-  const A = defineKind({ kind: 'dup/id', schema: z.string() })
+  const A = defineKind({ key: (parts) => parts, kind: 'dup/id', schema: z.string() })
     .view({ text: (p) => p })
     .seal();
-  const B = defineKind({ kind: 'dup/id', schema: z.string() })
+  const B = defineKind({ key: (parts) => parts, kind: 'dup/id', schema: z.string() })
     .view({ text: (p) => p })
     .seal();
-  const C = defineKind({ kind: 'other/id', schema: z.string() }).seal();
+  const C = defineKind({
+    key: (parts) => parts,
+    kind: 'other/id',
+    schema: z.string(),
+  }).seal();
   const a = A.codec.parse('x');
   assert(A.is(a));
   assert(!Boolean(B.is(a)));
@@ -264,7 +276,11 @@ test('numeric identity and encoding preserve both zero signs in either parse ord
     [0, -0],
     [-0, 0],
   ]) {
-    const N = defineKind({ kind: 'identity/signed-zero', schema: z.number() }).seal();
+    const N = defineKind({
+      key: (parts) => parts,
+      kind: 'identity/signed-zero',
+      schema: z.number(),
+    }).seal();
     const a = N.codec.parse(inputs[0]),
       b = N.codec.parse(inputs[1]);
     assert.notEqual(a, b);
@@ -273,7 +289,11 @@ test('numeric identity and encoding preserve both zero signs in either parse ord
     assert.equal(N.codec.parse(inputs[0]), a);
     assert.equal(N.codec.parse(inputs[1]), b);
   }
-  const NaNs = defineKind({ kind: 'identity/nan', schema: z.nan() }).seal();
+  const NaNs = defineKind({
+    key: (parts) => parts,
+    kind: 'identity/nan',
+    schema: z.nan(),
+  }).seal();
   const n = NaNs.codec.parse(NaN);
   assert.equal(n, NaNs.codec.parse(NaN));
   assert(Number.isNaN(z.encode(NaNs.codec, n)));
@@ -290,4 +310,16 @@ test('explicit numeric keys distinguish zero signs while collision assertions re
   assert.notEqual(a, b);
   assert.equal(a, K.codec.parse({ n: 0 }));
   assert.equal(b, K.codec.parse({ n: -0 }));
+});
+
+test('primitive key collisions reject unnormalized Parts', () => {
+  const K = defineKind({
+    kind: 'identity/primitive-collision',
+    schema: z.string(),
+    key: (s) => s.toLowerCase(),
+  }).seal();
+  const first = K.codec.parse('ABC');
+  assert.throws(() => K.codec.parse('abc'), /semantic identity collision/);
+  assert.equal(K.codec.parse('ABC'), first);
+  assert.equal(z.encode(K.codec, first), 'ABC');
 });

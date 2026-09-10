@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { defineKind, type ValueOf } from 'sealed-semantics';
 
 export const UserId = defineKind({
+  key: (parts) => parts,
   kind: 'sealed-semantics-test/user-id',
   schema: z.codec(
     z.string().regex(/^(usr_[a-f0-9]{16,}|user:[0-9a-f-]{36})$/),

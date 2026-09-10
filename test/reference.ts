@@ -29,6 +29,7 @@ export const UserId = defineKind({
   .seal();
 export type UserId = ValueOf<typeof UserId>;
 export const Sha256Digest = defineKind({
+  key: (parts) => parts,
   kind: 'example/sha256',
   schema: z.codec(
     z.string().regex(/^[a-f0-9]{64}$/),
@@ -51,6 +52,7 @@ export const Sha256Digest = defineKind({
   })
   .seal();
 export const NamespaceId = defineKind({
+  key: (parts) => parts,
   kind: 'example/namespace-id',
   schema: z.string().regex(/^ns:[a-z]+$/),
 })

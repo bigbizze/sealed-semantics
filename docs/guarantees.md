@@ -46,4 +46,4 @@ Cloudflare enables these facilities by default for compatibility dates from 2025
 
 Only the laws entry imports Node facilities and fast-check. The core uses browser-compatible JavaScript and the Zod peer dependency.
 
-Primitive identity follows `Object.is`: zero and negative zero are distinct, while NaN interns with itself when the schema permits it. Explicit primitive keys follow the same rule. Producer rejection values are domain-owned; the library preserves them unchanged and infers their exact type.
+Every semantic definition declares `key(parts)`. Key identity follows `Object.is`: zero and negative zero are distinct, while NaN interns with itself when the schema permits it. Different Parts that share a live key are rejected as collisions. Normalize Parts in the schema first. Producer rejection values are domain-owned; the library preserves them unchanged and infers their exact type.

@@ -84,6 +84,7 @@ export function validateDefinition(spec: unknown, semantic: boolean): void {
     throw new TypeError('kind must be a non-empty string literal');
   }
   if (!semantic) callback(input, 'mint', 'definition');
+  else callback(input, 'key', 'definition');
   for (const name of ['allocate', 'key', 'debug']) {
     if (Object.hasOwn(input, name)) callback(input, name, 'definition');
   }

@@ -13,6 +13,7 @@ import { ok } from './result.js';
 
 test('docs validate every input and normalized encoding at seal', () => {
   const B = defineKind({
+    key: (parts) => parts,
     kind: 'docs/normalized',
     schema: z.codec(z.string(), z.string(), {
       decode: (s) => s.toLowerCase(),
@@ -36,7 +37,11 @@ test('docs validate every input and normalized encoding at seal', () => {
 });
 
 test('docs reject schema failures, missing properties, unknown fields, and empty examples', () => {
-  const B = defineKind({ kind: 'docs/strict', schema: z.string().regex(/^id_/) });
+  const B = defineKind({
+    key: (parts) => parts,
+    kind: 'docs/strict',
+    schema: z.string().regex(/^id_/),
+  });
   for (const docs of [
     {},
     { examples: [] },
@@ -51,7 +56,11 @@ test('docs reject schema failures, missing properties, unknown fields, and empty
 });
 
 test('docs round trips use the codec, including nested kinds', () => {
-  const Child = defineKind({ kind: 'docs/child', schema: z.string() })
+  const Child = defineKind({
+    key: (parts) => parts,
+    kind: 'docs/child',
+    schema: z.string(),
+  })
     .view({ text: (p) => p })
     .seal();
   const Parent = defineKind({
@@ -88,7 +97,11 @@ test('minted docs require exact view descriptions without running the producer',
 });
 
 test('documentation rejects accessors and symbols without invoking getters', () => {
-  const B = defineKind({ kind: 'docs/descriptors', schema: z.string() });
+  const B = defineKind({
+    key: (parts) => parts,
+    kind: 'docs/descriptors',
+    schema: z.string(),
+  });
   let calls = 0;
   assert.throws(
     () =>
@@ -133,7 +146,11 @@ test('reference definitions carry executable documentation', () => {
 });
 
 test('semantic documentation exercises views and rejects unsafe outputs at completion', () => {
-  const B = defineKind({ kind: 'docs/view-domain', schema: z.string() }).view({
+  const B = defineKind({
+    key: (parts) => parts,
+    kind: 'docs/view-domain',
+    schema: z.string(),
+  }).view({
     bad: () => new Date(),
   } as any);
   assert.throws(

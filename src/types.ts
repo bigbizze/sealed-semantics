@@ -90,12 +90,10 @@ export type ReservedField =
   | 'valueOf'
   | 'toString';
 export type SemanticKey = string | number | bigint | boolean | null | undefined;
-export type IdentityOptions<P> = [P] extends [SemanticKey]
-  ? {}
-  : {
-      /** Required identity for non-primitive Parts. Normalize Parts in the schema first. */
-      key: (parts: P) => SemanticKey;
-    };
+export type IdentityOptions<P> = {
+  /** Required semantic identity. Normalize Parts in the schema before key runs. */
+  key: (parts: P) => SemanticKey;
+};
 export type DeepReadonly<T> =
   T extends Proof<string>
     ? T

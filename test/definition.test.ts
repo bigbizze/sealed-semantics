@@ -15,7 +15,11 @@ test('unknown definition options fail immediately', () => {
         } as any),
       /Unknown definition property/,
     );
-  const K = defineKind({ kind: 'definition/retry', schema: z.string() }).seal();
+  const K = defineKind({
+    key: (parts) => parts,
+    kind: 'definition/retry',
+    schema: z.string(),
+  }).seal();
   assert(K.is(K.codec.parse('x')));
 });
 
@@ -102,7 +106,11 @@ test('builders capture callbacks and each seal creates a definition', () => {
 });
 
 test('failed documentation can be corrected and docs precede completion', () => {
-  const B = defineKind({ kind: 'definition/docs-retry', schema: z.string().min(2) });
+  const B = defineKind({
+    key: (parts) => parts,
+    kind: 'definition/docs-retry',
+    schema: z.string().min(2),
+  });
   assert.throws(
     () => B.docs({ examples: [{ input: 'x', encoded: 'x' }] }).seal(),
     /rejected/,

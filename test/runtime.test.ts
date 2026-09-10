@@ -40,8 +40,12 @@ test('only Zod exposes boundary operations; private brands reject forgery and co
   assert.throws(() => value.debug.call(fake), TypeError);
 });
 
-test('schema-only kinds infer Parts and validate through all Zod boundary paths', async () => {
-  const Id = defineKind({ kind: 'runtime/identity', schema: z.string().min(2) })
+test('primitive kinds infer Parts and validate through all Zod boundary paths', async () => {
+  const Id = defineKind({
+    key: (parts) => parts,
+    kind: 'runtime/identity',
+    schema: z.string().min(2),
+  })
     .view({ length: (text) => text.length })
     .seal();
   const a = Id.codec.parse('ab');
@@ -81,6 +85,7 @@ test('schema codecs normalize inputs, validate decoded Parts, and encode nested 
 
 test('Zod refinements and codec issues remain Zod errors in both directions', () => {
   const Limited = defineKind({
+    key: (parts) => parts,
     kind: 'runtime/refined',
     schema: z.codec(z.string(), z.number().min(0), {
       decode: (text, ctx) => {
@@ -179,6 +184,7 @@ test('minted construction preserves errors, identity, and producer-owned copies'
 
 test('allocation runs the codec and reports Zod errors', () => {
   const Allocated = defineKind({
+    key: (parts) => parts,
     kind: 'runtime/allocated',
     schema: z.string().min(2),
     allocate: (s: string) => s,
@@ -186,6 +192,7 @@ test('allocation runs the codec and reports Zod errors', () => {
   assert(Allocated.is(Allocated.allocate('ab')));
   assert.throws(() => Allocated.allocate('x'), z.ZodError);
   const Zero = defineKind({
+    key: (parts) => parts,
     kind: 'runtime/zero',
     schema: z.string(),
     allocate: () => 'ok',
@@ -226,6 +233,7 @@ test('documentation wire comparison validates JSON and preserves negative zero',
 
 test('one-way transforms require a codec for encoding; async schemas use Zod async APIs', async () => {
   const OneWay = defineKind({
+    key: (parts) => parts,
     kind: 'runtime/one-way',
     schema: z.string().transform((s) => s.length),
   }).seal();
@@ -233,6 +241,7 @@ test('one-way transforms require a codec for encoding; async schemas use Zod asy
   assert(OneWay.is(value));
   assert.throws(() => z.encode(OneWay.codec, value), /unidirectional transform/i);
   const Async = defineKind({
+    key: (parts) => parts,
     kind: 'runtime/async',
     schema: z.string().refine(async (s) => s.length > 0),
   })

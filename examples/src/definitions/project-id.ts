@@ -3,6 +3,7 @@ import { defineKind, type ValueOf } from 'sealed-semantics';
 
 /** A project identifier, distinct from a user identifier. */
 export const ProjectId = defineKind({
+  key: (parts) => parts,
   kind: 'sealed-semantics-test/project-id',
   schema: z.string().regex(/^prj_[a-f0-9]{16,}$/),
 })

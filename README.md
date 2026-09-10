@@ -153,6 +153,7 @@ import { z } from 'zod';
 import { defineKind, type ValueOf } from 'sealed-semantics';
 
 const UserId = defineKind({
+  key: parts => parts,
   kind: 'app/user-id',
   schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/),
 })
@@ -182,12 +183,14 @@ import { z } from 'zod';
 import { defineKind, defineMinted, type ValueOf } from 'sealed-semantics';
 
 const UserId = defineKind({
+  key: parts => parts,
   kind: 'app/user-id',
   schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/),
 }).seal();
 type UserId = ValueOf<typeof UserId>;
 
 const ProjectId = defineKind({
+  key: parts => parts,
   kind: 'app/project-id',
   schema: z.string().regex(/^prj_[a-f0-9]+$/),
 }).seal();
@@ -207,11 +210,11 @@ console.log(z.encode(ResponseSchema, response));
 
 Use a `z.codec(...)` as the definition's schema when external input and Parts have different types. Normalize in that schema before identity is computed. One-way Zod transforms can decode but cannot encode backward.
 
-## Object Parts need an identity key
+## Every kind declares its identity key
 
-Primitive Parts use their own value as the key. Supported keys are strings, numbers, bigints, booleans, `null`, and `undefined`. A custom `key` on entirely primitive Parts is a compile error. Symbols are not semantic keys.
+Every `defineKind` requires `key`, including primitive Parts. Use `key: id => id` for a normalized string identifier. Supported keys are strings, numbers, bigints, booleans, `null`, and `undefined`. Symbols are not semantic keys.
 
-If the output includes an object or another non-primitive alternative, supply `key`:
+For structured Parts, choose a key that identifies the complete value:
 
 ```ts
 const Coordinate = defineKind({

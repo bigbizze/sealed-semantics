@@ -4,7 +4,11 @@ import { z } from 'zod';
 import { defineKind, defineMinted } from '../src/index.js';
 
 test('each observation is lazy, cached once, deeply frozen, and preserves sealed leaf types', () => {
-  const Id = defineKind({ kind: 'view/id', schema: z.string() }).seal();
+  const Id = defineKind({
+    key: (parts) => parts,
+    kind: 'view/id',
+    schema: z.string(),
+  }).seal();
   const id = Id.codec.parse('x');
   let calls = 0,
     emptyCalls = 0;
@@ -131,7 +135,11 @@ test('exposed Parts freeze safely, shared subgraphs work, and later codec/debug 
 });
 
 test('a frozen prototype forgery cannot become a sealed view leaf', () => {
-  const Id = defineKind({ kind: 'view/real-leaf', schema: z.string() }).seal();
+  const Id = defineKind({
+    key: (parts) => parts,
+    kind: 'view/real-leaf',
+    schema: z.string(),
+  }).seal();
   const real = Id.codec.parse('x');
   const fake = Object.freeze(Object.create(Object.getPrototypeOf(real)));
   const K = defineMinted({
@@ -202,7 +210,11 @@ test('a frozen hostile class with the kind symbol cannot impersonate a genuine l
     key: () => 1,
   }).seal();
   assert.throws(() => K.codec.parse('x'), /keyed Parts.*unsupported object/);
-  const Id = defineKind({ kind: 'view/local-leaf', schema: z.string() }).seal();
+  const Id = defineKind({
+    key: (parts) => parts,
+    kind: 'view/local-leaf',
+    schema: z.string(),
+  }).seal();
   const value = Id.codec.parse('x');
   const Holder = defineMinted({
     kind: 'view/local-holder',

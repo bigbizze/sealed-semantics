@@ -4,13 +4,13 @@ The main entry exports `defineKind` and `defineMinted`, plus TypeScript types. T
 
 ## Semantic definitions
 
-`defineKind({ kind, schema, key?, allocate?, debug? })` creates a builder. Schema output is private Parts. Schema input must be JSON-compatible and cannot be `any`. The kind label must be a non-empty string literal.
+`defineKind({ kind, schema, key, allocate?, debug? })` creates a builder. Schema output is private Parts. Schema input must be JSON-compatible and cannot be `any`. The kind label must be a non-empty string literal.
 
-Entirely primitive Parts use their own value as identity. The domain is `string | number | bigint | boolean | null | undefined`. Supplying `key` for that type is a compile error. A union containing a non-primitive alternative requires `key(parts)`, returning that primitive domain.
+Every semantic definition requires `key(parts)`, returning `string | number | bigint | boolean | null | undefined`. Primitive Parts use an explicit callback too, for example `key: id => id`. Normalize Parts in the schema before computing the key. Different Parts sharing a live key cause a collision error, including primitive Parts.
 
-For explicit keys, the runtime validates every decoded Parts graph before computing identity, including the first creation. Supported structures are primitives, dense arrays, plain data objects, Dates without own properties, and sealed leaves. Cycles, symbol keys, accessors, hidden properties, and other objects fail. Shared acyclic subgraphs are allowed.
+For every key, the runtime validates every decoded Parts graph before computing identity, including the first creation. Supported structures are primitives, dense arrays, plain data objects, Dates without own properties, and sealed leaves. Cycles, symbol keys, accessors, hidden properties, and other objects fail. Shared acyclic subgraphs are allowed.
 
-Each completed definition owns a private weak table. After Zod normalization, the key selects an existing live instance or a new one. An explicit-key hit must also pass structural collision comparison. Arrays compare in order, plain properties by name independent of insertion order, Dates by timestamp, and sealed leaves by identity. Numeric properties compare with `Object.is`; identity keys also distinguish signed zero and intern NaN with itself. Differing Parts for the same live key throw.
+Each completed definition owns a private weak table. After Zod normalization, the key selects an existing live instance or a new one. Every live hit must also pass structural collision comparison. Arrays compare in order, plain properties by name independent of insertion order, Dates by timestamp, and sealed leaves by identity. Numeric properties compare with `Object.is`; identity keys also distinguish signed zero and intern NaN with itself. Differing Parts for the same live key throw.
 
 Weak cleanup removes an entry only if it still contains the exact reference associated with the finalized object. Cleanup timing is unspecified. No public control changes interning. This is an identity guarantee, not a speed guarantee.
 

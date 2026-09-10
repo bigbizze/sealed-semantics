@@ -6,6 +6,7 @@ type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Assert<T extends true> = T;
 const Id = defineKind({
+  key: (parts) => parts,
   kind: 'types/id',
   schema: z.string(),
   debug: (s) => {
@@ -24,7 +25,11 @@ const Id = defineKind({
     view: { length: { description: 'Length', example: 1 } },
   })
   .seal();
-const Other = defineKind({ kind: 'types/other', schema: z.string() }).seal();
+const Other = defineKind({
+  key: (parts) => parts,
+  kind: 'types/other',
+  schema: z.string(),
+}).seal();
 type Id = ValueOf<typeof Id>;
 const id = Id.codec.parse('x');
 type In = Assert<Equal<z.input<typeof Id.codec>, string>>;
@@ -64,6 +69,7 @@ const converted = defineKind({
 type ConvertedInput = Assert<Equal<z.input<typeof converted.codec>, string>>;
 type Count = Assert<Equal<ValueOf<typeof converted>['view']['count'], number>>;
 const allocated = defineKind({
+  key: (parts) => parts,
   kind: 'types/allocate',
   schema: z.string(),
   allocate: (n: number, prefix: string) => `${prefix}${n}`,
@@ -97,17 +103,27 @@ Minted.mint({ id });
 Minted.mint({ id: 'x', other: 'x' });
 // @ts-expect-error Complete the builder first.
 type Unfinished = ValueOf<ReturnType<typeof defineMinted>>;
-const B = defineKind({ kind: 'types/docs', schema: z.string() });
-// @ts-expect-error Conversions belong in the schema codec.
-defineKind({ kind: 'types/no-decode', schema: z.string(), decode: (s: string) => s });
-// @ts-expect-error Conversions belong in the schema codec.
-defineKind({ kind: 'types/no-encode', schema: z.string(), encode: (s: string) => s });
+const B = defineKind({ key: (parts) => parts, kind: 'types/docs', schema: z.string() });
+defineKind({
+  key: (parts) => parts,
+  kind: 'types/no-decode',
+  schema: z.string(),
+  // @ts-expect-error Conversions belong in the schema codec.
+  decode: (s: string) => s,
+});
+defineKind({
+  key: (parts) => parts,
+  kind: 'types/no-encode',
+  schema: z.string(),
+  // @ts-expect-error Conversions belong in the schema codec.
+  encode: (s: string) => s,
+});
 // @ts-expect-error Schema input must be JSON, not any.
-defineKind({ kind: 'types/any', schema: z.any() });
+defineKind({ key: (parts) => parts, kind: 'types/any', schema: z.any() });
 // @ts-expect-error Raw dates are not JSON input. Decode a string schema into Date Parts instead.
-defineKind({ kind: 'types/date', schema: z.date() });
+defineKind({ key: (parts) => parts, kind: 'types/date', schema: z.date() });
 // @ts-expect-error Kind identity must be a literal.
-defineKind({ kind: '' as string, schema: z.string() });
+defineKind({ key: (parts) => parts, kind: '' as string, schema: z.string() });
 // @ts-expect-error Examples must be non-empty.
 B.docs({ examples: [] });
 // @ts-expect-error Encoded output is required.
@@ -154,8 +170,11 @@ assertValueLaws(Id, { validWire: fc.string(), allocateArgs: fc.constant([]) });
 assertMintedLaws(Minted, { validInput: fc.constant({ id }) });
 
 // @ts-expect-error Non-primitive Parts require a semantic key.
-defineKind({ kind: 'types/missing-key', schema: z.object({ x: z.number() }) });
-// @ts-expect-error Primitive identity cannot be overridden.
+defineKind({
+  kind: 'types/missing-key',
+  schema: z.object({ x: z.number() }),
+});
+// Primitive identity is explicit too.
 defineKind({ kind: 'types/primitive-key', schema: z.string(), key: (s: string) => s });
 defineKind({
   kind: 'types/object-key',
@@ -280,3 +299,6 @@ if (!unionResult.ok) {
 }
 // @ts-expect-error The package does not prescribe a producer error taxonomy.
 import type { ValueError } from '../src/index.js';
+
+// @ts-expect-error Primitive Parts also require key.
+defineKind({ kind: 'types/missing-primitive-key', schema: z.string() });

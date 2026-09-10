@@ -10,10 +10,10 @@ test('autocomplete suggests only configured documentation and law capabilities',
     import * as fc from 'fast-check';
     import {z} from 'zod';
     const ok = <T,>(value:T) => ({ok:true as const,value});
-    const BasicBuilder=defineKind({kind:'completion/basic',
+    const BasicBuilder=defineKind({ key: parts => parts,kind:'completion/basic',
 schema:z.string()});
 const Basic=BasicBuilder.seal();
-    const FullBuilder=defineKind({kind:'completion/full',
+    const FullBuilder=defineKind({ key: parts => parts,kind:'completion/full',
 schema:z.string(),
 allocate:()=>''}).view({suffix:p=>p.slice(-6)});
 const Full=FullBuilder.seal();
@@ -88,7 +88,7 @@ const Viewed=ViewedBuilder.seal();
     const expected: Record<string, string[]> = {
       domainError: ['code', 'detail'],
       definition: ['kind', 'schema', 'allocate', 'key', 'debug'],
-      primitiveDefinition: ['allocate', 'debug'],
+      primitiveDefinition: ['key', 'allocate', 'debug'],
       objectDefinition: ['key', 'allocate', 'debug'],
       instance: ['debug', 'toJSON', 'valueOf'],
       mintedKind: ['kind', 'is', 'mint'],

@@ -4,6 +4,7 @@ Add `.docs(...)` after optional `.view(...)` and before `.seal()`. Documentation
 
 ```ts
 const UserId = defineKind({
+  key: parts => parts,
   kind: 'app/user-id',
   schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/),
 })

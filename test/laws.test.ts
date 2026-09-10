@@ -67,7 +67,11 @@ test('laws accept shared immutable observations and detect invalid alias declara
     .view({ nested: (p) => p.nested })
     .seal();
   assertMintedLaws(K, { validInput: fc.integer() });
-  const Id = defineKind({ kind: 'law/id', schema: z.string() }).seal();
+  const Id = defineKind({
+    key: (parts) => parts,
+    kind: 'law/id',
+    schema: z.string(),
+  }).seal();
   assert.throws(() =>
     assertValueLaws(Id, {
       validWire: fc.string(),

@@ -131,7 +131,7 @@ function semanticKey(value: unknown, kind: string): SemanticKey {
   )
     return value as SemanticKey;
   throw new TypeError(
-    `${kind}: semantic key must be a string, number, bigint, boolean, null, or undefined. Non-primitive Parts require key(parts).`,
+    `${kind}: semantic key must be a string, number, bigint, boolean, null, or undefined. key(parts) must return a supported primitive.`,
   );
 }
 export function makeSemanticSeal<P>(
@@ -139,7 +139,7 @@ export function makeSemanticSeal<P>(
   ops: {
     view?: Record<string, (parts: P) => unknown>;
     debug?: ((parts: P) => string) | undefined;
-    key?: ((parts: P) => SemanticKey) | undefined;
+    key: (parts: P) => SemanticKey;
   },
 ) {
   const bridge = makeSeal(kind, { ...ops, semantic: true });
@@ -147,18 +147,16 @@ export function makeSemanticSeal<P>(
   return {
     ...bridge,
     seal: (parts: P) => {
-      if (ops.key) dataGraph(parts, `${kind}: keyed Parts`, true);
-      const key = semanticKey(ops.key ? ops.key(parts) : parts, kind);
+      dataGraph(parts, `${kind}: keyed Parts`, true);
+      const key = semanticKey(ops.key(parts), kind);
       const existing = interner.get(key);
       if (existing) {
-        if (ops.key) {
-          const stored = bridge.read(existing);
-          dataGraph(stored, `${kind}: stored Parts`, true);
-          if (!sameParts(stored, parts))
-            throw new TypeError(
-              `${kind}: semantic identity collision for key ${typeof key === 'string' ? JSON.stringify(key) : String(key)}`,
-            );
-        }
+        const stored = bridge.read(existing);
+        dataGraph(stored, `${kind}: stored Parts`, true);
+        if (!sameParts(stored, parts))
+          throw new TypeError(
+            `${kind}: semantic identity collision for key ${typeof key === 'string' ? JSON.stringify(key) : String(key)}`,
+          );
         return existing;
       }
       const value = bridge.seal(parts);

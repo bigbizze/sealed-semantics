@@ -50,7 +50,7 @@ ${source}`,
 }
 test('compiler diagnostics explain missing seal without expanding builders', () => {
   const output =
-    compile(`const B=defineKind({kind:'diagnostic/basic',schema:z.string()});
+    compile(`const B=defineKind({ key: parts => parts,kind:'diagnostic/basic',schema:z.string()});
 const M=defineMinted({kind:'diagnostic/minted',mint:(s:string)=>({ok:true,value:s})});
 type A=ValueOf<typeof B>; type C=ValueOf<typeof M>;`);
   assert(output.includes('Call .seal() on the definition first.'), output);
@@ -65,16 +65,16 @@ test('configuration errors explain identity and capability constraints', () => {
       "Property 'key' is missing",
     ],
     [
-      "defineKind({kind:'diagnostic/primitive',schema:z.string(),key:()=> 'x'});",
-      'Primitive Parts already define identity.',
+      "defineKind({kind:'diagnostic/primitive',schema:z.string()});",
+      "Property 'key' is missing",
     ],
     ['B.view({bad:()=>new Date()});', 'View outputs must be primitives'],
     [
-      `defineKind({kind:'diagnostic/conversion',schema:z.string(),decode:(s:string)=>s});`,
+      `defineKind({ key: parts => parts,kind:'diagnostic/conversion',schema:z.string(),decode:(s:string)=>s});`,
       'Unknown definition option',
     ],
     [
-      `defineKind({kind:'diagnostic/unknown',schema:z.string(),surprise:(s:string)=>s});`,
+      `defineKind({ key: parts => parts,kind:'diagnostic/unknown',schema:z.string(),surprise:(s:string)=>s});`,
       'Unknown definition option',
     ],
     [
@@ -98,14 +98,17 @@ test('configuration errors explain identity and capability constraints', () => {
       'Minted definitions cannot configure schema.',
     ],
     [
-      `defineKind({kind:'diagnostic/any',schema:z.any()});`,
+      `defineKind({ key: parts => parts,kind:'diagnostic/any',schema:z.any()});`,
       'Wire schema input must not be any.',
     ],
     [
-      `defineKind({kind:'diagnostic/date',schema:z.date()});`,
+      `defineKind({ key: parts => parts.getTime(),kind:'diagnostic/date',schema:z.date()});`,
       'Wire schema input must be JSON-compatible.',
     ],
-    [`defineKind({kind:widened,schema:z.string()});`, 'kind must be a string literal'],
+    [
+      `defineKind({ key: parts => parts,kind:widened,schema:z.string()});`,
+      'kind must be a string literal',
+    ],
     [
       `assertValueLaws(K,{validWire:fc.string(),allocateArgs:fc.constant([])});`,
       'allocateArgs requires an allocator',
@@ -116,7 +119,7 @@ test('configuration errors explain identity and capability constraints', () => {
     ],
   ];
   const output = compile(
-    `const B=defineKind({kind:'diagnostic/b',schema:z.string()}); const K=B.seal(); const widened:string='diagnostic/w';\n${cases.map(([source]) => source).join('\n')}`,
+    `const B=defineKind({ key: parts => parts,kind:'diagnostic/b',schema:z.string()}); const K=B.seal(); const widened:string='diagnostic/w';\n${cases.map(([source]) => source).join('\n')}`,
   );
   for (const [, message] of cases) assert(output.includes(message!), output);
   assert.equal((output.match(/error TS\d+:/g) ?? []).length, cases.length, output);
