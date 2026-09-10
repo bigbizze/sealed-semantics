@@ -110,10 +110,12 @@ mint:i=>({ok:true,value:i})}).view({text:p=>p}).docs({view:{}}).seal();
     .map((m) => m[1])
     .join('\n');
   writeFileSync(join(temp, 'readme.ts'), code);
+  const identifierStart = readme.indexOf('## Define an identifier\n');
+  assert(identifierStart >= 0, 'README must include the identifier example section');
   const intro = [
     ...readme
       .slice(
-        0,
+        identifierStart,
         readme.indexOf('## You can decode individual fields, or a whole response'),
       )
       .matchAll(/```ts\n([\s\S]*?)```/g),
