@@ -5,25 +5,25 @@ import { resolve } from 'node:path';
 
 test('autocomplete suggests only configured documentation and law capabilities', () => {
   const filename = resolve('test/completion-fixture.ts');
-  const source = `import {defineKind,defineMinted} from '../src/index.js';
+  const source = `import {defineSeal,defineMint} from '../src/index.js';
     import {assertValueLaws,assertMintedLaws} from '../src/laws.js';
     import * as fc from 'fast-check';
     import {z} from 'zod';
     const ok = <T,>(value:T) => ({ok:true as const,value});
-    const BasicBuilder=defineKind({ key: parts => parts,kind:'completion/basic',
+    const BasicBuilder=defineSeal({ key: parts => parts,name:'completion/basic',
 schema:z.string()});
 const Basic=BasicBuilder.seal();
-    const FullBuilder=defineKind({ key: parts => parts,kind:'completion/full',
+    const FullBuilder=defineSeal({ key: parts => parts,name:'completion/full',
 schema:z.string(),
 allocate:()=>''}).view({suffix:p=>p.slice(-6)});
 const Full=FullBuilder.seal();
-    const MintedBuilder=defineMinted({kind:'completion/minted',
+    const MintedBuilder=defineMint({name:'completion/minted',
 mint:(s:string)=>ok(s)});
 const Minted=MintedBuilder.seal();
-    const ViewedBuilder=defineMinted({kind:'completion/viewed',
+    const ViewedBuilder=defineMint({name:'completion/viewed',
 mint:(s:string)=>ok(s)}).view({suffix:p=>p.slice(-6)});
 const Viewed=ViewedBuilder.seal();
-    const Domain=defineMinted({kind:'completion/domain',mint:()=>({ok:false as const,error:{code:'denied' as const,detail:'reason'}})}).seal();
+    const Domain=defineMint({name:'completion/domain',mint:()=>({ok:false as const,error:{code:'denied' as const,detail:'reason'}})}).seal();
     const rejected=Domain.mint(undefined);
     if(!rejected.ok) { rejected.error./*domainError*/; }
     BasicBuilder.docs({ /*basic*/ }).seal();
@@ -38,15 +38,15 @@ const Viewed=ViewedBuilder.seal();
     assertValueLaws(Full,{validWire:fc.string(), /*fullLaws*/ });
     assertMintedLaws(Minted,{validInput:fc.string(), /*mintedLaws*/ });
     assertMintedLaws(Viewed,{validInput:fc.string(), /*viewedLaws*/ });
-    defineKind({ /*definition*/ });
-    defineMinted({ /*mintedDefinition*/ });
-    defineKind({kind:'completion/primitive',schema:z.string(), /*primitiveDefinition*/ });
-    defineKind({kind:'completion/object',schema:z.object({x:z.number()}), /*objectDefinition*/ });
+    defineSeal({ /*definition*/ });
+    defineMint({ /*mintedDefinition*/ });
+    defineSeal({name:'completion/primitive',schema:z.string(), /*primitiveDefinition*/ });
+    defineSeal({name:'completion/object',schema:z.object({x:z.number()}), /*objectDefinition*/ });
     const instance=Basic.codec.parse('x');
     instance./*instance*/;
     Minted./*mintedKind*/;
     BasicBuilder./*builder*/;
-    Basic./*kind*/;
+    Basic./*name*/;
     BasicBuilder.docs({examples:[{input:'x',encoded:'x'}]})./*documentedBuilder*/;
 
   `;
@@ -87,18 +87,18 @@ const Viewed=ViewedBuilder.seal();
     }
     const expected: Record<string, string[]> = {
       domainError: ['code', 'detail'],
-      definition: ['kind', 'schema', 'allocate', 'key', 'debug'],
+      definition: ['name', 'schema', 'allocate', 'key', 'debug'],
       primitiveDefinition: ['key', 'allocate', 'debug'],
       objectDefinition: ['key', 'allocate', 'debug'],
       instance: ['debug', 'toJSON', 'valueOf'],
-      mintedKind: ['kind', 'is', 'mint'],
-      mintedDefinition: ['kind', 'mint', 'debug'],
+      mintedKind: ['name', 'is', 'mint'],
+      mintedDefinition: ['name', 'mint', 'debug'],
       builder: ['view', 'docs', 'seal'],
-      kind: ['kind', 'is', 'codec'],
-      documentedBuilder: ['docs', 'seal'],
-      basic: ['description', 'examples'],
+      name: ['name', 'is', 'codec'],
+      documentedBuilder: ['docs', 'view', 'seal'],
+      basic: ['description', 'examples', 'view'],
       full: ['description', 'examples', 'view'],
-      minted: ['description'],
+      minted: ['description', 'view'],
       viewed: ['description', 'view'],
       names: ['suffix'],
       basicExample: ['input', 'encoded'],

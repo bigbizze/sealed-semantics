@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import * as fc from 'fast-check';
-import { defineKind, defineMinted, type ValueOf } from '../src/index.js';
+import { defineSeal, defineMint, type ValueOf } from '../src/index.js';
 import { assertValueLaws, assertMintedLaws } from '../src/laws.js';
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Assert<T extends true> = T;
-const Id = defineKind({
+const Id = defineSeal({
   key: (parts) => parts,
-  kind: 'types/id',
+  name: 'types/id',
   schema: z.string(),
   debug: (s) => {
     type Input = Assert<Equal<typeof s, string>>;
@@ -25,9 +25,9 @@ const Id = defineKind({
     view: { length: { description: 'Length', example: 1 } },
   })
   .seal();
-const Other = defineKind({
+const Other = defineSeal({
   key: (parts) => parts,
-  kind: 'types/other',
+  name: 'types/other',
   schema: z.string(),
 }).seal();
 type Id = ValueOf<typeof Id>;
@@ -51,8 +51,8 @@ Id.parse('x');
 Id.parseOrThrow('x');
 // @ts-expect-error Encoding belongs to Zod.
 id.encode();
-const converted = defineKind({
-  kind: 'types/converted',
+const converted = defineSeal({
+  name: 'types/converted',
   key: (p) => p.count,
   schema: z.codec(z.string(), z.object({ count: z.number() }), {
     decode: (s) => ({ count: Number(s) }),
@@ -68,9 +68,9 @@ const converted = defineKind({
   .seal();
 type ConvertedInput = Assert<Equal<z.input<typeof converted.codec>, string>>;
 type Count = Assert<Equal<ValueOf<typeof converted>['view']['count'], number>>;
-const allocated = defineKind({
+const allocated = defineSeal({
   key: (parts) => parts,
-  kind: 'types/allocate',
+  name: 'types/allocate',
   schema: z.string(),
   allocate: (n: number, prefix: string) => `${prefix}${n}`,
 }).seal();
@@ -82,8 +82,8 @@ allocated.allocate(1, 'x');
 allocated.allocate('x', 1);
 // @ts-expect-error An allocator is not present unless configured.
 Id.allocate();
-const Minted = defineMinted({
-  kind: 'types/minted',
+const Minted = defineMint({
+  name: 'types/minted',
   mint: (input: { id: Id; other: ValueOf<typeof Other> }) => ({
     ok: true,
     value: input,
@@ -102,28 +102,28 @@ Minted.mint({ id });
 // @ts-expect-error Runtime identity is not an arbitrary object shape.
 Minted.mint({ id: 'x', other: 'x' });
 // @ts-expect-error Complete the builder first.
-type Unfinished = ValueOf<ReturnType<typeof defineMinted>>;
-const B = defineKind({ key: (parts) => parts, kind: 'types/docs', schema: z.string() });
-defineKind({
+type Unfinished = ValueOf<ReturnType<typeof defineMint>>;
+const B = defineSeal({ key: (parts) => parts, name: 'types/docs', schema: z.string() });
+defineSeal({
   key: (parts) => parts,
-  kind: 'types/no-decode',
+  name: 'types/no-decode',
   schema: z.string(),
   // @ts-expect-error Conversions belong in the schema codec.
   decode: (s: string) => s,
 });
-defineKind({
+defineSeal({
   key: (parts) => parts,
-  kind: 'types/no-encode',
+  name: 'types/no-encode',
   schema: z.string(),
   // @ts-expect-error Conversions belong in the schema codec.
   encode: (s: string) => s,
 });
 // @ts-expect-error Schema input must be JSON, not any.
-defineKind({ key: (parts) => parts, kind: 'types/any', schema: z.any() });
+defineSeal({ key: (parts) => parts, name: 'types/any', schema: z.any() });
 // @ts-expect-error Raw dates are not JSON input. Decode a string schema into Date Parts instead.
-defineKind({ key: (parts) => parts, kind: 'types/date', schema: z.date() });
+defineSeal({ key: (parts) => parts, name: 'types/date', schema: z.date() });
 // @ts-expect-error Kind identity must be a literal.
-defineKind({ key: (parts) => parts, kind: '' as string, schema: z.string() });
+defineSeal({ key: (parts) => parts, name: '' as string, schema: z.string() });
 // @ts-expect-error Examples must be non-empty.
 B.docs({ examples: [] });
 // @ts-expect-error Encoded output is required.
@@ -133,7 +133,7 @@ B.docs({ examples: [{ input: 1, encoded: 'x' }] });
 // @ts-expect-error Unknown example properties are rejected.
 B.docs({ examples: [{ input: 'x', encoded: 'x', surprise: 'x' }] });
 // @ts-expect-error No declared view.
-B.docs({ examples: [{ input: 'x', encoded: 'x' }], view: {} });
+B.docs({ examples: [{ input: 'x', encoded: 'x' }], view: {} }).seal();
 const V = B.view({ size: (s) => s.length });
 // @ts-expect-error Every projection needs a description.
 V.docs({ examples: [{ input: 'x', encoded: 'x' }], view: {} });
@@ -151,8 +151,8 @@ V.docs({
 B.view({ debug: (s: string) => s });
 // @ts-expect-error Symbol projections are forbidden.
 B.view({ [Symbol.iterator]: (s: string) => s });
-defineMinted({
-  kind: 'types/minted-schema',
+defineMint({
+  name: 'types/minted-schema',
   mint: () => ({ ok: true, value: 1 }),
   // @ts-expect-error Minted definitions have no schema.
   schema: z.string(),
@@ -170,21 +170,21 @@ assertValueLaws(Id, { validWire: fc.string(), allocateArgs: fc.constant([]) });
 assertMintedLaws(Minted, { validInput: fc.constant({ id }) });
 
 // @ts-expect-error Non-primitive Parts require a semantic key.
-defineKind({
-  kind: 'types/missing-key',
+defineSeal({
+  name: 'types/missing-key',
   schema: z.object({ x: z.number() }),
 });
 // Primitive identity is explicit too.
-defineKind({ kind: 'types/primitive-key', schema: z.string(), key: (s: string) => s });
-defineKind({
-  kind: 'types/object-key',
+defineSeal({ name: 'types/primitive-key', schema: z.string(), key: (s: string) => s });
+defineSeal({
+  name: 'types/object-key',
   schema: z.object({ x: z.number() }),
   // @ts-expect-error Keys must be supported primitives.
   key: (p) => p,
 });
 // @ts-expect-error A union containing an object requires key.
-defineKind({
-  kind: 'types/union-key',
+defineSeal({
+  name: 'types/union-key',
   schema: z.union([z.string(), z.object({ x: z.number() })]),
 });
 // @ts-expect-error Values have no independent comparator.
@@ -193,8 +193,8 @@ id.equals(id);
 Id.map();
 // @ts-expect-error Native collections use reference identity.
 Id.set();
-const Structured = defineMinted({
-  kind: 'types/structured',
+const Structured = defineMint({
+  name: 'types/structured',
   mint: () => ({ ok: true, value: { users: [id], nested: { list: [1] } } }),
 })
   .view({ users: (p) => p.users, nested: (p) => p.nested })
@@ -213,8 +213,8 @@ B.view({ date: () => new Date() });
 B.view({ fn: () => () => 0 });
 // @ts-expect-error Nested mutable class observations are unsupported.
 B.view({ nested: () => ({ map: new Map() }) });
-defineMinted({
-  kind: 'types/minted-key',
+defineMint({
+  name: 'types/minted-key',
   mint: () => ({ ok: true, value: 1 }),
   // @ts-expect-error Mint events have no semantic key.
   key: () => 1,
@@ -223,8 +223,8 @@ defineMinted({
 // Producer-owned failures preserve their exact type throughout view/docs/seal.
 import type { ProducerResult } from '../src/index.js';
 type PaymentError = { code: 'unauthorized' } | { code: 'expired'; expiredAt: Date };
-const Payment = defineMinted({
-  kind: 'types/payment',
+const Payment = defineMint({
+  name: 'types/payment',
   mint: (input: string): ProducerResult<{ input: string }, PaymentError> =>
     input
       ? { ok: true, value: { input } }
@@ -240,8 +240,8 @@ if (!payment.ok) {
     type DateType = Assert<Equal<typeof payment.error.expiredAt, Date>>;
   }
 }
-const Single = defineMinted({
-  kind: 'types/single-error',
+const Single = defineMint({
+  name: 'types/single-error',
   mint: (s: string) =>
     s
       ? { ok: true as const, value: s }
@@ -253,8 +253,8 @@ if (!single.ok) {
     Equal<typeof single.error, { code: 'bad_input'; detail: string }>
   >;
 }
-const PrimitiveError = defineMinted({
-  kind: 'types/primitive-error',
+const PrimitiveError = defineMint({
+  name: 'types/primitive-error',
   mint: (s: string) => ({
     ok: false as const,
     error: s ? ('expired' as const) : ('unauthorized' as const),
@@ -264,8 +264,8 @@ const primitiveError = PrimitiveError.mint('');
 if (!primitiveError.ok) {
   type Exact = Assert<Equal<typeof primitiveError.error, 'expired' | 'unauthorized'>>;
 }
-const Infallible = defineMinted({
-  kind: 'types/infallible',
+const Infallible = defineMint({
+  name: 'types/infallible',
   mint: (input: string) => ({ ok: true as const, value: { input } }),
 }).seal();
 const infallible = Infallible.mint('');
@@ -281,8 +281,8 @@ const unionProducer = (input: number) => {
     return { ok: false as const, error: { code: 'stale' as const, age: 42 } };
   return { ok: true as const, value: { input } };
 };
-const UnionMint = defineMinted({
-  kind: 'types/inferred-union',
+const UnionMint = defineMint({
+  name: 'types/inferred-union',
   mint: unionProducer,
 }).seal();
 const unionResult = UnionMint.mint(0);
@@ -301,4 +301,47 @@ if (!unionResult.ok) {
 import type { ValueError } from '../src/index.js';
 
 // @ts-expect-error Primitive Parts also require key.
-defineKind({ kind: 'types/missing-primitive-key', schema: z.string() });
+defineSeal({ name: 'types/missing-primitive-key', schema: z.string() });
+
+const docsFirst = defineSeal({
+  name: 'types/docs-first',
+  schema: z.string(),
+  key: (s) => s,
+})
+  .docs({
+    examples: [{ input: 'x', encoded: 'x' }],
+    view: { text: { description: 'Text', example: 'x' } },
+  })
+  .view({ text: (s) => s })
+  .seal();
+const textFromDocsFirst: string = docsFirst.codec.parse('x').view.text;
+const mintDocsFirst = defineMint({
+  name: 'types/mint-docs-first',
+  mint: (s: string) => ({ ok: true as const, value: s }),
+})
+  .docs({ view: { text: { description: 'Text', example: 'x' } } })
+  .view({ text: (s) => s })
+  .seal();
+const mismatchedDocs = B.docs({
+  examples: [{ input: 'x', encoded: 'x' }],
+  view: { text: { description: 'Text', example: 42 } },
+}).view({ text: (s) => s });
+// @ts-expect-error The final string projection cannot have a numeric documentation example.
+mismatchedDocs.seal();
+const missingDocs = B.docs({ examples: [{ input: 'x', encoded: 'x' }] }).view({
+  text: (s) => s,
+});
+// @ts-expect-error Every final projection needs documentation when docs are supplied.
+missingDocs.seal();
+const extraDocs = B.docs({
+  examples: [{ input: 'x', encoded: 'x' }],
+  view: { text: { description: 'Text' }, extra: { description: 'Extra' } },
+}).view({ text: (s) => s });
+// @ts-expect-error Documentation cannot name a projection absent from the final view.
+extraDocs.seal();
+// @ts-expect-error Completed definitions have no builder methods.
+docsFirst.view({});
+// @ts-expect-error Completed definitions have no builder methods.
+docsFirst.docs({});
+// @ts-expect-error Completed definitions cannot be sealed again.
+mintDocsFirst.seal();

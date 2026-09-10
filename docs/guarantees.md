@@ -1,10 +1,10 @@
 # Guarantees and obligations
 
-Zod controls representation boundaries. `defineKind` creates semantic values whose value identity is JavaScript reference identity within one definition instance. `defineMinted` creates values whose identity is the successful mint event. `view` exposes stable immutable observations. The package holds no global state.
+Zod controls representation boundaries. `defineSeal` creates semantic values whose value identity is JavaScript reference identity within one definition instance. `defineMint` creates values whose identity is the successful mint event. `view` exposes stable immutable observations. The package holds no global state.
 
 ## Construction and identity
 
-A sealed value belongs to exactly one completed definition instance. `Kind.is(value)` is true only for values produced by that instance. Two definitions may use the same kind string. They are unrelated, and values of one are not values of the other.
+A sealed value belongs to exactly one completed definition instance. `Kind.is(value)` is true only for values produced by that instance. Two definitions may use the same definition name. They are unrelated, and values of one are not values of the other.
 
 Semantic decoding validates and normalizes input before computing identity. Equivalent live values are the same object. Native `Map` and `Set` therefore work. An existing live value cannot be displaced by another parse. Minting never interns; every success is a new event.
 

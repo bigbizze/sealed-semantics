@@ -29,11 +29,12 @@ The goal of this repository is to add two semantic datatype producers, both of w
 
 This comes from two distinct things: semantic kinds, which are values, and semantic mints, which are wrapped datatypes that include a contract about rules and transformations any value of this mint type has undergone. 
 
-**defineKind** create kinds. They differ from  only using typescript types because kinds have much stronger guarantees around the provenance of their data. Once a definition for a kind is provided, the only place that can create new values of that kind is Zod parse. The only methods that can be used to interact with a value of that kind are those in the definition. This allows you to distinguish between something that was merely produced from something that is legitimately entitled to be relied upon.
+**defineSeal** create kinds. They differ from  only using typescript types because kinds have much stronger guarantees around the provenance of their data. Once a definition for a kind is provided, the only place that can create new values of that kind is Zod parse. The only methods that can be used to interact with a value of that kind are those in the definition. This allows you to distinguish between something that was merely produced from something that is legitimately entitled to be relied upon.
 
 ```ts
-const UserId = defineKind({
-  kind: 'app/user-id', // globally unique namespace for this kind.
+const UserId = defineSeal({
+  key: id => id,
+  name: 'app/user-id', // globally unique namespace for this kind.
   schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/), // regular zod schema for handling serialization
   key: id => id // key for checking equality between instances of this kind. `schema` can be an object, or anything, meaning complex keys can be needed for reference
 })
@@ -50,7 +51,7 @@ kinds are meant to trasit across serialization boundaries with no issues. they u
 
 ---
 
-**defineMinted** creates contracts that couple a typescript types to some set of rules specified in its definition. This means that when a function wants to only accept Payment objects, where payment object really means "Only payment objects that are validated, authorized and time-stamped through the officially sanctioned paths for doing such things in this repo", having PaymentObject be defined as just a typescript types which has these 3 string properties and one boolean is obviously not ideal. If PaymentObject were a minted datatype (we could call this `PaymentReady`), those requirements could be added to it's mint function, it's value guaranteed to have been run through them, and only values produced by `mint()` be allowed to be passed to functions expecting PaymentObject.
+**defineMint** creates contracts that couple a typescript types to some set of rules specified in its definition. This means that when a function wants to only accept Payment objects, where payment object really means "Only payment objects that are validated, authorized and time-stamped through the officially sanctioned paths for doing such things in this repo", having PaymentObject be defined as just a typescript types which has these 3 string properties and one boolean is obviously not ideal. If PaymentObject were a minted datatype (we could call this `PaymentReady`), those requirements could be added to it's mint function, it's value guaranteed to have been run through them, and only values produced by `mint()` be allowed to be passed to functions expecting PaymentObject.
 
 ```ts
 
@@ -60,8 +61,8 @@ type PaymentObject = {
   currency: 'USD' | 'EUR'
 };
 
-const PaymentReady = defineMinted({
-  kind: 'app/payment',
+const PaymentReady = defineMint({
+  name: 'app/payment',
   mint: (input: PaymentObject) => {
     if (
       !UserId.is(input?.recipientId) ||
@@ -130,9 +131,9 @@ A carefully written class with a private constructor and ES private fields can e
 
 ## Two primitives
 
-**`defineKind` represents a semantic value.** Equivalent decoded values from one completed definition are the same live JavaScript object. Compare them with `===`. Use native `Map` and `Set`.
+**`defineSeal` represents a semantic value.** Equivalent decoded values from one completed definition are the same live JavaScript object. Compare them with `===`. Use native `Map` and `Set`.
 
-**`defineMinted` represents a successful mint event.** Every successful `.mint(input)` call creates a distinct object. A downstream function can require that object as evidence that the configured producer succeeded.
+**`defineMint` represents a successful mint event.** Every successful `.mint(input)` call creates a distinct object. A downstream function can require that object as evidence that the configured producer succeeded.
 
 You supply the checks. The library prevents callers from creating a genuine instance without passing through its construction path. It does not prove that your checks are correct. Accepting a user ID does not prove that a database row exists, or establish authorization, persistence, or currentness.
 
@@ -150,11 +151,11 @@ npm install sealed-semantics zod
 
 ```ts
 import { z } from 'zod';
-import { defineKind, type ValueOf } from 'sealed-semantics';
+import { defineSeal, type ValueOf } from 'sealed-semantics';
 
-const UserId = defineKind({
+const UserId = defineSeal({
   key: parts => parts,
-  kind: 'app/user-id',
+  name: 'app/user-id',
   schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/),
 })
   .view({ suffix: spelling => spelling.slice(-6) })
@@ -172,6 +173,8 @@ console.log(users.get(b)); // Alice
 
 The schema validates and normalizes input. Its output becomes the private representation, called **Parts**. Interning happens after that normalization. It makes semantic identity coincide with object identity; it is not a promise of faster parsing.
 
+Call `.docs(...)` and `.view(...)` in either order; `.seal()` must come last and checks documentation against the final projections. Completed definitions have no builder methods.
+
 `ValueOf<typeof UserId>` gives the instance type. A cast cannot construct an instance. `UserId.is(value)` checks the actual private brand.
 
 ## You can decode individual fields, or a whole response
@@ -180,18 +183,18 @@ Zod owns representation boundaries. Use `Kind.codec.parse(unknown)` or `safePars
 
 ```ts
 import { z } from 'zod';
-import { defineKind, defineMinted, type ValueOf } from 'sealed-semantics';
+import { defineSeal, defineMint, type ValueOf } from 'sealed-semantics';
 
-const UserId = defineKind({
+const UserId = defineSeal({
   key: parts => parts,
-  kind: 'app/user-id',
+  name: 'app/user-id',
   schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/),
 }).seal();
 type UserId = ValueOf<typeof UserId>;
 
-const ProjectId = defineKind({
+const ProjectId = defineSeal({
   key: parts => parts,
-  kind: 'app/project-id',
+  name: 'app/project-id',
   schema: z.string().regex(/^prj_[a-f0-9]+$/),
 }).seal();
 type ProjectId = ValueOf<typeof ProjectId>;
@@ -212,13 +215,13 @@ Use a `z.codec(...)` as the definition's schema when external input and Parts ha
 
 ## Every kind declares its identity key
 
-Every `defineKind` requires `key`, including primitive Parts. Use `key: id => id` for a normalized string identifier. Supported keys are strings, numbers, bigints, booleans, `null`, and `undefined`. Symbols are not semantic keys.
+Every `defineSeal` requires `key`, including primitive Parts. Use `key: id => id` for a normalized string identifier. Supported keys are strings, numbers, bigints, booleans, `null`, and `undefined`. Symbols are not semantic keys.
 
 For structured Parts, choose a key that identifies the complete value:
 
 ```ts
-const Coordinate = defineKind({
-  kind: 'geo/coordinate',
+const Coordinate = defineSeal({
+  name: 'geo/coordinate',
   schema: z.object({ lat: z.number(), lng: z.number() }),
   key: p => `${p.lat}:${p.lng}`,
 }).seal();
@@ -238,8 +241,8 @@ Keys use `Object.is` value semantics: `0` and `-0` are distinct keys, and all `N
 A save function can require a minted batch containing validated IDs. The producer below requires a non-empty list and removes repeated users.
 
 ```ts
-const MembershipBatch = defineMinted({
-  kind: 'app/membership-batch',
+const MembershipBatch = defineMint({
+  name: 'app/membership-batch',
   mint: (input: { projectId: ProjectId; userIds: readonly UserId[] }) => {
     if (!ProjectId.is(input?.projectId) ||
         !Array.isArray(input?.userIds as unknown) ||
@@ -296,13 +299,13 @@ The library does not deep-freeze all private Parts merely because they are seale
 
 ## Definition identity and development
 
-A sealed value belongs to exactly one completed definition instance. `Kind.is(value)` is true only for that instance's values. Two definitions may use the same `kind` string. They are unrelated, and their values are foreign to each other. The string is a diagnostic label, not runtime identity.
+A sealed value belongs to exactly one completed definition instance. `Kind.is(value)` is true only for that instance's values. Two definitions may use the same `name` string. They are unrelated, and their values are foreign to each other. The string is a diagnostic label, not runtime identity.
 
 Re-executing a definition module creates a new definition instance. Older values still work, but the new codec rejects them with a diagnostic. After editing a definition, refresh the page or restart the process to clear preserved state.
 
 Next.js dev, Vite, Vitest, Jest, and Node's test runner need no package-specific configuration. The package holds no global state that can survive a module reset. See [framework guidance](docs/frameworks.md).
 
-TypeScript cannot generate a fresh nominal type for each factory call. Literal kind names distinguish types statically, but two definitions using the same name can have compatible TypeScript types. Runtime brands and codecs remain authoritative.
+TypeScript cannot generate a fresh nominal type for each factory call. Literal definition names distinguish types statically, but two definitions using the same name can have compatible TypeScript types. Runtime brands and codecs remain authoritative.
 
 ## React and representation boundaries
 

@@ -51,20 +51,20 @@ try {
     [
       '--input-type=module',
       '-e',
-      "import {defineKind} from 'sealed-semantics'; import {z} from 'zod'; const K=defineKind({ key: parts => parts,kind:'consumer/no-test-peer',\nschema:z.string(),}).seal(); if (!K.is(K.codec.parse('x'))) throw Error();",
+      "import {defineSeal} from 'sealed-semantics'; import {z} from 'zod'; const K=defineSeal({ key: parts => parts,name:'consumer/no-test-peer',\nschema:z.string(),}).seal(); if (!K.is(K.codec.parse('x'))) throw Error();",
     ],
     temp,
   );
   // Documentation validation runs on import without fast-check.
   writeFileSync(
     join(temp, 'docs-good.mjs'),
-    `import {defineKind,defineMinted} from 'sealed-semantics';
+    `import {defineSeal,defineMint} from 'sealed-semantics';
     import {z} from 'zod';
-    export const Id=defineKind({ key: parts => parts,kind:'consumer/documented',
+    export const Id=defineSeal({ key: parts => parts,name:'consumer/documented',
 schema:z.string(),
 })
       .docs({examples:[{input:'x',encoded:'x'}]}).seal();
-    export const Plan=defineMinted({kind:'consumer/documented-plan',
+    export const Plan=defineMint({name:'consumer/documented-plan',
 mint:i=>({ok:true,value:i})}).docs({}).seal();
   `,
   );
@@ -76,10 +76,10 @@ mint:i=>({ok:true,value:i})}).docs({}).seal();
   assert.deepEqual(Object.keys(manifest.exports).sort(), ['.', './laws']);
   writeFileSync(
     join(temp, 'docs-bad.mjs'),
-    `import {defineMinted} from 'sealed-semantics';
-    export const Missing=defineMinted({kind:'consumer/missing-docs',
+    `import {defineMint} from 'sealed-semantics';
+    export const Missing=defineMint({name:'consumer/missing-docs',
 mint:i=>({ok:true,value:i})}).seal();
-    export const Incomplete=defineMinted({kind:'consumer/missing-view-docs',
+    export const Incomplete=defineMint({name:'consumer/missing-view-docs',
 mint:i=>({ok:true,value:i})}).view({text:p=>p}).docs({view:{}}).seal();
   `,
   );
@@ -173,46 +173,46 @@ mint:i=>({ok:true,value:i})}).view({text:p=>p}).docs({view:{}}).seal();
  import * as b from 'sealed-semantics-copy';
  import { assertValueLaws } from 'sealed-semantics/laws';
  const {z: foreignZod}=await import('zod-copy');
- assert.deepEqual(Object.keys(a).sort(), ['defineKind','defineMinted']);
- const ForeignSchema=a.defineKind({ key: parts => parts,kind:'consumer/foreign-schema',
+ assert.deepEqual(Object.keys(a).sort(), ['defineMint','defineSeal']);
+ const ForeignSchema=a.defineSeal({ key: parts => parts,name:'consumer/foreign-schema',
 schema:foreignZod.string(),
 }).seal();
  assert(ForeignSchema.is(ForeignSchema.codec.parse('x')));
- const ABuilder=a.defineKind({ key: parts => parts,kind:'consumer/id',schema:z.string()});
+ const ABuilder=a.defineSeal({ key: parts => parts,name:'consumer/id',schema:z.string()});
  const A=ABuilder.view({text:p=>p}).seal();
- const B=b.defineKind({ key: parts => parts,kind:'consumer/other-id',
+ const B=b.defineSeal({ key: parts => parts,name:'consumer/other-id',
 schema:z.string(),
 }).seal();
  const x=A.codec.parse('x'),y=A.codec.parse('x');
- const Same=b.defineKind({ key: parts => parts,kind:'consumer/id',schema:z.string()}).seal();
+ const Same=b.defineSeal({ key: parts => parts,name:'consumer/id',schema:z.string()}).seal();
  assert(!Same.is(x)); assert.notEqual(Same.codec.parse('x'),x);
  assert.throws(()=>z.encode(Same.codec,x),/different definition instance.*re-executed/);
 
  assert(!B.is(x)); assert(!A.is(B.codec.parse('x')));
  assert.equal(x,y); assert.equal(new Map([[x,1]]).get(y),1);
  assert.equal(new Set([x,y]).size,1);
- const D=a.defineMinted({kind:'consumer/proof',
+ const D=a.defineMint({name:'consumer/proof',
 mint:i=>({ok:true,value:i})}).seal();
  const p=D.mint(1).value,q=D.mint(1).value;
- const OtherD=b.defineMinted({kind:'consumer/proof',mint:i=>({ok:true,value:i})}).seal();
+ const OtherD=b.defineMint({name:'consumer/proof',mint:i=>({ok:true,value:i})}).seal();
  const foreignEvent=OtherD.mint(1).value;
  assert(!OtherD.is(p));
  assert.throws(()=>foreignEvent.debug.call(p),/debug.*different definition instance.*two copies/);
- const EventHolder=b.defineMinted({kind:'consumer/event-holder',mint:i=>({ok:true,value:i})}).view({event:p=>p}).seal();
+ const EventHolder=b.defineMint({name:'consumer/event-holder',mint:i=>({ok:true,value:i})}).view({event:p=>p}).seal();
  const heldEvent=EventHolder.mint(p).value;
  assert.throws(()=>heldEvent.view.event,/unsupported object/);
  assert.equal(EventHolder.mint(foreignEvent).value.view.event,foreignEvent);
 
  assert.notEqual(p,q); assert.equal(new Set([p,q]).size,2);
- const ForeignComposite=b.defineKind({kind:'consumer/foreign-composite',schema:z.object({id:A.codec}),key:p=>p.id.view.text}).seal();
+ const ForeignComposite=b.defineSeal({name:'consumer/foreign-composite',schema:z.object({id:A.codec}),key:p=>p.id.view.text}).seal();
  assert.throws(()=>ForeignComposite.codec.parse({id:'x'}),/keyed Parts.*unsupported object/);
- const Composite=a.defineKind({kind:'consumer/composite',
+ const Composite=a.defineSeal({name:'consumer/composite',
 schema:z.object({id:A.codec}),key:p=>p.id.view.text,
 }).view({id:p=>p.id}).seal();
  const c=Composite.codec.parse({id:'x'}),d=Composite.codec.parse({id:'x'});
  assert(A.is(c.view.id));assert.equal(c,d); assert.equal(new Map([[c,1]]).get(d),1);
  assert(Object.isFrozen(c.view));assert.equal(Object.getPrototypeOf(c.view),null);
- assert.deepEqual(Object.keys(a).sort(),['defineKind','defineMinted']);
+ assert.deepEqual(Object.keys(a).sort(),['defineMint','defineSeal']);
  assert.notEqual(ABuilder.seal(),A);
  assert.throws(()=>ABuilder.docs({examples:[{input:'x',encoded:'bad'}]}).seal(), /encoded does not match/);
  assertValueLaws(A,{validWire:fc.string()});

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { foreignValue } from './sealed-leaf.js';
 export function makeWireCodec<W extends z.ZodType, V>(
   schema: W,
-  kind: string,
+  definitionName: string,
   seal: (parts: z.output<W>) => V,
   is: (x: unknown) => boolean,
   read: (x: V) => z.output<W>,
@@ -10,7 +10,8 @@ export function makeWireCodec<W extends z.ZodType, V>(
   return z.codec(
     schema,
     z.custom<V>(is, {
-      error: (issue) => foreignValue(kind, issue.input, 'codec encode/validation'),
+      error: (issue) =>
+        foreignValue(definitionName, issue.input, 'codec encode/validation'),
     }),
     {
       decode: seal,

@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
 import * as api from '../src/index.js';
-import { defineKind, defineMinted } from '../src/index.js';
+import { defineSeal, defineMint } from '../src/index.js';
 import { stableWireKey } from '../src/keying.js';
 import {
   UserId,
@@ -14,7 +14,7 @@ import {
 import { ok } from './result.js';
 
 test('only Zod exposes boundary operations; private brands reject forgery and constructor recovery', () => {
-  assert.deepEqual(Object.keys(api).sort(), ['defineKind', 'defineMinted']);
+  assert.deepEqual(Object.keys(api).sort(), ['defineMint', 'defineSeal']);
   const value = UserId.codec.parse('usr_0123456789abcdef');
   for (const name of [
     'parse',
@@ -41,9 +41,9 @@ test('only Zod exposes boundary operations; private brands reject forgery and co
 });
 
 test('primitive kinds infer Parts and validate through all Zod boundary paths', async () => {
-  const Id = defineKind({
+  const Id = defineSeal({
     key: (parts) => parts,
-    kind: 'runtime/identity',
+    name: 'runtime/identity',
     schema: z.string().min(2),
   })
     .view({ length: (text) => text.length })
@@ -84,9 +84,9 @@ test('schema codecs normalize inputs, validate decoded Parts, and encode nested 
 });
 
 test('Zod refinements and codec issues remain Zod errors in both directions', () => {
-  const Limited = defineKind({
+  const Limited = defineSeal({
     key: (parts) => parts,
-    kind: 'runtime/refined',
+    name: 'runtime/refined',
     schema: z.codec(z.string(), z.number().min(0), {
       decode: (text, ctx) => {
         if (text === 'bad') {
@@ -115,8 +115,8 @@ test('Zod refinements and codec issues remain Zod errors in both directions', ()
 });
 
 test('instances, kinds, prototypes, and lazy view facades have frozen surfaces', () => {
-  const Parts = defineKind({
-    kind: 'runtime/view',
+  const Parts = defineSeal({
+    name: 'runtime/view',
     key: (p) => p.rows.join(','),
     schema: z.object({ rows: z.array(z.number()) }),
   })
@@ -169,12 +169,12 @@ test('minted construction preserves errors, identity, and producer-owned copies'
   assert.throws(() => JSON.stringify(a.value), /no external representation/);
   assert.deepEqual(a.value.view.rows, []);
   const error = {
-    kind: 'runtime/rejection',
+    name: 'runtime/rejection',
     reason: 'invalid_input' as const,
     issues: ['No'],
   };
-  const Rejected = defineMinted({
-    kind: 'runtime/rejection',
+  const Rejected = defineMint({
+    name: 'runtime/rejection',
     mint: () => ({ ok: false as const, error }),
   }).seal();
   const result = Rejected.mint(undefined);
@@ -183,17 +183,17 @@ test('minted construction preserves errors, identity, and producer-owned copies'
 });
 
 test('allocation runs the codec and reports Zod errors', () => {
-  const Allocated = defineKind({
+  const Allocated = defineSeal({
     key: (parts) => parts,
-    kind: 'runtime/allocated',
+    name: 'runtime/allocated',
     schema: z.string().min(2),
     allocate: (s: string) => s,
   }).seal();
   assert(Allocated.is(Allocated.allocate('ab')));
   assert.throws(() => Allocated.allocate('x'), z.ZodError);
-  const Zero = defineKind({
+  const Zero = defineSeal({
     key: (parts) => parts,
-    kind: 'runtime/zero',
+    name: 'runtime/zero',
     schema: z.string(),
     allocate: () => 'ok',
   }).seal();
@@ -232,17 +232,17 @@ test('documentation wire comparison validates JSON and preserves negative zero',
 });
 
 test('one-way transforms require a codec for encoding; async schemas use Zod async APIs', async () => {
-  const OneWay = defineKind({
+  const OneWay = defineSeal({
     key: (parts) => parts,
-    kind: 'runtime/one-way',
+    name: 'runtime/one-way',
     schema: z.string().transform((s) => s.length),
   }).seal();
   const value = OneWay.codec.parse('abc');
   assert(OneWay.is(value));
   assert.throws(() => z.encode(OneWay.codec, value), /unidirectional transform/i);
-  const Async = defineKind({
+  const Async = defineSeal({
     key: (parts) => parts,
-    kind: 'runtime/async',
+    name: 'runtime/async',
     schema: z.string().refine(async (s) => s.length > 0),
   })
     .view({ count: (s) => s.length })

@@ -6,7 +6,7 @@ import { makeWireCodec, parseCodec } from './zod-codec.js';
 import type {
   ProducerResult,
   JsonSchema,
-  LiteralKind,
+  LiteralName,
   ConfigurationError,
   IdentityOptions,
   ValueBuilder,
@@ -36,10 +36,8 @@ function builder(
   let sealing = false;
   return Object.freeze({
     view: (projections: Record<string, (parts: any) => unknown>) => {
-      if (metadata !== undefined)
-        throw new TypeError('Configure .view() before .docs().');
       validateView(projections);
-      return builder(complete, Object.freeze({ ...projections }));
+      return builder(complete, Object.freeze({ ...projections }), metadata);
     },
     docs: (next: Metadata) => {
       if (next === undefined) throw new TypeError('Documentation must be an object');
@@ -61,23 +59,23 @@ function builder(
 }
 /**
  * Completes semantic values whose identity is reference identity within one definition.
- * The kind string is a label. Same-label definitions are unrelated at runtime.
+ * The definition name is a label. Same-label definitions are unrelated at runtime.
  */
-export function defineKind<
+export function defineSeal<
   const K extends string,
   W extends z.ZodType,
   A extends unknown[] = never,
   const Keys extends PropertyKey = never,
 >(
   spec: {
-    kind: LiteralKind<K>;
+    name: LiteralName<K>;
     schema: W & JsonSchema<W>;
     allocate?: (...args: A) => NoInfer<z.input<W>>;
     debug?: (parts: NoInfer<z.output<W>>) => string;
   } & IdentityOptions<NoInfer<z.output<W>>> &
     Record<Keys, unknown> & {
       [
-        N in Exclude<Keys, 'kind' | 'schema' | 'allocate' | 'debug' | 'key'>
+        N in Exclude<Keys, 'name' | 'schema' | 'allocate' | 'debug' | 'key'>
       ]: ConfigurationError<
         N extends string
           ? `Unknown definition option "${N}". Use .view(...) for projections and .docs(...) for documentation.`
@@ -91,11 +89,11 @@ export function defineKind<
   [A] extends [never] ? {} : { allocate: (...args: A) => unknown }
 > {
   validateDefinition(spec, true);
-  const { kind, schema, debug, allocate, key } = spec;
+  const { name, schema, debug, allocate, key } = spec;
   return builder((view, metadata) => {
-    const bridge = makeSemanticSeal<z.output<W>>(kind, { debug, view, key });
-    const codec = makeWireCodec(schema, kind, bridge.seal, bridge.is, bridge.read);
-    const result = { kind, is: bridge.is, codec };
+    const bridge = makeSemanticSeal<z.output<W>>(name, { debug, view, key });
+    const codec = makeWireCodec(schema, name, bridge.seal, bridge.is, bridge.read);
+    const result = { name, is: bridge.is, codec };
     if (allocate)
       Object.assign(result, {
         allocate: (...args: A) => parseCodec(codec, allocate(...args)),
@@ -120,18 +118,18 @@ type MintError<R> = R extends { ok: false; error: infer E } ? E : never;
  * Each successful mint is a distinct event owned by this definition instance.
  * Same-label definitions are unrelated. Establishes construction, not external facts.
  */
-export function defineMinted<
+export function defineMint<
   const K extends string,
   I,
   R extends ProducerResult<unknown, unknown>,
   const Keys extends PropertyKey = never,
 >(
   spec: {
-    kind: LiteralKind<K>;
+    name: LiteralName<K>;
     mint: (input: I) => R;
     debug?: (parts: NoInfer<MintParts<R>>) => string;
   } & Record<Keys, unknown> & {
-      [N in Exclude<Keys, 'kind' | 'mint' | 'debug'>]: ConfigurationError<
+      [N in Exclude<Keys, 'name' | 'mint' | 'debug'>]: ConfigurationError<
         N extends 'allocate' | 'key' | 'schema'
           ? `Minted definitions cannot configure ${N}. Only semantic definitions support this option.`
           : N extends string
@@ -141,11 +139,11 @@ export function defineMinted<
     },
 ): MintedBuilder<K, I, MintParts<R>, MintError<R>> {
   validateDefinition(spec, false);
-  const { kind, mint, debug } = spec;
+  const { name, mint, debug } = spec;
   return builder((view, metadata) => {
-    const bridge = makeMintedSeal<MintParts<R>>(kind, { debug, view });
+    const bridge = makeMintedSeal<MintParts<R>>(name, { debug, view });
     const result = {
-      kind,
+      name,
       is: bridge.is,
       mint: (input: I) => {
         const produced = mint(input);

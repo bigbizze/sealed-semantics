@@ -21,13 +21,13 @@ type MintedLawOptions<K extends Minted> = {
 type Checked<P, A> = P & {
   [N in Exclude<keyof P, keyof A>]: ConfigurationError<
     N extends 'allocateArgs'
-      ? 'allocateArgs requires an allocator in defineKind(...).'
+      ? 'allocateArgs requires an allocator in defineSeal(...).'
       : 'Unknown law option. Use an option supported by this kind.'
   >;
 };
 
 function shared(kind: AnyKind, value: any): void {
-  assert(Boolean(kind.is(value)), foreignValue(kind.kind, value, 'laws'));
+  assert(Boolean(kind.is(value)), foreignValue(kind.name, value, 'laws'));
   for (const x of [kind, value, Object.getPrototypeOf(value)])
     assert(Object.isFrozen(x));
   assert(!kind.is(Object.create(Object.getPrototypeOf(value))));

@@ -4,7 +4,6 @@ const reservedFields = new Set([
   'docs',
   'documentation',
   'view',
-  'kind',
   'is',
   'mint',
   'schema',
@@ -72,16 +71,16 @@ export function validateDefinition(spec: unknown, semantic: boolean): void {
   keys(
     input,
     semantic
-      ? ['kind', 'schema', 'allocate', 'key', 'debug']
-      : ['kind', 'mint', 'debug'],
+      ? ['name', 'schema', 'allocate', 'key', 'debug']
+      : ['name', 'mint', 'debug'],
     'definition',
   );
   if (
-    !Object.hasOwn(input, 'kind') ||
-    typeof input.kind !== 'string' ||
-    input.kind.trim().length === 0
+    !Object.hasOwn(input, 'name') ||
+    typeof input.name !== 'string' ||
+    input.name.trim().length === 0
   ) {
-    throw new TypeError('kind must be a non-empty string literal');
+    throw new TypeError('name must be a non-empty string literal');
   }
   if (!semantic) callback(input, 'mint', 'definition');
   else callback(input, 'key', 'definition');

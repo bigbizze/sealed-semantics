@@ -10,6 +10,6 @@ Public types expose only configured capabilities. Generic checks explain invalid
 - Documentation requires typed input/output examples and exact projection descriptions.
 - Law options include allocation generators only when allocation is configured.
 
-Configuration rejects unknown keys, accessors, hidden properties, symbol keys, and malformed callbacks. A kind label must be a non-empty string literal.
+Configuration rejects unknown keys, accessors, hidden properties, symbol keys, and malformed callbacks. A definition name must be a non-empty string literal.
 
 Foreign codec values report the receiving definition and attempted operation. A matching label explains that module re-execution or duplicate installation may have created another definition instance. `is()` remains a boolean predicate.

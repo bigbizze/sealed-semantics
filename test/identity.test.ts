@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { inspect } from 'node:util';
 import { spawnSync } from 'node:child_process';
 import { z } from 'zod';
-import { defineKind, defineMinted } from '../src/index.js';
+import { defineSeal, defineMint } from '../src/index.js';
 import { cleanup, makeInterner } from '../src/interner.js';
 import type { SemanticKey } from '../src/types.js';
 
 test('normalized Parts give reference identity, native collection lookup, and allocation identity', () => {
-  const Id = defineKind({
+  const Id = defineSeal({
     key: (parts) => parts,
-    kind: 'identity/id',
+    name: 'identity/id',
     schema: z.string().toLowerCase(),
     allocate: (s: string) => s,
   }).seal();
@@ -23,9 +23,9 @@ test('normalized Parts give reference identity, native collection lookup, and al
   assert.equal(Id.codec.parse(z.encode(Id.codec, a)), a);
   for (let i = 0; i < 100; i++) Id.codec.parse(`usr_${i}`);
   assert.equal(Id.codec.parse('USR_1'), a);
-  const Other = defineKind({
+  const Other = defineSeal({
     key: (parts) => parts,
-    kind: 'identity/other',
+    name: 'identity/other',
     schema: z.string(),
   }).seal();
   assert.notEqual(Other.codec.parse('usr_1'), a);
@@ -33,32 +33,32 @@ test('normalized Parts give reference identity, native collection lookup, and al
 
 test('all primitive key types use Object.is identity after schema conversion', () => {
   const values = [0, -0, NaN, 1n, true, false, null, undefined, 'x'] as const;
-  const K = defineKind({
+  const K = defineSeal({
     key: (parts) => parts,
-    kind: 'identity/primitives',
+    name: 'identity/primitives',
     schema: z.string().transform((s) => values[Number(s)]),
   }).seal();
   assert.notEqual(K.codec.parse('0'), K.codec.parse('1'));
   for (let i = 0; i < values.length; i++)
     assert.equal(K.codec.parse(String(i)), K.codec.parse(String(i)));
   assert.notEqual(K.codec.parse('4'), K.codec.parse('5'));
-  const SymbolParts = defineKind({
+  const SymbolParts = defineSeal({
     key: (parts: symbol) => parts,
-    kind: 'identity/symbol',
+    name: 'identity/symbol',
     schema: z.string().transform(() => Symbol()),
   } as any).seal();
   assert.throws(() => SymbolParts.codec.parse('x'), /semantic key must/);
 });
 
 test('keyed Parts are validated on first decode and collisions never substitute private state', () => {
-  const C = defineKind({
-    kind: 'identity/coordinate',
+  const C = defineSeal({
+    name: 'identity/coordinate',
     schema: z.object({ lat: z.number(), lng: z.number() }),
     key: (p) => `${p.lat}:${p.lng}`,
   }).seal();
   assert.equal(C.codec.parse({ lat: 1, lng: 2 }), C.codec.parse({ lng: 2, lat: 1 }));
-  const Bad = defineKind({
-    kind: 'identity/bad-key',
+  const Bad = defineSeal({
+    name: 'identity/bad-key',
     schema: z.object({ id: z.string(), version: z.number() }),
     key: () => 'same',
   }).seal();
@@ -99,8 +99,8 @@ test('keyed Parts are validated on first decode and collisions never substitute 
   cycle.self = cycle;
   invalid.push(cycle);
   invalid.forEach((value, i) => {
-    const K = defineKind({
-      kind: `identity/invalid-${i}`,
+    const K = defineSeal({
+      name: `identity/invalid-${i}`,
       schema: z.string().transform(() => value),
       key: () => 'x',
     }).seal();
@@ -109,12 +109,12 @@ test('keyed Parts are validated on first decode and collisions never substitute 
   assert.equal(reads, 0);
   for (const schema of [z.string(), z.object({ n: z.number() })]) {
     assert.throws(
-      () => defineKind({ kind: 'identity/missing-runtime-key', schema } as any),
+      () => defineSeal({ name: 'identity/missing-runtime-key', schema } as any),
       /definition.key must be a function/,
     );
   }
-  const Wrong = defineKind({
-    kind: 'identity/wrong-runtime-key',
+  const Wrong = defineSeal({
+    name: 'identity/wrong-runtime-key',
     schema: z.object({ n: z.number() }),
     key: () => ({}),
   } as any).seal();
@@ -122,8 +122,8 @@ test('keyed Parts are validated on first decode and collisions never substitute 
 });
 
 test('collision guard supports Dates and sealed leaves without treating opaque lookalikes as data', () => {
-  const DateKind = defineKind({
-    kind: 'identity/date',
+  const DateKind = defineSeal({
+    name: 'identity/date',
     schema: z.codec(z.string(), z.date(), {
       decode: (s) => new Date(s),
       encode: (d) => d.toISOString(),
@@ -135,15 +135,15 @@ test('collision guard supports Dates and sealed leaves without treating opaque l
   const a = DateKind.codec.parse('2020-01-01');
   assert.equal(a, DateKind.codec.parse('2020-01-01T00:00:00.000Z'));
   assert.equal(a.view.timestamp, 1577836800000);
-  const Event = defineMinted({
-    kind: 'identity/event',
+  const Event = defineMint({
+    name: 'identity/event',
     mint: () => ({ ok: true, value: 0 }),
   }).seal();
   const one = Event.mint(undefined),
     two = Event.mint(undefined);
   assert(one.ok && two.ok);
-  const Holder = defineKind({
-    kind: 'identity/holder',
+  const Holder = defineSeal({
+    name: 'identity/holder',
     schema: z
       .string()
       .transform((s) => ({ child: s === 'one' ? one.value : two.value })),
@@ -173,8 +173,8 @@ test('stale cleanup cannot delete a replacement and current cleanup releases its
 
 test('mint success is an event and inspection does not expose Parts or call debug', () => {
   let debugCalls = 0;
-  const M = defineMinted({
-    kind: 'identity/minted',
+  const M = defineMint({
+    name: 'identity/minted',
     mint: (input: string) => ({ ok: true, value: { input } }),
     debug: () => {
       debugCalls++;
@@ -216,15 +216,15 @@ test('missing weak runtime facilities fail at import with actionable diagnostics
 });
 
 test('same-name definitions are independent and foreign diagnostics explain the attempted operation', () => {
-  const A = defineKind({ key: (parts) => parts, kind: 'dup/id', schema: z.string() })
+  const A = defineSeal({ key: (parts) => parts, name: 'dup/id', schema: z.string() })
     .view({ text: (p) => p })
     .seal();
-  const B = defineKind({ key: (parts) => parts, kind: 'dup/id', schema: z.string() })
+  const B = defineSeal({ key: (parts) => parts, name: 'dup/id', schema: z.string() })
     .view({ text: (p) => p })
     .seal();
-  const C = defineKind({
+  const C = defineSeal({
     key: (parts) => parts,
-    kind: 'other/id',
+    name: 'other/id',
     schema: z.string(),
   }).seal();
   const a = A.codec.parse('x');
@@ -238,7 +238,7 @@ test('same-name definitions are independent and foreign diagnostics explain the 
   );
   assert.throws(
     () => z.encode(C.codec, a as any),
-    /other\/id.*different kind \(dup\/id\)/,
+    /other\/id.*different definition \(dup\/id\)/,
   );
   const get = Object.getOwnPropertyDescriptor(
     Object.getPrototypeOf(B.codec.parse('x')),
@@ -246,12 +246,12 @@ test('same-name definitions are independent and foreign diagnostics explain the 
   )!.get!;
   assert.throws(() => get.call(a), /view.*dup\/id.*different definition/);
   assert.equal(a.view.text, 'x');
-  const M = defineMinted({
-    kind: 'dup/mint',
+  const M = defineMint({
+    name: 'dup/mint',
     mint: () => ({ ok: true, value: 1 }),
   }).seal();
-  const N = defineMinted({
-    kind: 'dup/mint',
+  const N = defineMint({
+    name: 'dup/mint',
     mint: () => ({ ok: true, value: 1 }),
   }).seal();
   const m = M.mint(undefined),
@@ -263,7 +263,7 @@ test('same-name definitions are independent and foreign diagnostics explain the 
     /debug.*dup\/mint.*different definition/,
   );
   assert.equal(m.value.debug(), 'dup/mint');
-  const symbol = Symbol.for('sealed-semantics.kind');
+  const symbol = Symbol.for('sealed-semantics.name');
   assert.equal((a as any)[symbol], 'dup/id');
   const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(a), symbol)!;
   assert.equal(descriptor.enumerable, false);
@@ -276,9 +276,9 @@ test('numeric identity and encoding preserve both zero signs in either parse ord
     [0, -0],
     [-0, 0],
   ]) {
-    const N = defineKind({
+    const N = defineSeal({
       key: (parts) => parts,
-      kind: 'identity/signed-zero',
+      name: 'identity/signed-zero',
       schema: z.number(),
     }).seal();
     const a = N.codec.parse(inputs[0]),
@@ -289,9 +289,9 @@ test('numeric identity and encoding preserve both zero signs in either parse ord
     assert.equal(N.codec.parse(inputs[0]), a);
     assert.equal(N.codec.parse(inputs[1]), b);
   }
-  const NaNs = defineKind({
+  const NaNs = defineSeal({
     key: (parts) => parts,
-    kind: 'identity/nan',
+    name: 'identity/nan',
     schema: z.nan(),
   }).seal();
   const n = NaNs.codec.parse(NaN);
@@ -300,8 +300,8 @@ test('numeric identity and encoding preserve both zero signs in either parse ord
 });
 
 test('explicit numeric keys distinguish zero signs while collision assertions remain active', () => {
-  const K = defineKind({
-    kind: 'identity/explicit-zero',
+  const K = defineSeal({
+    name: 'identity/explicit-zero',
     schema: z.object({ n: z.number() }),
     key: (p) => p.n,
   }).seal();
@@ -313,8 +313,8 @@ test('explicit numeric keys distinguish zero signs while collision assertions re
 });
 
 test('primitive key collisions reject unnormalized Parts', () => {
-  const K = defineKind({
-    kind: 'identity/primitive-collision',
+  const K = defineSeal({
+    name: 'identity/primitive-collision',
     schema: z.string(),
     key: (s) => s.toLowerCase(),
   }).seal();

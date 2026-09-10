@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { pathToFileURL } from 'node:url';
 import { z } from 'zod';
-import { defineMinted, type ValueOf } from 'sealed-semantics';
+import { defineMint, type ValueOf } from 'sealed-semantics';
 import { UserId, ProjectId } from '../definitions/index.ts';
 export interface MembershipInput {
   userId: UserId;
@@ -9,8 +9,8 @@ export interface MembershipInput {
 }
 
 /** A local plan to associate a user with a project; it does not grant access. */
-export const PreparedMembership = defineMinted({
-  kind: 'sealed-semantics-test/prepared-membership',
+export const PreparedMembership = defineMint({
+  name: 'sealed-semantics-test/prepared-membership',
   mint: (input: MembershipInput) => {
     // Also reject raw strings and wrong-kind objects from JavaScript callers.
     if (!UserId.is(input?.userId) || !ProjectId.is(input?.projectId)) {
@@ -44,8 +44,8 @@ export type PreparedMembership = ValueOf<typeof PreparedMembership>;
 // saveMembershipBatch accepts this type so every caller must first pass these checks:
 // at least one plan, all for the same project, with only one plan per user.
 // Store a new array. Its view is cached and deeply frozen.
-export const MembershipBatch = defineMinted({
-  kind: 'sealed-semantics-test/examples/membership-batch',
+export const MembershipBatch = defineMint({
+  name: 'sealed-semantics-test/examples/membership-batch',
   mint: (plans: readonly PreparedMembership[]) => {
     if (
       // Check runtime input without narrowing the typed readonly array to any[].
