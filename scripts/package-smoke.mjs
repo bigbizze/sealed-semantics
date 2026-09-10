@@ -156,6 +156,43 @@ mint:i=>({ok:true,value:i})}).view({text:p=>p}).docs({view:{}}).seal();
     ],
     temp,
   );
+  // Exported inferred definitions must emit portable declarations using root exports.
+  writeFileSync(
+    join(temp, 'definitions.ts'),
+    `import { z } from 'zod';
+import { defineSeal, defineMint } from 'sealed-semantics';
+export const Id = defineSeal({name:'emit/id', schema:z.string(), key:s=>s}).seal();
+export const Bytes = defineSeal({name:'emit/bytes', schema:z.string(), key:s=>s})
+  .view({text:s=>s}).copy({bytes:s=>new TextEncoder().encode(s)}).seal();
+export const Mint = defineMint({name:'emit/mint', mint:(input:string)=>({ok:true as const,value:input})})
+  .view({text:s=>s}).seal();
+`,
+  );
+  writeFileSync(
+    join(temp, 'tsconfig.emit.json'),
+    JSON.stringify({
+      extends: './tsconfig.json',
+      compilerOptions: { declaration: true, emitDeclarationOnly: true },
+      include: ['definitions.ts'],
+    }),
+  );
+  for (const compiler of ['typescript', 'typescript-5-7']) {
+    const output = join(temp, 'emitted-' + compiler);
+    run(
+      process.execPath,
+      [
+        join(root, 'node_modules', compiler, 'bin/tsc'),
+        '-p',
+        join(temp, 'tsconfig.emit.json'),
+        '--outDir',
+        output,
+      ],
+      temp,
+    );
+    const declaration = readFileSync(join(output, 'definitions.d.ts'), 'utf8');
+    assert(declaration.includes('import("sealed-semantics").SealedValue'), declaration);
+    assert(!/sealed-semantics\/(?:dist|src)|\bProof\b/.test(declaration), declaration);
+  }
   cpSync(
     join(temp, 'node_modules/sealed-semantics'),
     join(temp, 'node_modules/sealed-semantics-copy'),
@@ -232,7 +269,7 @@ schema:z.object({id:A.codec}),key:p=>p.id.view.text,
     temp,
   );
   console.log(
-    `Package smoke passed with Zod ${process.argv[2] ?? '4.1.0'}: README, declaration constraints, cross-copy brands and native collections, test-only entry, exports, synchronous docs validation.`,
+    `Package smoke passed with Zod ${process.argv[2] ?? '4.1.0'}: README, portable declaration emit (current TypeScript and 5.7), declaration constraints, cross-copy brands and native collections, test-only entry, exports, synchronous docs validation.`,
   );
   console.log(`Tarball: ${join(root, metadata.filename)}`);
 } catch (error) {
