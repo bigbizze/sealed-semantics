@@ -4,6 +4,7 @@ import * as fc from 'fast-check';
 import type { z } from 'zod';
 import { encodeWire, parseCodec } from './zod-codec.js';
 import { foreignValue } from './sealed-leaf.js';
+import { copyGraph } from './copy.js';
 import { dataGraph } from './structure.js';
 import type { AnyKind, ProducerResult, Proof, ConfigurationError } from './types.js';
 
@@ -37,6 +38,33 @@ function shared(kind: AnyKind, value: any): void {
   assert.throws(() => value.valueOf(), TypeError);
   assert.deepEqual(Object.keys(value), []);
   assert(!kind.is(structuredClone(value)));
+  if ('to' in value) {
+    assert.equal(value.to, value.to);
+    assert(Object.isFrozen(value.to));
+    assert.equal(Object.getPrototypeOf(value.to), null);
+    for (const name of Object.keys(value.to)) {
+      const first = value.to[name]();
+      const second = value.to[name]();
+      assert.deepEqual(first, second, `to.${name} must produce equivalent data`);
+      const nodes = copyGraph(first, `to.${name}`);
+      const otherNodes = new Set(copyGraph(second, `to.${name}`));
+      for (const node of nodes) {
+        assert(!otherNodes.has(node), `to.${name} must not share objects across calls`);
+        if (node instanceof ArrayBuffer && node.byteLength) {
+          const bytes = new Uint8Array(node);
+          bytes[0] = bytes[0]! ^ 255;
+        } else if (node instanceof Date) node.setTime(0);
+        else if (node instanceof Map) node.set('__law_probe__', true);
+        else if (node instanceof Set) node.add('__law_probe__');
+        else Reflect.set(node, '__law_probe__', true);
+      }
+      assert.deepEqual(
+        value.to[name](),
+        second,
+        `to.${name} mutations must not affect later conversions`,
+      );
+    }
+  }
   if ('view' in value) {
     assert.equal(value.view, value.view);
     assert(Object.isFrozen(value.view));

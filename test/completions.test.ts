@@ -26,7 +26,10 @@ const Viewed=ViewedBuilder.seal();
     const Domain=defineMint({name:'completion/domain',mint:()=>({ok:false as const,error:{code:'denied' as const,detail:'reason'}})}).seal();
     const rejected=Domain.mint(undefined);
     if(!rejected.ok) { rejected.error./*domainError*/; }
+    const Converted=BasicBuilder.to({bytes:s=>new TextEncoder().encode(s),date:()=>new Date()});
+    Converted.seal().codec.parse("x").to./*conversions*/;
     BasicBuilder.docs({ /*basic*/ }).seal();
+    Converted.docs({to:{ /*conversionDocs*/ }});
     FullBuilder.docs({ /*full*/ }).seal();
     MintedBuilder.docs({ /*minted*/ }).seal();
     ViewedBuilder.docs({ /*viewed*/ }).seal();
@@ -87,19 +90,21 @@ const Viewed=ViewedBuilder.seal();
     }
     const expected: Record<string, string[]> = {
       domainError: ['code', 'detail'],
+      conversions: ['bytes', 'date'],
+      conversionDocs: ['bytes', 'date'],
       definition: ['name', 'schema', 'allocate', 'key', 'debug'],
       primitiveDefinition: ['key', 'allocate', 'debug'],
       objectDefinition: ['key', 'allocate', 'debug'],
       instance: ['debug', 'toJSON', 'valueOf'],
       mintedKind: ['name', 'is', 'mint'],
       mintedDefinition: ['name', 'mint', 'debug'],
-      builder: ['view', 'docs', 'seal'],
+      builder: ['view', 'to', 'docs', 'seal'],
       name: ['name', 'is', 'codec'],
-      documentedBuilder: ['docs', 'view', 'seal'],
-      basic: ['description', 'examples', 'view'],
-      full: ['description', 'examples', 'view'],
-      minted: ['description', 'view'],
-      viewed: ['description', 'view'],
+      documentedBuilder: ['docs', 'view', 'to', 'seal'],
+      basic: ['description', 'examples', 'view', 'to'],
+      full: ['description', 'examples', 'view', 'to'],
+      minted: ['description', 'view', 'to'],
+      viewed: ['description', 'view', 'to'],
       names: ['suffix'],
       basicExample: ['input', 'encoded'],
       fullExample: ['input', 'encoded'],

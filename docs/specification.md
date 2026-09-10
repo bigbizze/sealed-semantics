@@ -22,7 +22,7 @@ The completed kind exposes `name`, `is`, `codec`, and `allocate` only when confi
 
 ## Completion
 
-Optional `.view(projections)` returns a builder with that projection map. Optional `.docs(metadata)` follows views. Every `.seal()` call creates a new frozen definition instance from the captured configuration. Calling `.seal()` recursively during completion fails. There is nothing to publish globally.
+Optional `.view(projections)` returns a builder with that projection map. Optional `.docs(metadata)` and `.to(conversions)` retain the other builder configuration. Every `.seal()` call creates a new frozen definition instance from the captured configuration. Calling `.seal()` recursively during completion fails. There is nothing to publish globally.
 
 A sealed value belongs to exactly one completed definition instance. `is` checks its ES private-field brand and returns a boolean. Definitions with the same label are permitted and unrelated. No global or module-level mutable table tracks names or instances.
 
@@ -44,4 +44,10 @@ Private Parts are logically immutable. The library does not freeze all Parts at 
 
 Identity is local to a completed definition and its JavaScript realm. Encode and decode across worker, server/client, network, or process boundaries. A module re-execution makes new definitions; previous values remain valid only for their original definitions. See [frameworks](frameworks.md).
 
-Builder `.docs()` and `.view()` calls may appear in either order. Both retain the other configuration. Final documentation must match the final projections when `.seal()` completes the definition; completed definitions expose no builder methods.
+Builder `.docs()`, `.view()`, and `.to()` calls may appear in any order. Both retain the other configuration. Final documentation must match the final projections when `.seal()` completes the definition; completed definitions expose no builder methods.
+
+## Owned conversions
+
+`.to(conversions)` declares bound zero-argument methods on a stable frozen null-prototype `value.to` facade. Each invocation evaluates the callback, validates its result, and deep-clones it. No result is cached. An empty conversion map exposes no `to` member. Completed definitions have no builder methods.
+
+Top-level outputs are restricted to Date, Map, Set, ArrayBuffer, standard typed arrays and DataView. Primitives, plain objects and arrays use view. Collection contents may recursively contain plain data or supported built-ins. Cycles, functions, promises, symbols, accessors, hidden properties, custom classes, shared memory and sealed leaves are rejected. Copies have mutable container types through `Owned<T>` and do not share objects with callback state or previous results. This conversion surface does not add minted serialization. See [byte conversions](bytes.md).

@@ -345,3 +345,41 @@ docsFirst.view({});
 docsFirst.docs({});
 // @ts-expect-error Completed definitions cannot be sealed again.
 mintDocsFirst.seal();
+
+const CopyExample = defineSeal({
+  name: 'copy/types',
+  schema: z.string(),
+  key: (s) => s,
+})
+  .to({
+    bytes: (s) => new TextEncoder().encode(s),
+    date: () => new Date(),
+    records: () => new Map([['x', { values: [1] as readonly number[] }]]),
+  })
+  .seal();
+const copies = CopyExample.codec.parse('x');
+copies.to.records().get('x')!.values.push(2);
+const bytes: Uint8Array = copies.to.bytes();
+const date: Date = copies.to.date();
+defineSeal({ name: 'copy/string', schema: z.string(), key: (s) => s }).to({
+  // @ts-expect-error Text belongs in view.
+  string: (s) => s,
+});
+defineSeal({ name: 'copy/object', schema: z.string(), key: (s) => s }).to({
+  // @ts-expect-error Plain data belongs in view.
+  data: (s) => ({ s }),
+});
+defineSeal({ name: 'copy/array', schema: z.string(), key: (s) => s }).to({
+  // @ts-expect-error Arrays belong in view.
+  data: (s) => [s],
+});
+defineSeal({ name: 'copy/function', schema: z.string(), key: (s) => s }).to({
+  // @ts-expect-error Functions cannot be copied.
+  data: () => () => 1,
+});
+defineSeal({ name: 'copy/shared', schema: z.string(), key: (s) => s }).to({
+  // @ts-expect-error Shared memory cannot be copied.
+  data: () => new SharedArrayBuffer(1),
+});
+// @ts-expect-error Sealing completes the builder.
+CopyExample.to({});

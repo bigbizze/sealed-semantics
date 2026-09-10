@@ -1,5 +1,5 @@
 import type { z } from 'zod';
-import { validateDefinition, validateView } from './definition.js';
+import { validateDefinition, validateView, validateConversions } from './definition.js';
 import { documentedKind, type Metadata } from './documentation.js';
 import { makeSemanticSeal, makeMintedSeal } from './seal.js';
 import { makeWireCodec, parseCodec } from './zod-codec.js';
@@ -15,6 +15,7 @@ import type {
 export type {
   ProducerResult,
   DeepReadonly,
+  Owned,
   ValueOf,
   JsonValue,
   AnyKind,
@@ -28,20 +29,31 @@ const ok = <T>(value: T): ProducerResult<T, never> => ({ ok: true, value });
 function builder(
   complete: (
     view: Record<string, (parts: any) => unknown>,
-    metadata?: Metadata,
+    metadata: Metadata | undefined,
+    conversions: Record<string, (parts: any) => unknown>,
   ) => object,
   view: Record<string, (parts: any) => unknown> = {},
   metadata?: Metadata,
+  conversions: Record<string, (parts: any) => unknown> = {},
 ): object {
   let sealing = false;
   return Object.freeze({
     view: (projections: Record<string, (parts: any) => unknown>) => {
       validateView(projections);
-      return builder(complete, Object.freeze({ ...projections }), metadata);
+      return builder(
+        complete,
+        Object.freeze({ ...projections }),
+        metadata,
+        conversions,
+      );
+    },
+    to: (next: Record<string, (parts: any) => unknown>) => {
+      validateConversions(next);
+      return builder(complete, view, metadata, Object.freeze({ ...next }));
     },
     docs: (next: Metadata) => {
       if (next === undefined) throw new TypeError('Documentation must be an object');
-      return builder(complete, view, next);
+      return builder(complete, view, next, conversions);
     },
     seal: () => {
       if (sealing)
@@ -50,7 +62,7 @@ function builder(
         );
       sealing = true;
       try {
-        return complete(view, metadata);
+        return complete(view, metadata, conversions);
       } finally {
         sealing = false;
       }
@@ -90,8 +102,8 @@ export function defineSeal<
 > {
   validateDefinition(spec, true);
   const { name, schema, debug, allocate, key } = spec;
-  return builder((view, metadata) => {
-    const bridge = makeSemanticSeal<z.output<W>>(name, { debug, view, key });
+  return builder((view, metadata, to) => {
+    const bridge = makeSemanticSeal<z.output<W>>(name, { debug, view, key, to });
     const codec = makeWireCodec(schema, name, bridge.seal, bridge.is, bridge.read);
     const result = { name, is: bridge.is, codec };
     if (allocate)
@@ -100,7 +112,7 @@ export function defineSeal<
       });
     const completed = documentedKind(
       result,
-      { semantic: true, view: Object.keys(view) },
+      { semantic: true, view: Object.keys(view), to: Object.keys(to) },
       metadata,
     );
     return completed;
@@ -140,8 +152,8 @@ export function defineMint<
 ): MintedBuilder<K, I, MintParts<R>, MintError<R>> {
   validateDefinition(spec, false);
   const { name, mint, debug } = spec;
-  return builder((view, metadata) => {
-    const bridge = makeMintedSeal<MintParts<R>>(name, { debug, view });
+  return builder((view, metadata, to) => {
+    const bridge = makeMintedSeal<MintParts<R>>(name, { debug, view, to });
     const result = {
       name,
       is: bridge.is,
@@ -155,6 +167,7 @@ export function defineMint<
       {
         semantic: false,
         view: Object.keys(view),
+        to: Object.keys(to),
       },
       metadata,
     );

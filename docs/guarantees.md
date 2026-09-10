@@ -20,6 +20,8 @@ Normalize Parts before computing an explicit key. The key is identity, not a col
 
 Keyed Parts permit primitives, dense arrays, plain data objects, Dates, and sealed leaves. They reject unsupported graphs on first decode. Dates compare by timestamp and remain logically immutable. Views cannot expose a Date; expose a timestamp or string instead.
 
+For byte-valued semantic data, use a canonical string such as lowercase hex. Typed arrays and Node buffers are not supported semantic Parts or view outputs. Convert strings to fresh mutable buffers at binary API boundaries; buffer reference identity does not carry semantic identity. See [digests and byte buffers](bytes.md).
+
 The library does not deep-freeze all private Parts merely because they are sealed. Anything exposed through `view` becomes deeply immutable. Parts must remain logically immutable after sealing. Copy caller-owned mutable containers before retaining them. Do not mutate retained aliases, the schema, or callback behavior after completion.
 
 Genuine graph leaves possess a package-local ES-private brand. A diagnostic kind symbol cannot authenticate a leaf. Forged objects and sealed values from another installed copy are rejected as leaves. Browser JavaScript has no general proxy detector, so producer code must not rely on adversarial proxies. This package is not a sandbox against malicious producer code or changes to JavaScript intrinsics.
@@ -47,3 +49,5 @@ Cloudflare enables these facilities by default for compatibility dates from 2025
 Only the laws entry imports Node facilities and fast-check. The core uses browser-compatible JavaScript and the Zod peer dependency.
 
 Every semantic definition declares `key(parts)`. Key identity follows `Object.is`: zero and negative zero are distinct, while NaN interns with itself when the schema permits it. Different Parts that share a live key are rejected as collisions. Normalize Parts in the schema first. Producer rejection values are domain-owned; the library preserves them unchanged and infers their exact type.
+
+`to` methods expose caller-owned mutable built-ins that cannot be view outputs: Date, Map, Set, ArrayBuffer, typed arrays and DataView. Every call validates and deep-clones the callback result. Objects in one returned graph are independent of private Parts and previous results; repeated calls do not promise reference identity. Plain data remains in view. See [copying restrictions](bytes.md).
