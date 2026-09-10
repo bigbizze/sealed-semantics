@@ -26,13 +26,13 @@ test('normalized Parts give reference identity, native collection lookup, and al
   assert.notEqual(Other.codec.parse('usr_1'), a);
 });
 
-test('all primitive key types use SameValueZero after schema conversion', () => {
+test('all primitive key types use Object.is identity after schema conversion', () => {
   const values = [0, -0, NaN, 1n, true, false, null, undefined, 'x'] as const;
   const K = defineKind({
     kind: 'identity/primitives',
     schema: z.string().transform((s) => values[Number(s)]),
   }).seal();
-  assert.equal(K.codec.parse('0'), K.codec.parse('1'));
+  assert.notEqual(K.codec.parse('0'), K.codec.parse('1'));
   for (let i = 0; i < values.length; i++)
     assert.equal(K.codec.parse(String(i)), K.codec.parse(String(i)));
   assert.notEqual(K.codec.parse('4'), K.codec.parse('5'));
@@ -257,4 +257,37 @@ test('same-name definitions are independent and foreign diagnostics explain the 
   assert.equal(descriptor.enumerable, false);
   assert.equal(descriptor.set, undefined);
   assert(!Reflect.set(a, symbol, 'wrong'));
+});
+
+test('numeric identity and encoding preserve both zero signs in either parse order', () => {
+  for (const inputs of [
+    [0, -0],
+    [-0, 0],
+  ]) {
+    const N = defineKind({ kind: 'identity/signed-zero', schema: z.number() }).seal();
+    const a = N.codec.parse(inputs[0]),
+      b = N.codec.parse(inputs[1]);
+    assert.notEqual(a, b);
+    assert(Object.is(z.encode(N.codec, a), inputs[0]));
+    assert(Object.is(z.encode(N.codec, b), inputs[1]));
+    assert.equal(N.codec.parse(inputs[0]), a);
+    assert.equal(N.codec.parse(inputs[1]), b);
+  }
+  const NaNs = defineKind({ kind: 'identity/nan', schema: z.nan() }).seal();
+  const n = NaNs.codec.parse(NaN);
+  assert.equal(n, NaNs.codec.parse(NaN));
+  assert(Number.isNaN(z.encode(NaNs.codec, n)));
+});
+
+test('explicit numeric keys distinguish zero signs while collision assertions remain active', () => {
+  const K = defineKind({
+    kind: 'identity/explicit-zero',
+    schema: z.object({ n: z.number() }),
+    key: (p) => p.n,
+  }).seal();
+  const a = K.codec.parse({ n: 0 }),
+    b = K.codec.parse({ n: -0 });
+  assert.notEqual(a, b);
+  assert.equal(a, K.codec.parse({ n: 0 }));
+  assert.equal(b, K.codec.parse({ n: -0 }));
 });

@@ -8,7 +8,7 @@ import { dataGraph } from './structure.js';
 import type { AnyKind, ProducerResult, Proof, ConfigurationError } from './types.js';
 
 type Semantic = AnyKind & { codec: z.ZodType<Proof<string>, any> };
-type Minted = AnyKind & { mint(input: any): ProducerResult<any> };
+type Minted = AnyKind & { mint(input: any): ProducerResult<any, unknown> };
 type ValueLawOptions<K extends Semantic> = {
   validWire: fc.Arbitrary<z.input<K['codec']>>;
   equivalentAliases?: fc.Arbitrary<[z.input<K['codec']>, z.input<K['codec']>]>;

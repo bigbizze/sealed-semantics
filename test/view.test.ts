@@ -177,3 +177,45 @@ test('recursive projections fail without caching and simple falsy results cache'
     assert.equal(calls, 1);
   }
 });
+
+test('a frozen hostile class with the kind symbol cannot impersonate a genuine leaf', () => {
+  class Fake {
+    get [Symbol.for('sealed-semantics.kind')]() {
+      return 'view/claimed-id';
+    }
+  }
+  Object.freeze(Fake.prototype);
+  const fake = Object.freeze(new Fake());
+  assert.deepEqual(Reflect.ownKeys(fake), []);
+  const Mint = defineMinted({
+    kind: 'view/fake-output',
+    mint: () => ({ ok: true, value: fake }),
+  })
+    .view({ leaf: (p) => p })
+    .seal();
+  const r = Mint.mint(undefined);
+  assert(r.ok);
+  assert.throws(() => r.value.view.leaf, /unsupported object/);
+  const K = defineKind({
+    kind: 'view/fake-parts',
+    schema: z.string().transform(() => ({ fake })),
+    key: () => 1,
+  }).seal();
+  assert.throws(() => K.codec.parse('x'), /keyed Parts.*unsupported object/);
+  const Id = defineKind({ kind: 'view/local-leaf', schema: z.string() }).seal();
+  const value = Id.codec.parse('x');
+  const Holder = defineMinted({
+    kind: 'view/local-holder',
+    mint: () => ({ ok: true, value }),
+  })
+    .view({ leaf: (p) => p })
+    .seal();
+  const held = Holder.mint(undefined);
+  assert(held.ok);
+  assert.equal(held.value.view.leaf, value);
+  assert(Object.isFrozen(value.constructor));
+  assert.throws(() => Object.setPrototypeOf(value.constructor, class {}), TypeError);
+  const Base = Object.getPrototypeOf(value.constructor);
+  assert.throws(() => new Base(), /Cannot construct/);
+  assert.throws(() => new Base(Symbol()), /Cannot construct/);
+});

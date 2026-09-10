@@ -17,21 +17,18 @@ export function foreignValue(kind: string, value: unknown, operation: string): s
     return `${operation} for ${kind}: value belongs to a different kind (${other}).`;
   return `${operation} for ${kind}: expected a sealed value from this definition instance.`;
 }
-// The protocol identifies atomic leaves across copies without storing instances.
-// Frozen opaque shape checks reject ordinary objects carrying a copied label.
-export function isSealed(value: unknown): value is object {
-  if (
-    typeof value !== 'object' ||
-    value === null ||
-    !Object.isFrozen(value) ||
-    Reflect.ownKeys(value).length !== 0
-  )
-    return false;
-  const proto = Object.getPrototypeOf(value);
-  return (
-    proto !== null &&
-    proto !== Object.prototype &&
-    Object.isFrozen(proto) &&
-    kindOf(value) !== undefined
-  );
+// Package-copy authenticity. The token also guards the recoverable base constructor.
+export const LEAF_TOKEN: unique symbol = Symbol('sealed leaf construction');
+export class SealedLeaf {
+  #sealed!: void;
+  constructor(token: typeof LEAF_TOKEN) {
+    if (token !== LEAF_TOKEN)
+      throw new TypeError('Cannot construct a sealed leaf directly');
+  }
+  static is(value: unknown): value is SealedLeaf {
+    return typeof value === 'object' && value !== null && #sealed in value;
+  }
 }
+export const isSealed = SealedLeaf.is;
+Object.freeze(SealedLeaf.prototype);
+Object.freeze(SealedLeaf);

@@ -17,9 +17,9 @@
     "src",
     "test",
     "spike",
-    "examples"
+    "examples/reference.ts"
   ],
   "exclude": [
-    "examples/consumer"
+    "examples/node_modules"
   ]
 }

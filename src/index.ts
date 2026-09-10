@@ -15,7 +15,6 @@ import type {
 export type {
   ProducerResult,
   DeepReadonly,
-  ValueError,
   ValueOf,
   JsonValue,
   AnyKind,
@@ -126,6 +125,8 @@ export function defineKind<
     [A] extends [never] ? {} : { allocate: (...args: A) => unknown }
   >;
 }
+type MintParts<R> = R extends { ok: true; value: infer P } ? P : never;
+type MintError<R> = R extends { ok: false; error: infer E } ? E : never;
 /**
  * Creates a builder for values whose configured mint producer must succeed.
  * Each successful mint is a distinct event owned by this definition instance.
@@ -134,13 +135,13 @@ export function defineKind<
 export function defineMinted<
   const K extends string,
   I,
-  P,
+  R extends ProducerResult<unknown, unknown>,
   const Keys extends PropertyKey = never,
 >(
   spec: {
     kind: LiteralKind<K>;
-    mint: (input: I) => ProducerResult<P>;
-    debug?: (parts: NoInfer<P>) => string;
+    mint: (input: I) => R;
+    debug?: (parts: NoInfer<MintParts<R>>) => string;
   } & Record<Keys, unknown> & {
       [N in Exclude<Keys, 'kind' | 'mint' | 'debug'>]: ConfigurationError<
         N extends 'allocate' | 'key' | 'schema'
@@ -150,17 +151,17 @@ export function defineMinted<
             : 'Symbol-named options are not supported.'
       >;
     },
-): MintedBuilder<K, I, P> {
+): MintedBuilder<K, I, MintParts<R>, MintError<R>> {
   validateDefinition(spec, false);
   const { kind, mint, debug } = spec;
   return builder((view, metadata) => {
-    const bridge = makeMintedSeal<P>(kind, { debug, view });
+    const bridge = makeMintedSeal<MintParts<R>>(kind, { debug, view });
     const result = {
       kind,
       is: bridge.is,
       mint: (input: I) => {
         const produced = mint(input);
-        return produced.ok ? ok(bridge.seal(produced.value)) : produced;
+        return produced.ok ? ok(bridge.seal(produced.value as MintParts<R>)) : produced;
       },
     };
     const completed = documentedKind(
@@ -172,5 +173,5 @@ export function defineMinted<
       metadata,
     );
     return completed;
-  }) as MintedBuilder<K, I, P>;
+  }) as MintedBuilder<K, I, MintParts<R>, MintError<R>>;
 }

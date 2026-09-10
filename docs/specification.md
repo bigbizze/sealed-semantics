@@ -10,7 +10,7 @@ Entirely primitive Parts use their own value as identity. The domain is `string 
 
 For explicit keys, the runtime validates every decoded Parts graph before computing identity, including the first creation. Supported structures are primitives, dense arrays, plain data objects, Dates without own properties, and sealed leaves. Cycles, symbol keys, accessors, hidden properties, and other objects fail. Shared acyclic subgraphs are allowed.
 
-Each completed definition owns a private weak table. After Zod normalization, the key selects an existing live instance or a new one. An explicit-key hit must also pass structural collision comparison. Arrays compare in order, plain properties by name independent of insertion order, Dates by timestamp, and sealed leaves by identity. Numeric properties compare with `Object.is`; only identity keys use SameValueZero. Differing Parts for the same live key throw.
+Each completed definition owns a private weak table. After Zod normalization, the key selects an existing live instance or a new one. An explicit-key hit must also pass structural collision comparison. Arrays compare in order, plain properties by name independent of insertion order, Dates by timestamp, and sealed leaves by identity. Numeric properties compare with `Object.is`; identity keys also distinguish signed zero and intern NaN with itself. Differing Parts for the same live key throw.
 
 Weak cleanup removes an entry only if it still contains the exact reference associated with the finalized object. Cleanup timing is unspecified. No public control changes interning. This is an identity guarantee, not a speed guarantee.
 
@@ -18,13 +18,15 @@ The completed kind exposes `kind`, `is`, `codec`, and `allocate` only when confi
 
 ## Minted definitions
 
-`defineMinted({ kind, mint, debug? })` creates a builder. The producer returns `ProducerResult<Parts>`. Failure passes through unchanged. Every success creates a fresh instance without an intern table. The completed definition exposes `kind`, `is`, and `mint`.
+`defineMinted({ kind, mint, debug? })` creates a builder. The producer returns `ProducerResult<Parts, Error>`. Parts and Error are inferred independently. Error is producer-owned and defaults to `never` for an infallible producer. Failure passes through unchanged. Every success creates a fresh instance without an intern table. The completed definition exposes `kind`, `is`, and `mint`.
 
 ## Completion
 
 Optional `.view(projections)` returns a builder with that projection map. Optional `.docs(metadata)` follows views. Every `.seal()` call creates a new frozen definition instance from the captured configuration. Calling `.seal()` recursively during completion fails. There is nothing to publish globally.
 
 A sealed value belongs to exactly one completed definition instance. `is` checks its ES private-field brand and returns a boolean. Definitions with the same label are permitted and unrelated. No global or module-level mutable table tracks names or instances.
+
+Each instance also possesses an ES-private leaf brand shared within this installed package copy. Only that brand authenticates atomic graph leaves. Other package copies and objects mimicking a label are rejected by graph validation.
 
 The stateless `Symbol.for('sealed-semantics.kind')` protocol reports the label across package copies. It never grants a definition's brand. Foreign codec inputs receive an operation-specific diagnostic. Matching labels explain module re-execution and duplicate package installation as likely causes.
 
