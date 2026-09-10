@@ -48,7 +48,60 @@ type UserId = ValueOf<typeof UserId>;
 
 kinds are meant to trasit across serialization boundaries with no issues. they use zod for encoding and decoding as you already would.
 
-**defineMinted** creates contracts that couple a typescript types to some set of rules specified in its definition. This means that when a function wants to only accept Payment objects, where payment object really means "Only payment objects that are validated, authorized and time-stamped through the officially sanctioned paths for doing such things in this repo", having PaymentObject be defined as just a typescript types which has these 3 string properties and one boolean is obviously not ideal. If PaymentObject were a minted datatype, those requirements could be added to it's mint function, it's value guaranteed to have been run through them, and only values produced by `mint()` be allowed to be passed to functions expecting PaymentObject.
+---
+
+**defineMinted** creates contracts that couple a typescript types to some set of rules specified in its definition. This means that when a function wants to only accept Payment objects, where payment object really means "Only payment objects that are validated, authorized and time-stamped through the officially sanctioned paths for doing such things in this repo", having PaymentObject be defined as just a typescript types which has these 3 string properties and one boolean is obviously not ideal. If PaymentObject were a minted datatype (we could call this `PaymentReady`), those requirements could be added to it's mint function, it's value guaranteed to have been run through them, and only values produced by `mint()` be allowed to be passed to functions expecting PaymentObject.
+
+```ts
+
+type PaymentObject = {
+  recipientId: UserId,
+  amountCents: number,
+  currency: 'USD' | 'EUR'
+};
+
+const PaymentReady = defineMinted({
+  kind: 'app/payment',
+  mint: (input: PaymentObject) => {
+    if (
+      !UserId.is(input?.recipientId) ||
+      !Number.isSafeInteger(input?.amountCents) ||
+      input.amountCents <= 0 ||
+      !['USD', 'EUR'].includes(input.currency)
+    ) {
+      return {
+        ok: false,
+        error: {
+          code: 'invalid_payment',
+          message: 'Expected a recipient, a positive whole-cent amount, and USD or EUR.',
+        },
+      };
+    }
+
+    return {
+      ok: true,
+      value: {
+        recipientId: input.recipientId,
+        amountCents: input.amountCents,
+        currency: input.currency,
+        preparedAt: Date.now(),
+      },
+    };
+  },
+})
+  .view({
+    recipientId: p => p.recipientId,
+    amountCents: p => p.amountCents,
+    currency: p => p.currency,
+    preparedAt: p => p.preparedAt,
+  })
+  .seal();
+
+type PaymentObject = ValueOf<typeof PaymentObject>;
+
+```
+
+Then any function taking `PaymentReady` as an argument can work from the guarantees this creates.
 
 You can also create minted datatypes which include kinds, or other mints. This allows the semantic attestations to compose naturally.
 
@@ -133,6 +186,7 @@ const UserId = defineKind({
   schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/),
 }).seal();
 type UserId = ValueOf<typeof UserId>;
+
 const ProjectId = defineKind({
   kind: 'app/project-id',
   schema: z.string().regex(/^prj_[a-f0-9]+$/),
@@ -202,8 +256,12 @@ const MembershipBatch = defineMinted({
     } };
   },
 })
-  .view({ projectId: p => p.projectId, userIds: p => p.userIds })
+  .view({
+    projectId: p => p.projectId,
+    userIds: p => p.userIds
+  })
   .seal();
+
 type MembershipBatch = ValueOf<typeof MembershipBatch>;
 
 function saveMembershipBatch(batch: MembershipBatch) {
