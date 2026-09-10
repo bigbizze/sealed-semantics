@@ -16,8 +16,7 @@
   "include": [
     "src",
     "test",
-    "spike",
-    "examples/reference.ts"
+    "spike"
   ],
   "exclude": [
     "examples/node_modules"
