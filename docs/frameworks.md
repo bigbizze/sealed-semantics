@@ -9,3 +9,5 @@ Re-executing a module that completes a definition creates a new definition insta
 Next.js dev, Vite, Vitest, Jest, and Node's test runner need no package-specific configuration. The package holds no global state that could survive a module reset. No bundler plugin or HMR handler is required.
 
 Use `toBe` in Jest and Vitest to assert identity. Distinct minted values have no enumerable state, so `toEqual` can treat them as equal.
+
+Two installed package copies have separate private leaf brands. A foreign copy’s values can supply diagnostic labels but cannot be used as trusted atomic view or Parts leaves.

@@ -200,3 +200,83 @@ defineMinted({
   // @ts-expect-error Mint events have no semantic key.
   key: () => 1,
 });
+
+// Producer-owned failures preserve their exact type throughout view/docs/seal.
+import type { ProducerResult } from '../src/index.js';
+type PaymentError = { code: 'unauthorized' } | { code: 'expired'; expiredAt: Date };
+const Payment = defineMinted({
+  kind: 'types/payment',
+  mint: (input: string): ProducerResult<{ input: string }, PaymentError> =>
+    input
+      ? { ok: true, value: { input } }
+      : { ok: false, error: { code: 'unauthorized' } },
+})
+  .view({ input: (p) => p.input })
+  .docs({ view: { input: { description: 'Payment input.' } } })
+  .seal();
+const payment = Payment.mint('');
+if (!payment.ok) {
+  type Exact = Assert<Equal<typeof payment.error, PaymentError>>;
+  if (payment.error.code === 'expired') {
+    type DateType = Assert<Equal<typeof payment.error.expiredAt, Date>>;
+  }
+}
+const Single = defineMinted({
+  kind: 'types/single-error',
+  mint: (s: string) =>
+    s
+      ? { ok: true as const, value: s }
+      : { ok: false as const, error: { code: 'bad_input' as const, detail: s } },
+}).seal();
+const single = Single.mint('');
+if (!single.ok) {
+  type Exact = Assert<
+    Equal<typeof single.error, { code: 'bad_input'; detail: string }>
+  >;
+}
+const PrimitiveError = defineMinted({
+  kind: 'types/primitive-error',
+  mint: (s: string) => ({
+    ok: false as const,
+    error: s ? ('expired' as const) : ('unauthorized' as const),
+  }),
+}).seal();
+const primitiveError = PrimitiveError.mint('');
+if (!primitiveError.ok) {
+  type Exact = Assert<Equal<typeof primitiveError.error, 'expired' | 'unauthorized'>>;
+}
+const Infallible = defineMinted({
+  kind: 'types/infallible',
+  mint: (input: string) => ({ ok: true as const, value: { input } }),
+}).seal();
+const infallible = Infallible.mint('');
+if (!infallible.ok) {
+  type NoError = Assert<Equal<typeof infallible.error, never>>;
+}
+type SuccessfulParts = Assert<Equal<ValueOf<typeof Payment>['view']['input'], string>>;
+
+const unionProducer = (input: number) => {
+  if (input < 0)
+    return { ok: false as const, error: { code: 'unauthorized' as const } };
+  if (input === 0)
+    return { ok: false as const, error: { code: 'stale' as const, age: 42 } };
+  return { ok: true as const, value: { input } };
+};
+const UnionMint = defineMinted({
+  kind: 'types/inferred-union',
+  mint: unionProducer,
+}).seal();
+const unionResult = UnionMint.mint(0);
+if (!unionResult.ok) {
+  type Exact = Assert<
+    Equal<
+      typeof unionResult.error,
+      Extract<ReturnType<typeof unionProducer>, { ok: false }>['error']
+    >
+  >;
+  if (unionResult.error.code === 'stale') {
+    type Age = Assert<Equal<typeof unionResult.error.age, number>>;
+  }
+}
+// @ts-expect-error The package does not prescribe a producer error taxonomy.
+import type { ValueError } from '../src/index.js';

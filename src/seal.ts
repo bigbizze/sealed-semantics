@@ -1,5 +1,5 @@
 import { makeInterner } from './interner.js';
-import { KIND, foreignValue } from './sealed-leaf.js';
+import { KIND, foreignValue, SealedLeaf, LEAF_TOKEN } from './sealed-leaf.js';
 import { dataGraph, sameParts, immutableView } from './structure.js';
 import type { SemanticKey } from './types.js';
 const CONSTRUCT: unique symbol = Symbol('sealed-semantics/construct');
@@ -25,12 +25,13 @@ function makeSeal<P>(
         : `${kind} has no external representation and cannot be serialized`,
     );
   };
-  class Sealed {
+  class Sealed extends SealedLeaf {
     #parts: P;
     #view?: Readonly<Record<string, unknown>>;
     constructor(token: typeof CONSTRUCT, parts: P) {
       if (token !== CONSTRUCT)
         throw new TypeError(`${kind} cannot be constructed directly`);
+      super(LEAF_TOKEN);
       this.#parts = parts;
       Object.freeze(this);
     }
@@ -106,6 +107,7 @@ function makeSeal<P>(
     }
   }
   Object.freeze(Sealed.prototype);
+  Object.freeze(Sealed);
   return {
     is: hasBrand,
     read: unseal,

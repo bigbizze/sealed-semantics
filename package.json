@@ -35,7 +35,7 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"examples/**/*.ts\" \"spike/**/*.ts\" \"scripts/*.mjs\"",
     "check:readme": "node scripts/check-readme.mjs",
     "typecheck:5.7": "node node_modules/typescript-5-7/bin/tsc --noEmit",
-    "test:consumer": "npm test --prefix examples/consumer"
+    "test:consumer": "npm test --prefix examples"
   },
   "peerDependencies": {
     "fast-check": "^4.9.0",

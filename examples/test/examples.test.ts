@@ -2,19 +2,19 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { UserId } from '../src/definitions/user-id.ts';
 import { ProjectId } from '../src/definitions/project-id.ts';
-import { PreparedMembership } from '../src/definitions/prepared-membership.ts';
-import { MembershipBatch } from '../src/examples/define-minted/membership-workflow/membership-batch.ts';
+import { PreparedMembership } from '../src/examples/membership-workflow.ts';
+import { MembershipBatch } from '../src/examples/membership-workflow.ts';
 import {
   fakeServer,
   readMembershipRequest,
   membershipResponse,
-} from '../src/examples/define-kind/http-contract.ts';
-import { createProfileLookup } from '../src/examples/define-kind/profile-cache.ts';
+} from '../src/examples/http-contract.ts';
+import { createProfileLookup } from '../src/examples/profile-cache.ts';
 import {
   addProjectMembers,
   saveMembershipBatch,
   type MembershipDatabase,
-} from '../src/examples/define-minted/membership-workflow/membership-workflow.ts';
+} from '../src/examples/membership-workflow.ts';
 
 const legacy = 'user:01234567-89ab-cdef-0123-456789abcdef';
 const current = 'usr_0123456789abcdef0123456789abcdef';
@@ -116,21 +116,19 @@ test('batch validation rejects mixed projects and preserves its private list', (
   assert.equal(MembershipBatch.mint(new Array<PreparedMembership>(1)).ok, false);
   const mixed = MembershipBatch.mint([first, plan(current, 'prj_0123456789abcdef')]);
   assert(!mixed.ok);
-  assert.deepEqual(mixed.error.issues, ['All plans must belong to the same project.']);
+  assert.equal(mixed.error.message, 'All plans must belong to the same project.');
 });
 
-test('saving requires a minted batch, not a matching object', async () => {
-  const member = plan();
-  const lookalike = {
-    view: { projectId: member.view.projectId, plans: [member], count: 1 },
-  };
-  const { database, writes } = recordingDatabase();
-  await assert.rejects(async () => {
-    // @ts-expect-error Matching properties do not provide the MembershipBatch brand.
-    await saveMembershipBatch(lookalike, database);
-  }, /Expected a validated MembershipBatch/);
-  assert.equal(writes.length, 0);
-});
+// Compile-only: typed internal functions trust their input. Casts are not validation.
+function invalidBatchType(
+  lookalike: {
+    view: { projectId: ProjectId; plans: PreparedMembership[]; count: number };
+  },
+  database: MembershipDatabase,
+) {
+  // @ts-expect-error A matching shape lacks construction provenance.
+  void saveMembershipBatch(lookalike, database);
+}
 
 // Prevent a passing runtime test from hiding a loss of type inference.
 type Equal<A, B> =

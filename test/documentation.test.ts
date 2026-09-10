@@ -8,7 +8,7 @@ import {
   ContentAddress,
   NamespaceId,
   PreparedWrite,
-} from '../examples/reference.js';
+} from './reference.js';
 import { ok } from './result.js';
 
 test('docs validate every input and normalized encoding at seal', () => {

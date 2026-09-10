@@ -22,11 +22,11 @@ Keyed Parts permit primitives, dense arrays, plain data objects, Dates, and seal
 
 The library does not deep-freeze all private Parts merely because they are sealed. Anything exposed through `view` becomes deeply immutable. Parts must remain logically immutable after sealing. Copy caller-owned mutable containers before retaining them. Do not mutate retained aliases, the schema, or callback behavior after completion.
 
-Do not pass adversarial proxies or objects that impersonate the stateless sealed-leaf protocol as trusted producer output. Browser JavaScript has no general proxy detector. This package is not a sandbox against malicious producer code or changes to JavaScript intrinsics.
+Genuine graph leaves possess a package-local ES-private brand. A diagnostic kind symbol cannot authenticate a leaf. Forged objects and sealed values from another installed copy are rejected as leaves. Browser JavaScript has no general proxy detector, so producer code must not rely on adversarial proxies. This package is not a sandbox against malicious producer code or changes to JavaScript intrinsics.
 
 ## Observations and logging
 
-Views are lazy and separately cached. Successful results are stable and deeply frozen. Sealed leaves retain their original identity and are not recursively frozen. Unsupported structures and cycles throw on first access. Shared acyclic structures work. If evaluation fails, later access retries.
+Views are lazy and separately cached. Successful results are stable and deeply frozen. Genuine local sealed leaves retain their original identity and are not recursively frozen. Unsupported structures and cycles throw on first access. Shared acyclic structures work. If evaluation fails, later access retries.
 
 Explicit debug callbacks may reveal information chosen by the producer. Console inspection does not call them or encode Parts. It displays `Sealed<kind>`. JSON and structured logging must explicitly encode semantic values through Zod. Minted values have no external representation.
 
@@ -45,3 +45,5 @@ The core requires `WeakRef` and `FinalizationRegistry`. Import throws a clear er
 Cloudflare enables these facilities by default for compatibility dates from 2025-05-05. If disabled, enable `enable_weak_ref` and remove `disable_weak_ref`. [Cloudflare compatibility documentation](https://developers.cloudflare.com/workers/configuration/compatibility-flags/#enable-finalizationregistry-and-weakref)
 
 Only the laws entry imports Node facilities and fast-check. The core uses browser-compatible JavaScript and the Zod peer dependency.
+
+Primitive identity follows `Object.is`: zero and negative zero are distinct, while NaN interns with itself when the schema permits it. Explicit primitive keys follow the same rule. Producer rejection values are domain-owned; the library preserves them unchanged and infers their exact type.

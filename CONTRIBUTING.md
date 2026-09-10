@@ -19,7 +19,7 @@ npm run test:package
 
 - `src`: library runtime and public types. Runtime Zod operations belong in `zod-codec.ts`.
 - `test` and `spike`: runtime checks, compiler diagnostics, completion checks, and inference checks.
-- `examples/consumer`: a separate consumer package with practical examples and its own tests.
+- `examples`: a separate consumer package with practical examples and its own tests.
 - `docs`: current guarantees, API guidance, and framework guidance.
 
 When changing public types, test both accepted inference and rejected configurations. Invalid capabilities should not appear as available operations. When changing a producer example, verify its exact projection types as well as its runtime behavior.

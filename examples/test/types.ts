@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { UserId } from '../src/definitions/user-id.ts';
 import { ProjectId } from '../src/definitions/project-id.ts';
-import { PreparedMembership } from '../src/definitions/prepared-membership.ts';
+import { PreparedMembership } from '../src/examples/membership-workflow.ts';
 
 function identifiers() {
   const user = UserId.codec.safeParse('usr_0123456789abcdef');
@@ -17,10 +17,11 @@ function identifiers() {
 function assertInvalid(result: ReturnType<typeof PreparedMembership.mint>) {
   assert.equal(result.ok, false);
   assert.ok(!result.ok);
-  assert.equal(result.error.reason, 'invalid_input');
-  assert.deepEqual(result.error.issues, [
+  assert.equal(result.error.code, 'invalid_membership');
+  assert.equal(
+    result.error.message,
     'Expected a sealed UserId and a sealed ProjectId.',
-  ]);
+  );
 }
 
 test('mint accepts both sealed identifiers and preserves their types and identities', () => {

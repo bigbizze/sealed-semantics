@@ -15,13 +15,24 @@ if (result.success) {
 
 There is no separate library parse result, parse wrapper, or instance encoder. Put conversion and rejection logic in the Zod schema or codec. Zod issues preserve paths within nested contracts. Programming exceptions thrown by callbacks are not converted into validation failures.
 
-Minted construction uses the structural `ProducerResult<T, E = ValueError>` contract:
+Minted construction uses `ProducerResult<Parts, Error>`. Both types are inferred from the producer. The error type belongs to the application. For an infallible producer, the error defaults to `never`.
 
 ```ts
-{ ok: true, value: parts }
-{ ok: false, error: { kind: 'app/plan', reason: 'invalid_input', issues: ['Missing input'] } }
+type PaymentError =
+  | { code: 'unauthorized' }
+  | { code: 'expired'; expiredAt: Date };
+
+const Payment = defineMinted({
+  kind: 'payment/authorized',
+  mint: (input: string): ProducerResult<{ input: string }, PaymentError> =>
+    input
+      ? { ok: true, value: { input } }
+      : { ok: false, error: { code: 'unauthorized' } },
+}).seal();
+const result = Payment.mint('');
+if (!result.ok) console.log(result.error.code); // PaymentError
 ```
 
-`Kind.mint(input)` returns failure unchanged and seals successful Parts. Runtime `ok` and `err` helpers are not exported. Producers may use any helper that returns the structural contract. There is no global result adapter, `unwrap`, or `mintOrThrow` API.
+The completed kind returns the producer's failure unchanged. It does not wrap errors, add properties, or convert them into messages. Object unions, string errors, and other producer-owned values are supported. Successful mint calls still create distinct instances. Minted values have no serialization API in the current API.
 
 Semantic identity collisions and unsupported Parts are producer errors and throw TypeError, including through safe Zod operations. Foreign-definition encoding produces a Zod issue naming the operation, receiving kind, and likely cause. Safe encoding returns that issue; ordinary encoding throws.

@@ -11,7 +11,7 @@ import {
   NamespaceId,
   ContentAddress,
   PreparedWrite,
-} from '../examples/reference.js';
+} from './reference.js';
 const hex = (n: number) =>
   fc
     .array(fc.constantFrom(...'0123456789abcdef'), { minLength: n, maxLength: n })

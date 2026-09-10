@@ -10,7 +10,7 @@ import {
   ContentAddress,
   NamespaceId,
   PreparedWrite,
-} from '../examples/reference.js';
+} from './reference.js';
 import { ok } from './result.js';
 
 test('only Zod exposes boundary operations; private brands reject forgery and constructor recovery', () => {

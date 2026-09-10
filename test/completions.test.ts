@@ -23,6 +23,9 @@ const Minted=MintedBuilder.seal();
     const ViewedBuilder=defineMinted({kind:'completion/viewed',
 mint:(s:string)=>ok(s)}).view({suffix:p=>p.slice(-6)});
 const Viewed=ViewedBuilder.seal();
+    const Domain=defineMinted({kind:'completion/domain',mint:()=>({ok:false as const,error:{code:'denied' as const,detail:'reason'}})}).seal();
+    const rejected=Domain.mint(undefined);
+    if(!rejected.ok) { rejected.error./*domainError*/; }
     BasicBuilder.docs({ /*basic*/ }).seal();
     FullBuilder.docs({ /*full*/ }).seal();
     MintedBuilder.docs({ /*minted*/ }).seal();
@@ -83,6 +86,7 @@ const Viewed=ViewedBuilder.seal();
       );
     }
     const expected: Record<string, string[]> = {
+      domainError: ['code', 'detail'],
       definition: ['kind', 'schema', 'allocate', 'key', 'debug'],
       primitiveDefinition: ['allocate', 'debug'],
       objectDefinition: ['key', 'allocate', 'debug'],

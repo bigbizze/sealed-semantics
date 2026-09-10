@@ -16,10 +16,9 @@
   "include": [
     "src",
     "test",
-    "spike",
-    "examples"
+    "spike"
   ],
   "exclude": [
-    "examples/consumer"
+    "examples/node_modules"
   ]
 }

@@ -12,7 +12,7 @@ assertMintedLaws(Plan, { validInput: acceptedPlanInputs });
 
 Semantic laws check repeated-decode identity, codec round-trip identity, stable encoding, native Map/Set lookup, private brands, frozen surfaces, serialization traps, and stable deeply immutable views. `allocateArgs` is available only when the kind has an allocator.
 
-Minted laws check distinct successful events and the same construction and observation invariants. Sealed leaves require no extra mutator or kind-list configuration.
+Minted laws check distinct successful events and the same construction and observation invariants. Genuine local sealed leaves require no extra configuration. Forged and foreign-package leaves are rejected. Mint errors can have any producer-owned type; the generic harness checks success without inspecting domain error properties.
 
 A sealed value belongs to exactly one completed definition instance. Same-label definitions are unrelated. Property generators must produce inputs accepted by the tested definition. Tests use reference equality, not enumeration of private objects.
 

@@ -159,7 +159,7 @@ The key is the declared identity, not a hash hint. Parts must already be normali
 
 Keyed Parts support primitives, plain data objects, dense arrays, `Date`, and sealed values as atomic leaves. Dates compare by timestamp. Cycles, accessors, hidden properties, symbol keys, typed arrays, and other class instances are rejected on the first decode. Shared acyclic children are allowed.
 
-Keys use JavaScript `Map` semantics: `0` and `-0` share one key, and all `NaN` keys share one key. The schema must accept or produce those values first. This does not make non-finite numbers valid JSON.
+Keys use `Object.is` value semantics: `0` and `-0` are distinct keys, and all `NaN` keys share one key. The schema must accept or produce those values first. This does not make non-finite numbers valid JSON.
 
 ## Require checks before saving
 
@@ -176,9 +176,8 @@ const MembershipBatch = defineMinted({
       return {
         ok: false,
         error: {
-          kind: 'app/membership-batch',
-          reason: 'invalid_input',
-          issues: ['Expected a project and at least one user.'],
+          code: 'invalid_membership_batch',
+          message: 'Expected a project and at least one user.',
         },
       };
     }
@@ -193,7 +192,6 @@ const MembershipBatch = defineMinted({
 type MembershipBatch = ValueOf<typeof MembershipBatch>;
 
 function saveMembershipBatch(batch: MembershipBatch) {
-  if (!MembershipBatch.is(batch)) throw new TypeError('Expected a MembershipBatch');
   console.log('Save:', {
     project: z.encode(ProjectId.codec, batch.view.projectId),
     users: batch.view.userIds.map(id => z.encode(UserId.codec, id)),
@@ -208,13 +206,15 @@ if (first.ok && second.ok) {
 }
 ```
 
+The producer owns its error format. `ProducerResult<Parts, Error>` can describe object unions or primitive errors; `.mint()` returns failures unchanged. Typed internal functions trust their parameters. Check runtime brands only at untyped or adversarial boundaries.
+
 The library ensures that the producer succeeded. The producer defines what that success means. This example does not check user existence or permission to change project membership.
 
 ## Stable, immutable views
 
 Each view projection runs lazily. Its first successful result is validated, deeply frozen, and cached. Later reads return exactly that result, including `undefined` and other falsy values. Failed projections can be retried.
 
-Views allow primitives, sealed values, dense arrays, and plain data objects. Structured observations are deeply readonly in TypeScript. Functions, Dates, collections, other class instances, accessors, hidden properties, symbol-keyed structures, and cycles are rejected on access. Sealed leaves retain their exact type and remain usable.
+Views allow primitives, sealed values, dense arrays, and plain data objects. Structured observations are deeply readonly in TypeScript. Functions, Dates, collections, other class instances, accessors, hidden properties, symbol-keyed structures, and cycles are rejected on access. Genuine sealed leaves from this installed package copy retain their exact type and remain usable. An ES-private brand authenticates them. The well-known kind symbol is only a diagnostic label; fake objects and values from another installed copy are rejected as graph leaves.
 
 The library does not deep-freeze all private Parts merely because they are sealed. Anything exposed through `view` becomes deeply immutable. Parts must remain logically immutable after sealing. If a projection returns an internal array, that array is frozen too. Producers must not retain aliases that they later mutate.
 
@@ -234,7 +234,7 @@ Equivalent decodes from one definition return the same live object. Semantic val
 
 Object identity does not cross workers, processes, server/client, network, or storage boundaries. Encode through Zod, transfer plain data, then decode with the receiving definition.
 
-Console inspection shows `Sealed<app/user-id>` without encoding, revealing Parts, or calling `debug()`. `JSON.stringify(value)` still throws. Structured/JSON logging requires explicit Zod encoding. Minted values have no external representation.
+Console inspection shows `Sealed<app/user-id>` without encoding, revealing Parts, or calling `debug()`. `JSON.stringify(value)` still throws. Structured/JSON logging requires explicit Zod encoding. Minted values are local construction attestations in the current API. Crossing a serialization boundary requires establishing the claim again on the receiving side.
 
 In Jest and Vitest, use `toBe` to test identity. Two distinct minted values can pass `toEqual` because their private state is not enumerable.
 
@@ -243,9 +243,9 @@ In Jest and Vitest, use `toBe` to test identity. Two distinct minted values can 
 ```sh
 npm ci
 npm run check
-npm run examples --prefix examples/consumer
+npm run examples --prefix examples
 ```
 
-The [consumer walkthrough](examples/consumer/src/examples/index.ts) demonstrates HTTP requests, native caches, and a save function that requires minted plans and batches. It imports the package through its public exports.
+The [consumer walkthrough](examples/src/examples/README.md) demonstrates HTTP requests, native caches, and a save function that requires minted plans and batches. It imports the package through its public exports.
 
 Read the [guarantees](docs/guarantees.md), [specification](docs/specification.md), [documentation guide](docs/documentation.md), [laws](docs/laws.md), and [error guide](docs/producer-results.md). See [CONTRIBUTING.md](CONTRIBUTING.md), [release checks](docs/releasing.md), and [SECURITY.md](SECURITY.md). Licensed under [MIT](LICENSE).

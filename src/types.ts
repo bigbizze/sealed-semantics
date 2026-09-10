@@ -1,13 +1,8 @@
 import type { z } from 'zod';
 export type JsonValue =
   string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
-export type ProducerResult<T, E = ValueError> =
+export type ProducerResult<T, E = never> =
   { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: E };
-export interface ValueError {
-  readonly kind: string;
-  readonly reason: 'invalid_input';
-  readonly issues: readonly string[];
-}
 /** An impossible requirement that explains an invalid configuration in compiler errors. */
 export type ConfigurationError<Message extends string> = {
   readonly [Explanation in Message]: never;
@@ -57,10 +52,10 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
     ? { allocate(...args: A): SemanticValue<K, W, O> }
     : {})
 >;
-export type MintedKind<K extends string, I, O> = Readonly<{
+export type MintedKind<K extends string, I, E, O> = Readonly<{
   readonly kind: K;
   is(x: unknown): x is MintedValue<K, O>;
-  mint(input: I): ProducerResult<MintedValue<K, O>>;
+  mint(input: I): ProducerResult<MintedValue<K, O>, E>;
 }>;
 export type JsonSchema<W extends z.ZodType> = 0 extends 1 & z.input<W>
   ? ConfigurationError<'Wire schema input must not be any. Use a schema with a specific JSON input type.'>
@@ -226,12 +221,12 @@ export interface ValueBuilder<
   readonly seal: () => Documented<ValueKind<K, W, O>, D>;
 }
 /** Configuration only. Call .seal() to create the completed kind. */
-export interface MintedBuilder<K extends string, I, P, O = {}, D = undefined> {
+export interface MintedBuilder<K extends string, I, P, E, O = {}, D = undefined> {
   readonly view: <const F extends Record<string, (parts: P) => unknown>>(
     projections: CheckedView<F>,
-  ) => MintedBuilder<K, I, P, Omit<O, 'view'> & { view: F }>;
+  ) => MintedBuilder<K, I, P, E, Omit<O, 'view'> & { view: F }>;
   readonly docs: <const M extends DocumentationInput<M, MintedDocumentation<O>>>(
     metadata: CheckedDocumentation<M, MintedDocumentation<O>>,
-  ) => Omit<MintedBuilder<K, I, P, O, MintedDocumentation<O>>, 'view'>;
-  readonly seal: () => Documented<MintedKind<K, I, O>, D>;
+  ) => Omit<MintedBuilder<K, I, P, E, O, MintedDocumentation<O>>, 'view'>;
+  readonly seal: () => Documented<MintedKind<K, I, E, O>, D>;
 }

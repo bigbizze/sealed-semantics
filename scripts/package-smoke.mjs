@@ -110,10 +110,12 @@ mint:i=>({ok:true,value:i})}).view({text:p=>p}).docs({view:{}}).seal();
     .map((m) => m[1])
     .join('\n');
   writeFileSync(join(temp, 'readme.ts'), code);
+  const identifierStart = readme.indexOf('## Define an identifier\n');
+  assert(identifierStart >= 0, 'README must include the identifier example section');
   const intro = [
     ...readme
       .slice(
-        0,
+        identifierStart,
         readme.indexOf('## You can decode individual fields, or a whole response'),
       )
       .matchAll(/```ts\n([\s\S]*?)```/g),
@@ -198,10 +200,13 @@ mint:i=>({ok:true,value:i})}).seal();
  assert.throws(()=>foreignEvent.debug.call(p),/debug.*different definition instance.*two copies/);
  const EventHolder=b.defineMinted({kind:'consumer/event-holder',mint:i=>({ok:true,value:i})}).view({event:p=>p}).seal();
  const heldEvent=EventHolder.mint(p).value;
- assert.equal(heldEvent.view.event,p);
+ assert.throws(()=>heldEvent.view.event,/unsupported object/);
+ assert.equal(EventHolder.mint(foreignEvent).value.view.event,foreignEvent);
 
  assert.notEqual(p,q); assert.equal(new Set([p,q]).size,2);
- const Composite=b.defineKind({kind:'consumer/composite',
+ const ForeignComposite=b.defineKind({kind:'consumer/foreign-composite',schema:z.object({id:A.codec}),key:p=>p.id.view.text}).seal();
+ assert.throws(()=>ForeignComposite.codec.parse({id:'x'}),/keyed Parts.*unsupported object/);
+ const Composite=a.defineKind({kind:'consumer/composite',
 schema:z.object({id:A.codec}),key:p=>p.id.view.text,
 }).view({id:p=>p.id}).seal();
  const c=Composite.codec.parse({id:'x'}),d=Composite.codec.parse({id:'x'});
