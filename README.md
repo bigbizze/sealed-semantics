@@ -4,10 +4,9 @@
 
 Typescript types mostly govern syntax:
 
-Is this a string or not? If this is an object instead of a number, then this property on that object needs this type. etc.
+> Is this thing a string or not? If this this thing is an object instead of a number, then this property on that object needs this type. etc.
 
-In the world of AI agents, syntax rules are often locally coherent but semantically insufficient in the larger context. Human programmers implicitly carry lots of context in their heads while working about the bigger picture of a repository or project. 
-
+AI agents often confuse locally coherent syntactical rules for globally coherent semantic ones. Human programmers are different in that they implicitly carry lots of semantic context in their heads when working in a repository they're familiar with, which they apply when making decisions.
 
 A senior engineer who sees:
 
@@ -16,20 +15,31 @@ submitPayment(payment)
 ```
 understands 20 necessary preconditions instantly. An AI doesn't necessarily see more than a callable function that needs objects of the payment shape.
 
-You can try to solve this with updating CLAUDE.md or AGENTS.md stating:
+You can try to address this with better context selection: graph traversal or RAG-like systems, or adding rules and heuristics like many people do with CLAUDE.md or AGENTS.md files, where you can try to solve this with updating CLAUDE.md or AGENTS.md stating:
 
 > “Never call capturePayment unless…”
 
 but then you're relying on the agent to remember. you're also encoding just one rule of the N you'll need with this approach where their ability to remember decreases proportional to N increasing. 
 
+So why don't we strive to make these implicit rules explicit, so that they're impossible to use incorrectly? AI agents don't get annoyed with strictness and rules in the way humans do, so the cost of making these things impossible by construction seems marginal today. 
+
 ___
 
-The goal of this repository is to create two new semantic datatype producers and entities, both of which give much stronger guarantees about what state can be made not possible to represent. 
+The goal of this repository is to add two semantic datatype producers, both of which strive to create much stronger guarantees around making invalid semantic state impossible to use.
 
-This comes from two distinct things: semantic kinds, which are values, and semantic mints, which are datatypes that include a contract about rules and transformations any value of this mint type has undergone. 
-
+This comes from two distinct things: semantic kinds, which are values, and semantic mints, which are wrapped datatypes that include a contract about rules and transformations any value of this mint type has undergone. 
 
 **defineKind** create kinds. They differ from  only using typescript types because kinds have much stronger guarantees around the provenance of their data. Once a definition for a kind is provided, the only place that can create new values of that kind is Zod parse. The only methods that can be used to interact with a value of that kind are those in the definition. This allows you to distinguish between something that was merely produced from something that is legitimately entitled to be relied upon.
+
+```ts
+const UserId = defineKind({
+  kind: 'app/user-id',
+  schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/),
+})
+  .view({ suffix: spelling => spelling.slice(-6) })
+  .seal();
+type UserId = ValueOf<typeof UserId>;
+```
 
 kinds are meant to trasit across serialization boundaries with no issues. they use zod for encoding and decoding as you already would.
 
