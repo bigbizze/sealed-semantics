@@ -1,6 +1,6 @@
 # Public contract
 
-The main entry exports `defineSeal` and `defineMint`, plus TypeScript types. The optional Node-only `sealed-semantics/laws` entry exports `assertValueLaws` and `assertMintedLaws`.
+The main entry exports `defineSeal` and `defineMint`, plus TypeScript types. `SealedValue<Name>` is the public opaque base type. `SemanticValue` and `MintedValue` also have root exports so inferred consumer declarations can name their types without private module paths. Use `ValueOf<typeof Definition>` for a specific completed definition. The optional Node-only `sealed-semantics/laws` entry exports `assertValueLaws` and `assertMintedLaws`.
 
 ## Semantic definitions
 

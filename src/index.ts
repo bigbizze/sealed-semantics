@@ -13,6 +13,9 @@ import type {
   MintedBuilder,
 } from './types.js';
 export type {
+  Proof as SealedValue,
+  SemanticValue,
+  MintedValue,
   ProducerResult,
   DeepReadonly,
   ValueOf,
