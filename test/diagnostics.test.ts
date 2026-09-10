@@ -58,19 +58,28 @@ type A=ValueOf<typeof B>; type C=ValueOf<typeof M>;`);
   assert(output.includes('MintedBuilder<'), output);
   assert.equal((output.match(/error TS\d+:/g) ?? []).length, 2, output);
 });
-test('configuration errors describe removed callbacks and invalid capabilities', () => {
+test('configuration errors explain identity and capability constraints', () => {
   const cases = [
     [
+      "defineKind({kind:'diagnostic/object',schema:z.object({x:z.number()})});",
+      "Property 'key' is missing",
+    ],
+    [
+      "defineKind({kind:'diagnostic/primitive',schema:z.string(),key:()=> 'x'});",
+      'Primitive Parts already define identity.',
+    ],
+    ['B.view({bad:()=>new Date()});', 'View outputs must be primitives'],
+    [
       `defineKind({kind:'diagnostic/conversion',schema:z.string(),decode:(s:string)=>s});`,
-      'Configure conversion in a Zod codec passed as schema.',
+      'Unknown definition option',
     ],
     [
-      `defineKind({kind:'diagnostic/canonical',schema:z.string(),canonical:(s:string)=>s});`,
-      'Expose observations with .view(...)',
+      `defineKind({kind:'diagnostic/unknown',schema:z.string(),surprise:(s:string)=>s});`,
+      'Unknown definition option',
     ],
     [
-      `B.docs({examples:[{input:'x',encoded:'x',canonical:'x'}]});`,
-      'Canonical examples are no longer supported.',
+      `B.docs({examples:[{input:'x',encoded:'x',surprise:'x'}]});`,
+      'Unknown example property.',
     ],
     [
       `B.docs({examples:[{input:'x',encoded:'x'}],view:{}});`,
@@ -78,7 +87,7 @@ test('configuration errors describe removed callbacks and invalid capabilities',
     ],
     [
       `B.docs({examples:[{input:'x',encoded:'x'}],views:{}});`,
-      'The docs.views property was renamed to view.',
+      'Unknown documentation property',
     ],
     [
       `B.view({parts:(s:string)=>s});`,
@@ -102,8 +111,8 @@ test('configuration errors describe removed callbacks and invalid capabilities',
       'allocateArgs requires an allocator',
     ],
     [
-      `assertValueLaws(K,{validWire:fc.string(),projectionMutators:{view:{x:()=>{}}}});`,
-      'projectionMutators.view requires declared view projections.',
+      `assertValueLaws(K,{validWire:fc.string(),surprise:true});`,
+      'Unknown law option.',
     ],
   ];
   const output = compile(

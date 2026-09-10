@@ -46,10 +46,9 @@ Id.parse('x');
 Id.parseOrThrow('x');
 // @ts-expect-error Encoding belongs to Zod.
 id.encode();
-// @ts-expect-error No standard canonical operation.
-id.canonical();
 const converted = defineKind({
   kind: 'types/converted',
+  key: (p) => p.count,
   schema: z.codec(z.string(), z.object({ count: z.number() }), {
     decode: (s) => ({ count: Number(s) }),
     encode: (p) => String(p.count),
@@ -99,27 +98,14 @@ Minted.mint({ id: 'x', other: 'x' });
 // @ts-expect-error Complete the builder first.
 type Unfinished = ValueOf<ReturnType<typeof defineMinted>>;
 const B = defineKind({ kind: 'types/docs', schema: z.string() });
-defineKind({
-  kind: 'types/no-canonical',
-  schema: z.string(),
-  // @ts-expect-error Canonical callbacks were removed.
-  canonical: (s: string) => s,
-});
 // @ts-expect-error Conversions belong in the schema codec.
 defineKind({ kind: 'types/no-decode', schema: z.string(), decode: (s: string) => s });
 // @ts-expect-error Conversions belong in the schema codec.
 defineKind({ kind: 'types/no-encode', schema: z.string(), encode: (s: string) => s });
 // @ts-expect-error Schema input must be JSON, not any.
 defineKind({ kind: 'types/any', schema: z.any() });
-// @ts-expect-error Raw dates are not JSON input. A string-to-date codec works.
+// @ts-expect-error Raw dates are not JSON input. Decode a string schema into Date Parts instead.
 defineKind({ kind: 'types/date', schema: z.date() });
-const date = defineKind({
-  kind: 'types/date-codec',
-  schema: z.codec(z.string(), z.date(), {
-    decode: (s) => new Date(s),
-    encode: (d) => d.toISOString(),
-  }),
-}).view({ year: (d) => d.getUTCFullYear() });
 // @ts-expect-error Kind identity must be a literal.
 defineKind({ kind: '' as string, schema: z.string() });
 // @ts-expect-error Examples must be non-empty.
@@ -128,8 +114,8 @@ B.docs({ examples: [] });
 B.docs({ examples: [{ input: 'x' }] });
 // @ts-expect-error Examples follow the input schema type.
 B.docs({ examples: [{ input: 1, encoded: 'x' }] });
-// @ts-expect-error No canonical examples.
-B.docs({ examples: [{ input: 'x', encoded: 'x', canonical: 'x' }] });
+// @ts-expect-error Unknown example properties are rejected.
+B.docs({ examples: [{ input: 'x', encoded: 'x', surprise: 'x' }] });
 // @ts-expect-error No declared view.
 B.docs({ examples: [{ input: 'x', encoded: 'x' }], view: {} });
 const V = B.view({ size: (s) => s.length });
@@ -146,7 +132,7 @@ V.docs({
   view: { size: { description: 'Size' }, extra: { description: 'No' } },
 });
 // @ts-expect-error Standard operations cannot be projections.
-B.view({ equals: (s: string) => s });
+B.view({ debug: (s: string) => s });
 // @ts-expect-error Symbol projections are forbidden.
 B.view({ [Symbol.iterator]: (s: string) => s });
 defineMinted({
@@ -155,16 +141,7 @@ defineMinted({
   // @ts-expect-error Minted definitions have no schema.
   schema: z.string(),
 });
-assertValueLaws(Id, {
-  validWire: fc.string(),
-  projectionMutators: {
-    view: {
-      length: (n) => {
-        type N = Assert<Equal<typeof n, number>>;
-      },
-    },
-  },
-});
+assertValueLaws(Id, { validWire: fc.string() });
 assertValueLaws(allocated, {
   validWire: fc.string(),
   allocateArgs: fc.tuple(fc.integer(), fc.string()),
@@ -173,19 +150,53 @@ assertValueLaws(allocated, {
 assertValueLaws(Id, { validWire: fc.integer() });
 // @ts-expect-error No allocator exists.
 assertValueLaws(Id, { validWire: fc.string(), allocateArgs: fc.constant([]) });
-assertValueLaws(Id, {
-  validWire: fc.string(),
-  // @ts-expect-error Only declared view projections have mutators.
-  projectionMutators: { view: { unknown: () => {} } },
-});
-assertValueLaws(Id, {
-  validWire: fc.string(),
-  // @ts-expect-error Canonical mutators were removed.
-  projectionMutators: { canonical: () => {} },
-});
 // @ts-expect-error This minted input requires both IDs.
 assertMintedLaws(Minted, { validInput: fc.constant({ id }) });
-// @ts-expect-error Old exports are absent.
-import { defineValue, defineDerived, defineAttested } from '../src/index.js';
-// @ts-expect-error Old law names are absent.
-import { assertDerivedLaws, assertAttestedLaws } from '../src/laws.js';
+
+// @ts-expect-error Non-primitive Parts require a semantic key.
+defineKind({ kind: 'types/missing-key', schema: z.object({ x: z.number() }) });
+// @ts-expect-error Primitive identity cannot be overridden.
+defineKind({ kind: 'types/primitive-key', schema: z.string(), key: (s: string) => s });
+defineKind({
+  kind: 'types/object-key',
+  schema: z.object({ x: z.number() }),
+  // @ts-expect-error Keys must be supported primitives.
+  key: (p) => p,
+});
+// @ts-expect-error A union containing an object requires key.
+defineKind({
+  kind: 'types/union-key',
+  schema: z.union([z.string(), z.object({ x: z.number() })]),
+});
+// @ts-expect-error Values have no independent comparator.
+id.equals(id);
+// @ts-expect-error Native collections use reference identity.
+Id.map();
+// @ts-expect-error Native collections use reference identity.
+Id.set();
+const Structured = defineMinted({
+  kind: 'types/structured',
+  mint: () => ({ ok: true, value: { users: [id], nested: { list: [1] } } }),
+})
+  .view({ users: (p) => p.users, nested: (p) => p.nested })
+  .seal();
+const r = Structured.mint(undefined);
+if (r.ok) {
+  type Exact = Assert<Equal<typeof r.value.view.users, readonly Id[]>>;
+  // @ts-expect-error Array observations are readonly.
+  r.value.view.users.push(id);
+  // @ts-expect-error Nested observations are readonly.
+  r.value.view.nested.list[0] = 2;
+}
+// @ts-expect-error Date observations are unsupported.
+B.view({ date: () => new Date() });
+// @ts-expect-error Function observations are unsupported.
+B.view({ fn: () => () => 0 });
+// @ts-expect-error Nested mutable class observations are unsupported.
+B.view({ nested: () => ({ map: new Map() }) });
+defineMinted({
+  kind: 'types/minted-key',
+  mint: () => ({ ok: true, value: 1 }),
+  // @ts-expect-error Mint events have no semantic key.
+  key: () => 1,
+});

@@ -1,230 +1,199 @@
 # sealed-semantics
 
+Define values once. Make their construction rules, identity, and permitted observations part of the API.
 
-This package is for the people who want to create software architecture using Typescript that is substantially more restrictive than what regular Typescript offers, for defining datatypes and how they are interacted with and move through the system.
+This package is for TypeScript codebases where an object with the right properties is not enough. You need to know how it was created.
 
-Human engineers who are experienced in a codebase tend to carry around a lot of implicit context when working on a repository.
-They implicitly just *know* how lots of things should be used and interact, or where the correct thing is for the current problem they're working on.
-They tend to know that operations involving, for e.g., `UserClaims` objects should be performed in the way `UserClaims` tend to be in the application.
+This matters particularly in agent-heavy codebases. An engineer may remember that a value must pass a shared validator. An agent working on one function may instead assemble a matching object and add local helpers. The change can look reasonable while bypassing rules elsewhere in the application.
 
-By contrast, AI tends to be mostly focused on the local context and its immediate vicinity when tasked to do something. It sometimes might notice that it's working with something called `UserClaims` 
-and that this means that it should do a string search in the repo to find precedents for this. Whether it does such a search at all, or whether such a search finds the right things, leading to it making the right decision are the opposites of guarantees.
-This is because we lack a good way to enforce them in Typescript.
-An AI in such a situation could just as easily produce its own `UserClaims` thing that satisfies a shape, hand-rolling whatever local functions it needs to interact with this, satisfying what it needed to *locally* achieve for the local change.
-This is often a tech debt production line!
+A carefully written class with a private constructor and ES private fields can enforce controlled construction manually. TypeScript and JavaScript can implement these mechanisms without this package. `sealed-semantics` standardizes the complete convention: runtime nominal identity, Zod codec composition, hidden state, controlled projections, semantic identity, mint-event provenance, executable documentation, and laws.
 
-The uncertainty that this produces leads to difficult code reviews by humans or, among other things,
-the risk of leaving behind precedents for breaking the structural rules of your architecture.
-(Where breaks in structure are then used as justifications for more breaks in the future by AI.)
+## Two primitives
 
-You may not notice the mess this produces incrementally, because each individual set of changes seems locally coherent, but you definitely notice it once the repository is sufficiently complex! 
+**`defineKind` represents a semantic value.** Equivalent decoded values from one completed definition are the same live JavaScript object. Compare them with `===`. Use native `Map` and `Set`.
 
-(You could replace AI in the last few paragraphs with humans, or more commonly, humans without as much experience in a codebase too.
-AI coding just supercharges the amount of output that tends to work this way.)
+**`defineMinted` represents a successful mint event.** Every successful `.mint(input)` call creates a distinct object. A downstream function can require that object as evidence that the configured producer succeeded.
 
-As AI context windows increase or fill-up, their precision with choosing the right information in the context also decreases!
+You supply the checks. The library prevents callers from creating a genuine instance without passing through its construction path. It does not prove that your checks are correct. Accepting a user ID does not prove that a database row exists, or establish authorization, persistence, or currentness.
 
-## Who is this for?
+## Requirements
 
-Are you frustrated by escape hatches in Typescript types giving room for downstream consumers violating contracts and boundaries?
+Use Node 22+, TypeScript 5.7+, and Zod >=4.1 <5. The core is browser-compatible. It requires `WeakRef` and `FinalizationRegistry` and throws a clear error at import if either is unavailable. There is no fallback.
 
-Are you tired of watching AI consistently not realize that the local context it's looking at isn't sufficient for understanding how a given type fits in the broader system?
+For Cloudflare Workers with weak references disabled, enable `enable_weak_ref` and remove `disable_weak_ref`. See [runtime requirements](docs/guarantees.md#runtime-requirements).
 
-Does your codebase suffer from "there's already a similar helper for this in <_some other random module or place_>, use that", relying on the rote memory of human reviewers to catch this?
+```sh
+npm install sealed-semantics zod
+```
 
-I am / was all of those things, so I made this package to hopefully eliminate much of it.
-
-## The problem
-Typescript's type system is great, but it has *a lot* of escape hatches, and tends to leave behind inexactness that you don't necessarily know is there.
-From the various casting operations, to the runtime hacks that ignore the transpiler, to no enforced serialization protocol linked to types (and much more), types often feel more like hints than true constraints.
-
-## The solution
-
-### **sealed-semantics** has just two primitives:
-
-
-### `defineKind()`: Define what a value means and how it enters or leaves your application
-
-You define "kinds". A  kind combines a TypeScript type with runtime rules for creating and using its values. 
-Kinds are based on the semantic description of a datatype. For example: "This is a distance. It must be finite and non-negative. Inputs can use metres or kilometres, but internally it is always stored in metres. Callers can read the distance in either unit. When serialized, it always includes both the amount and the unit: { amount: 1500, unit: 'm' }."
-
-You pass this definition to `defineKind()`, optionally add projections with `.view(...)`, and call `.seal()` to complete the kind. Every instance must be created through that kind’s construction methods or its codec, so it must pass the validation and conversion logic in its Zod schema.
-The completed definition controls how instances can be used: their internal state stays private, `.view(...)` declares what callers may read, and its Zod codec defines how they cross boundaries. 
-Callers cannot create a genuine instance simply by assembling an object with matching properties or casting it to the TypeScript type.
-
-### `defineMinted()`: Require that specific logic has run before a value can be used
-
-A minted value establishes that its configured `mint` producer successfully ran on an input and produced this result. It does not establish that the producer’s logic is correct or certify contextual facts such as existence, authorization, currentness, or persistence.
-
-Sometimes valid individual values are not enough. You need to know that a particular set of rules has been applied to them together.
-
-How often do you receive a `SomeInput`, then validate it again because its TypeScript type only tells you which properties it has?
-Why can't the function require an input that has already passed those checks?
-
-With `defineMinted()`, you put those rules in a `mint` function.
-Its input can contain existing kinds, ordinary data, or both. After you complete the definition with .seal(), calling .mint(input) runs that function and creates an instance only if it succeeds.
-
-A save function can then require a `SomeInput` instance. Callers must obtain one through a successful call to `SomeInput.mint(...)`.
-They cannot substitute an ordinary object with the same properties.
-
-You supply the checks. The library prevents callers from creating a genuine instance without passing through them.
- 
-
----
-
-### Requirements
-Requires Node 22+, TypeScript 5.7+, and Zod >=4.1 <5. The package is in initial development; the API may change before 1.0.
-
-
-Install with `npm install sealed-semantics`.
-             `pnpm install sealed-semantics`
-             `yarn add sealed-semantics`
-
----
-
-## What does that look like in code?
-
-Take a user ID. It arrives as a string in an HTTP response, but most of your application should not have to keep asking whether that string is actually a user ID of the kind you expect. In other words, this ID is user.id from the user table in my database, guaranteed. Not a customerId from Stripe, not any other kind of user ID, but just that it's provably a user.id from the user table in our database.
-
-Define the rules once, then pass a `UserId` to functions that need one.
+## Define an identifier
 
 ```ts
 import { z } from 'zod';
 import { defineKind, type ValueOf } from 'sealed-semantics';
 
 const UserId = defineKind({
-  kind: 'readme/user-id',
-  schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]{16,}$/),
-}).view({
-  suffix: spelling => spelling.slice(-6)
-}).seal();
-
+  kind: 'app/user-id',
+  schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/),
+})
+  .view({ suffix: spelling => spelling.slice(-6) })
+  .seal();
 type UserId = ValueOf<typeof UserId>;
 
-const user = UserId.codec.parse('USR_0123456789ABCDEF');
-console.log(z.encode(UserId.codec, user));      // usr_0123456789abcdef
-console.log(user.view.suffix);   // abcdef
+const a = UserId.codec.parse('USR_0123456789ABCDEF');
+const b = UserId.codec.parse('usr_0123456789abcdef');
+console.log(a === b); // true
+console.log(a.view.suffix); // abcdef
+console.log(z.encode(UserId.codec, a)); // usr_0123456789abcdef
+const users = new Map<UserId, string>([[a, 'Alice']]);
+console.log(users.get(b)); // Alice
 ```
 
-`schema` is the Zod schema for the value. Its output becomes the private representation. Here, it validates the ID and normalizes it to lowercase. If input and private representation need different types, pass a `z.codec(...)` as the schema.
+The schema validates and normalizes input. Its output becomes the private representation, called **Parts**. Interning happens after that normalization. It makes semantic identity coincide with object identity; it is not a promise of faster parsing.
 
-`.view()` declares the properties callers can read from that private representation. `view.suffix` exposes the final six characters.
-
-`ValueOf<typeof UserId>` gives you the TypeScript type for instances produced by this kind definition. 
-A function that accepts `UserId` cannot accidentally receive anything besides userIds of the defined kind. This means no ordinary string or a separately defined `ProjectId`, nor someone trying to bypass the function's signature as a workaround. If someone bypasses TypeScript with a cast, `UserId.is(value)` still checks whether the value is a real instance. A cast cannot create one.
+`ValueOf<typeof UserId>` gives the instance type. A cast cannot construct an instance. `UserId.is(value)` checks the actual private brand.
 
 ## You can decode individual fields, or a whole response
 
-Zod handles both directions. Use `UserId.codec.parse(input)` for unknown input, or `UserId.codec.safeParse(input)` to handle a validation error as a result. Use `z.decode(UserId.codec, input)` when the input is already statically typed. Use `z.encode(UserId.codec, value)` for output.
-
-`sealed-semantics` does not add its own parse, decode, encode, or canonical methods. `.view(...)` and `.docs(...)` remain optional steps before `.seal()`.
-
-For a request or response with several fields, a Zod schema saves you from manually decoding each one:
+Zod owns representation boundaries. Use `Kind.codec.parse(unknown)` or `safeParse(unknown)` for external input. Use `z.decode` for statically typed input, and `z.encode` for output. A composed schema handles nested kinds and arrays without field-by-field conversion.
 
 ```ts
 import { z } from 'zod';
 import { defineKind, defineMinted, type ValueOf } from 'sealed-semantics';
 
 const UserId = defineKind({
-  kind: 'readme/user-id',
-  schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]{16,}$/),
-})
-  .view({ suffix: (spelling) => spelling.slice(-6) })
-  .seal();
+  kind: 'app/user-id',
+  schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/),
+}).seal();
 type UserId = ValueOf<typeof UserId>;
-
 const ProjectId = defineKind({
-  kind: 'readme/project-id',
-  schema: z.string().regex(/^prj_[a-f0-9]{16,}$/),
+  kind: 'app/project-id',
+  schema: z.string().regex(/^prj_[a-f0-9]+$/),
 }).seal();
 type ProjectId = ValueOf<typeof ProjectId>;
-const MembershipResponse = z.object({
+
+const ResponseSchema = z.object({
   user_id: UserId.codec,
   project_id: ProjectId.codec,
 });
-const user = UserId.codec.parse('usr_0123456789abcdef');
-const member = MembershipResponse.parse({
-  user_id: 'USR_0123456789ABCDEF',
-  project_id: 'prj_fedcba9876543210',
+const response = ResponseSchema.parse({
+  user_id: 'USR_123ABC',
+  project_id: 'prj_123abc',
 });
-// member.user_id is now a UserId, and member.project_id is a ProjectId.
-console.log(z.encode(MembershipResponse, member));
-// { user_id: 'usr_0123456789abcdef', project_id: 'prj_fedcba9876543210' }
+console.log(z.encode(ResponseSchema, response));
+// { user_id: 'usr_123abc', project_id: 'prj_123abc' }
 ```
 
-The same schema reads external data into your application types and writes those types back into external data. This works for nested objects and arrays too. Using Zod at these entry and exit points means less field-by-field conversion code.
+Use a `z.codec(...)` as the definition's schema when external input and Parts have different types. Normalize in that schema before identity is computed. One-way Zod transforms can decode but cannot encode backward.
 
-## A function can also require that specific logic has already run
+## Object Parts need an identity key
 
-Suppose a database function saves a list of users to one project. It needs at least one user, and it should save each user only once. You could ask every caller to remember those rules. Or you could make the function accept a `MembershipBatch` that can only be created by running those rules.
+Primitive Parts use their own value as the key. Supported keys are strings, numbers, bigints, booleans, `null`, and `undefined`. A custom `key` on entirely primitive Parts is a compile error. Symbols are not semantic keys.
 
-That is what `defineMinted` is for. Its `.seal()` call finishes the definition; each later `.mint(input)` call runs the checks to create an instance. Here, it takes existing `ProjectId` and `UserId` instances and creates a new type:
+If the output includes an object or another non-primitive alternative, supply `key`:
+
+```ts
+const Coordinate = defineKind({
+  kind: 'geo/coordinate',
+  schema: z.object({ lat: z.number(), lng: z.number() }),
+  key: p => `${p.lat}:${p.lng}`,
+}).seal();
+const c1 = Coordinate.codec.parse({ lat: 1, lng: 2 });
+const c2 = Coordinate.codec.parse({ lat: 1, lng: 2 });
+console.log(c1 === c2); // true
+```
+
+The key is the declared identity, not a hash hint. Parts must already be normalized for that identity. On a live hit, the library compares the Parts structurally. A key collision between different Parts throws instead of returning the wrong value. Errors include the kind and key, not private Parts.
+
+Keyed Parts support primitives, plain data objects, dense arrays, `Date`, and sealed values as atomic leaves. Dates compare by timestamp. Cycles, accessors, hidden properties, symbol keys, typed arrays, and other class instances are rejected on the first decode. Shared acyclic children are allowed.
+
+Keys use JavaScript `Map` semantics: `0` and `-0` share one key, and all `NaN` keys share one key. The schema must accept or produce those values first. This does not make non-finite numbers valid JSON.
+
+## Require checks before saving
+
+A save function can require a minted batch containing validated IDs. The producer below requires a non-empty list and removes repeated users.
 
 ```ts
 const MembershipBatch = defineMinted({
-  kind: 'readme/membership-batch',
+  kind: 'app/membership-batch',
   mint: (input: { projectId: ProjectId; userIds: readonly UserId[] }) => {
-    const valid =
-      ProjectId.is(input?.projectId) &&
-      Array.isArray(input?.userIds as unknown) &&
-      input.userIds.length > 0 &&
-      Array.from(input.userIds).every((id) => UserId.is(id));
-    if (!valid) {
+    if (!ProjectId.is(input?.projectId) ||
+        !Array.isArray(input?.userIds as unknown) ||
+        input.userIds.length === 0 ||
+        !Array.from(input.userIds).every(id => UserId.is(id))) {
       return {
         ok: false,
         error: {
-          kind: 'readme/membership-batch',
+          kind: 'app/membership-batch',
           reason: 'invalid_input',
-          issues: ['Expected a project ID and at least one user ID.'],
+          issues: ['Expected a project and at least one user.'],
         },
       };
     }
-    const users = UserId.set();
-    for (const id of input.userIds) users.add(id);
-    return { ok: true, value: { projectId: input.projectId, userIds: [...users] } };
+    return { ok: true, value: {
+      projectId: input.projectId,
+      userIds: [...new Set(input.userIds)],
+    } };
   },
 })
-  .view({
-    projectId: (parts) => parts.projectId,
-    userIds: (parts) => [...parts.userIds],
-  })
+  .view({ projectId: p => p.projectId, userIds: p => p.userIds })
   .seal();
 type MembershipBatch = ValueOf<typeof MembershipBatch>;
 
 function saveMembershipBatch(batch: MembershipBatch) {
   if (!MembershipBatch.is(batch)) throw new TypeError('Expected a MembershipBatch');
-  // Replace this log with your database write.
-  console.log('Save members:', {
+  console.log('Save:', {
     project: z.encode(ProjectId.codec, batch.view.projectId),
-    users: batch.view.userIds.map((id) => z.encode(UserId.codec, id)),
+    users: batch.view.userIds.map(id => z.encode(UserId.codec, id)),
   });
 }
-
-const batch = MembershipBatch.mint({
-  projectId: member.project_id,
-  userIds: [user],
-});
-if (batch.ok) saveMembershipBatch(batch.value);
+const input = { projectId: response.project_id, userIds: [response.user_id] };
+const first = MembershipBatch.mint(input);
+const second = MembershipBatch.mint(input);
+if (first.ok && second.ok) {
+  console.log(first.value === second.value); // false: two mint events
+  saveMembershipBatch(first.value);
+}
 ```
 
-`saveMembershipBatch` can rely on `mint` having run. An ordinary object with the same properties will not pass the type check or the runtime `MembershipBatch.is` check. The batch contains at least one user, and `UserId.set()` removes duplicates by ID value, even when they are different JavaScript objects.
+The library ensures that the producer succeeded. The producer defines what that success means. This example does not check user existence or permission to change project membership.
 
-The batch stores a new array, and `view.userIds` returns a new copy each time. Editing the caller's array or the returned array therefore cannot change the stored list. This copying is part of the definition above: the library keeps state private, but it does not automatically copy or freeze that state for you.
+## Stable, immutable views
 
-You still have to write the right checks in `mint`. This example checks the IDs and the list; it does not check whether the users exist or whether the caller may add them to the project. A minted value has no boundary codec. It records that local checks ran; when saving, you explicitly encode the IDs it contains.
+Each view projection runs lazily. Its first successful result is validated, deeply frozen, and cached. Later reads return exactly that result, including `undefined` and other falsy values. Failed projections can be retried.
 
-## Try the full examples
+Views allow primitives, sealed values, dense arrays, and plain data objects. Structured observations are deeply readonly in TypeScript. Functions, Dates, collections, other class instances, accessors, hidden properties, symbol-keyed structures, and cycles are rejected on access. Sealed leaves retain their exact type and remain usable.
 
-From a clone of this repository:
+The library does not deep-freeze all private Parts merely because they are sealed. Anything exposed through `view` becomes deeply immutable. Parts must remain logically immutable after sealing. If a projection returns an internal array, that array is frozen too. Producers must not retain aliases that they later mutate.
+
+## Definition identity and development
+
+A sealed value belongs to exactly one completed definition instance. `Kind.is(value)` is true only for that instance's values. Two definitions may use the same `kind` string. They are unrelated, and their values are foreign to each other. The string is a diagnostic label, not runtime identity.
+
+Re-executing a definition module creates a new definition instance. Older values still work, but the new codec rejects them with a diagnostic. After editing a definition, refresh the page or restart the process to clear preserved state.
+
+Next.js dev, Vite, Vitest, Jest, and Node's test runner need no package-specific configuration. The package holds no global state that can survive a module reset. See [framework guidance](docs/frameworks.md).
+
+TypeScript cannot generate a fresh nominal type for each factory call. Literal kind names distinguish types statically, but two definitions using the same name can have compatible TypeScript types. Runtime brands and codecs remain authoritative.
+
+## React and representation boundaries
+
+Equivalent decodes from one definition return the same live object. Semantic values can be used in React state and dependency arrays. Cached structured views do not need caller-written `useMemo` just to stabilize their references.
+
+Object identity does not cross workers, processes, server/client, network, or storage boundaries. Encode through Zod, transfer plain data, then decode with the receiving definition.
+
+Console inspection shows `Sealed<app/user-id>` without encoding, revealing Parts, or calling `debug()`. `JSON.stringify(value)` still throws. Structured/JSON logging requires explicit Zod encoding. Minted values have no external representation.
+
+In Jest and Vitest, use `toBe` to test identity. Two distinct minted values can pass `toEqual` because their private state is not enumerable.
+
+## Examples and verification
 
 ```sh
 npm ci
-npm run test:consumer
+npm run check
 npm run examples --prefix examples/consumer
 ```
 
-Start with the [example index](examples/consumer/src/examples/index.ts). It walks through a fake HTTP request and response, ID comparisons, a cache keyed by user IDs, and saving project memberships. Each section shows the relevant calls and explains the result. [Runners](examples/consumer/src/runners.ts) contain the sample data and logging.
+The [consumer walkthrough](examples/consumer/src/examples/index.ts) demonstrates HTTP requests, native caches, and a save function that requires minted plans and batches. It imports the package through its public exports.
 
-The [membership workflow](examples/consumer/src/examples/define-minted/membership-workflow/membership-workflow.ts) goes one step further than this README: it first mints a plan from a `UserId` and a `ProjectId`, then mints a batch from several plans. The batch checks that all plans belong to the same project. The save function therefore receives something that has passed both stages. The example uses a fake database; it does not write to an external service.
-
-For more detail, read about [what the library guarantees](docs/guarantees.md), [boundary and mint errors](docs/producer-results.md), [adding checked examples with `.docs()`](docs/documentation.md), and [testing your definitions](docs/laws.md). The [diagnostics guide](docs/diagnostics.md) explains configuration errors. To contribute, see [CONTRIBUTING.md](CONTRIBUTING.md). For publishing checks, see [releasing](docs/releasing.md). Report security issues using [SECURITY.md](SECURITY.md). Licensed under [MIT](LICENSE).
+Read the [guarantees](docs/guarantees.md), [specification](docs/specification.md), [documentation guide](docs/documentation.md), [laws](docs/laws.md), and [error guide](docs/producer-results.md). See [CONTRIBUTING.md](CONTRIBUTING.md), [release checks](docs/releasing.md), and [SECURITY.md](SECURITY.md). Licensed under [MIT](LICENSE).

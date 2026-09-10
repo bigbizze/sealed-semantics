@@ -23,7 +23,9 @@ test('only Zod exposes boundary operations; private brands reject forgery and co
     'parseOrThrow',
     'decode',
     'encode',
-    'canonical',
+    'equals',
+    'map',
+    'set',
   ]) {
     assert(!(name in UserId), name);
     assert(!(name in value), name);
@@ -35,7 +37,6 @@ test('only Zod exposes boundary operations; private brands reject forgery and co
   }
   assert.throws(() => new (value.constructor as any)(), TypeError);
   assert.throws(() => new (value.constructor as any)(Symbol(), {}), TypeError);
-  assert.throws(() => value.equals(fake), TypeError);
   assert.throws(() => value.debug.call(fake), TypeError);
 });
 
@@ -45,8 +46,8 @@ test('schema-only kinds infer Parts and validate through all Zod boundary paths'
     .seal();
   const a = Id.codec.parse('ab');
   assert.equal(a.view.length, 2);
-  assert(z.decode(Id.codec, 'ab').equals(a));
-  assert((await Id.codec.parseAsync('ab')).equals(a));
+  assert.equal(z.decode(Id.codec, 'ab'), a);
+  assert.equal(await Id.codec.parseAsync('ab'), a);
   assert.equal(z.encode(Id.codec, a), 'ab');
   assert(!Id.codec.safeParse(42).success);
   assert(!z.safeDecode(Id.codec, 'x').success);
@@ -58,8 +59,7 @@ test('schema codecs normalize inputs, validate decoded Parts, and encode nested 
   const current = 'usr_550e8400e29b41d4a716446655440000';
   const a = UserId.codec.parse(legacy),
     b = z.decode(UserId.codec, current);
-  assert.notEqual(a, b);
-  assert(a.equals(b));
+  assert.equal(a, b);
   assert.equal(z.encode(UserId.codec, a), current);
   // Accepted by the broad external grammar but rejected by the codec output schema.
   assert(!UserId.codec.safeParse(`user:${'-'.repeat(36)}`).success);
@@ -109,36 +109,10 @@ test('Zod refinements and codec issues remain Zod errors in both directions', ()
   assert.equal(z.encode(Positive, Positive.parse('2')), '2');
 });
 
-test('semantic collections use normalized encoding and preserve original keys', () => {
-  const a = UserId.codec.parse('usr_0123456789abcdef');
-  const b = UserId.codec.parse('usr_0123456789abcdef');
-  const map = UserId.map<number>().set(a, 1).set(b, 2);
-  assert.equal(map.size, 1);
-  assert.equal(map.get(a), 2);
-  assert.equal([...map.keys()][0], a);
-  const entry = [...map.entries()][0]!;
-  entry[1] = 999;
-  assert.equal(map.get(b), 2);
-  map.forEach((v, k, m) => {
-    assert.equal(v, 2);
-    assert.equal(k, a);
-    assert.equal(m, map);
-  });
-  assert(map.has(b));
-  assert(map.delete(b));
-  assert.equal(map.size, 0);
-  map.set(a, 1);
-  map.clear();
-  assert.equal(map.size, 0);
-  const set = UserId.set().add(a).add(b);
-  assert.equal(set.size, 1);
-  assert(set.has(b));
-  assert.throws(() => map.set({} as any, 1), TypeError);
-});
-
 test('instances, kinds, prototypes, and lazy view facades have frozen surfaces', () => {
   const Parts = defineKind({
     kind: 'runtime/view',
+    key: (p) => p.rows.join(','),
     schema: z.object({ rows: z.array(z.number()) }),
   })
     .view({ rows: (p) => [...p.rows] })
@@ -147,7 +121,10 @@ test('instances, kinds, prototypes, and lazy view facades have frozen surfaces',
   const value = Parts.codec.parse(input);
   input.rows.push(3);
   assert.deepEqual(value.view.rows, [1, 2]);
-  value.view.rows.push(4);
+  assert.throws(() => {
+    // @ts-expect-error Views are deeply readonly.
+    value.view.rows.push(4);
+  }, TypeError);
   assert.deepEqual(value.view.rows, [1, 2]);
   for (const target of [Parts, value, Object.getPrototypeOf(value), value.view]) {
     assert(Object.isFrozen(target));
@@ -180,9 +157,8 @@ test('minted construction preserves errors, identity, and producer-owned copies'
   const a = PreparedWrite.mint(input),
     b = PreparedWrite.mint(input);
   assert(a.ok && b.ok);
-  assert(!a.value.equals(b.value));
-  assert(a.value.equals(a.value));
-  assert.equal(PreparedWrite.set().add(a.value).add(b.value).size, 2);
+  assert.notEqual(a.value, b.value);
+  assert.equal(new Set([a.value, b.value]).size, 2);
   assert(!('codec' in PreparedWrite));
   assert(!('encode' in a.value));
   assert.throws(() => JSON.stringify(a.value), /no external representation/);
@@ -217,7 +193,7 @@ test('allocation runs the codec and reports Zod errors', () => {
   assert.equal(z.encode(Zero.codec, Zero.allocate()), 'ok');
 });
 
-test('deterministic keys validate JSON data and preserve negative zero', () => {
+test('documentation wire comparison validates JSON and preserves negative zero', () => {
   assert.equal(stableWireKey({ b: 2, a: 1 }), '{"a":1,"b":2}');
   assert.equal(stableWireKey(-0), '-0');
   assert.notEqual(stableWireKey(-0), stableWireKey(0));

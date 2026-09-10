@@ -19,7 +19,7 @@ From this directory, use `npm test`, `npm start`, or `npm run examples`. `npm ru
 | [src/examples/index.ts](src/examples/index.ts) | Read the important API calls in order, with section descriptions. |
 | [src/runners.ts](src/runners.ts) | Request fixtures, fake database adapters, detailed logging, and result checks. |
 | [src/definitions](src/definitions) | `UserId`, `ProjectId`, and `PreparedMembership` definitions. |
-| [src/examples/define-value](src/examples/define-value) | HTTP validation and profile caching. |
+| [src/examples/define-kind](src/examples/define-kind) | HTTP validation and profile caching. |
 | [src/examples/define-minted/membership-workflow](src/examples/define-minted/membership-workflow) | A checked batch and the save function that requires it. |
 | [test](test) | Runtime rejection tests and compile-time checks, including exact projection types. |
 | [src/index.ts](src/index.ts) | Runs the demonstration and re-exports the definitions. |
@@ -27,7 +27,7 @@ From this directory, use `npm test`, `npm start`, or `npm run examples`. `npm ru
 The seven sections demonstrate:
 
 1. Decode an HTTP response through a Zod schema or individual `Kind.codec.parse()` calls.
-2. Compare independently parsed values with `.equals()` and encode the response again.
+2. Compare independently parsed values with `===` and encode the response again.
 3. Handle invalid input as an HTTP response, a result object, or an exception.
 4. Reuse a cached profile across accepted spellings of one user ID.
 5. Mint a plan from both ID types, mint a batch, and pass it to a function that requires it.
@@ -48,4 +48,4 @@ Relative imports use `.ts`. The compiler rewrites them for built JavaScript; Nod
 
 `.seal()` validates any supplied `.docs()` examples while a definition module loads. A wrong example fails tests that import that definition and application startup. No separate documentation command is needed.
 
-Duplicate names fail when both definitions complete in the same realm. Compiling a file does not execute it, and an unused file is not automatically imported. Separate test processes have separate registries.
+Module re-execution creates independent definitions. Old values stay valid for their original definition, but a new codec rejects them with a foreign-definition diagnostic.

@@ -1,4 +1,4 @@
-import { createProfileLookup } from './define-value/profile-cache.ts';
+import { createProfileLookup } from './define-kind/profile-cache.ts';
 import { MembershipBatch } from './define-minted/membership-workflow/membership-batch.ts';
 import {
   addProjectMembers,
@@ -55,12 +55,10 @@ const manualParseExample: PostResponse = {
 httpRequestNext({ manualParseExample, zodParseExample });
 
 // ############################################################
-section('2. Two parsing paths: different objects, equal IDs');
+section('2. Two parsing paths: equal IDs are the same object');
 compareParsingExamples({
   sameUserObject: zodParseExample.user_id === manualParseExample.user_id,
-  equalUsers: zodParseExample.user_id.equals(manualParseExample.user_id),
   sameProjectObject: zodParseExample.project_id === manualParseExample.project_id,
-  equalProjects: zodParseExample.project_id.equals(manualParseExample.project_id),
   encoded: z.encode(postResponseSchema, zodParseExample),
   userPassesProjectCheck: ProjectId.is(zodParseExample.user_id),
 });

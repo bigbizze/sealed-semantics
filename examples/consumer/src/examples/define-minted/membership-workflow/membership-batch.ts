@@ -3,7 +3,7 @@ import { UserId, PreparedMembership } from '../../../definitions/index.ts';
 
 // saveMembershipBatch accepts this type so every caller must first pass these checks:
 // at least one plan, all for the same project, with only one plan per user.
-// Store a new array and return copies so callers cannot change the accepted list.
+// Store a new array. Its view is cached and deeply frozen.
 export const MembershipBatch = defineMinted({
   kind: 'sealed-semantics-test/examples/membership-batch',
   mint: (plans: readonly PreparedMembership[]) => {
@@ -23,7 +23,7 @@ export const MembershipBatch = defineMinted({
       };
     }
     const projectId = plans[0]!.view.projectId;
-    if (plans.some((plan) => !projectId.equals(plan.view.projectId))) {
+    if (plans.some((plan) => projectId !== plan.view.projectId)) {
       return {
         ok: false,
         error: {
@@ -33,7 +33,7 @@ export const MembershipBatch = defineMinted({
         },
       };
     }
-    const users = UserId.set();
+    const users = new Set<UserId>();
     const unique = plans.filter((plan) => {
       if (users.has(plan.view.userId)) return false;
       users.add(plan.view.userId);
@@ -44,7 +44,7 @@ export const MembershipBatch = defineMinted({
 })
   .view({
     projectId: (parts) => parts.projectId,
-    plans: (parts) => [...parts.plans],
+    plans: (parts) => parts.plans,
     count: (parts) => parts.plans.length,
   })
   .docs({
@@ -53,7 +53,7 @@ export const MembershipBatch = defineMinted({
     view: {
       projectId: { description: 'The common project for every plan.' },
       plans: {
-        description: 'A fresh array of plans, one per semantic user identifier.',
+        description: 'An immutable array of plans, one per semantic user identifier.',
       },
       count: { description: 'The number of distinct users in the batch.' },
     },

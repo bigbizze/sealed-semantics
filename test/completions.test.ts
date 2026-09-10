@@ -35,11 +35,13 @@ const Viewed=ViewedBuilder.seal();
     assertValueLaws(Full,{validWire:fc.string(), /*fullLaws*/ });
     assertMintedLaws(Minted,{validInput:fc.string(), /*mintedLaws*/ });
     assertMintedLaws(Viewed,{validInput:fc.string(), /*viewedLaws*/ });
-    assertValueLaws(Full,{validWire:fc.string(),projectionMutators:{ /*fullMutators*/ }});
-    assertMintedLaws(Viewed,{validInput:fc.string(),projectionMutators:{ /*viewedMutators*/ }});
-    assertMintedLaws(Viewed,{validInput:fc.string(),projectionMutators:{view:{ /*viewNames*/ }}});
     defineKind({ /*definition*/ });
     defineMinted({ /*mintedDefinition*/ });
+    defineKind({kind:'completion/primitive',schema:z.string(), /*primitiveDefinition*/ });
+    defineKind({kind:'completion/object',schema:z.object({x:z.number()}), /*objectDefinition*/ });
+    const instance=Basic.codec.parse('x');
+    instance./*instance*/;
+    Minted./*mintedKind*/;
     BasicBuilder./*builder*/;
     Basic./*kind*/;
     BasicBuilder.docs({examples:[{input:'x',encoded:'x'}]})./*documentedBuilder*/;
@@ -81,10 +83,14 @@ const Viewed=ViewedBuilder.seal();
       );
     }
     const expected: Record<string, string[]> = {
-      definition: ['kind', 'schema', 'allocate', 'equals', 'debug'],
+      definition: ['kind', 'schema', 'allocate', 'key', 'debug'],
+      primitiveDefinition: ['allocate', 'debug'],
+      objectDefinition: ['key', 'allocate', 'debug'],
+      instance: ['debug', 'toJSON', 'valueOf'],
+      mintedKind: ['kind', 'is', 'mint'],
       mintedDefinition: ['kind', 'mint', 'debug'],
       builder: ['view', 'docs', 'seal'],
-      kind: ['kind', 'is', 'codec', 'map', 'set'],
+      kind: ['kind', 'is', 'codec'],
       documentedBuilder: ['docs', 'seal'],
       basic: ['description', 'examples'],
       full: ['description', 'examples', 'view'],
@@ -94,18 +100,8 @@ const Viewed=ViewedBuilder.seal();
       basicExample: ['input', 'encoded'],
       fullExample: ['input', 'encoded'],
       projectionDoc: ['description', 'example'],
-      basicLaws: ['equivalentAliases', 'sealedKinds'],
-      fullLaws: [
-        'equivalentAliases',
-        'allocateArgs',
-        'projectionMutators',
-        'sealedKinds',
-      ],
-      mintedLaws: ['sealedKinds'],
-      viewedLaws: ['projectionMutators', 'sealedKinds'],
-      fullMutators: ['view'],
-      viewedMutators: ['view'],
-      viewNames: ['suffix'],
+      basicLaws: ['equivalentAliases'],
+      fullLaws: ['equivalentAliases', 'allocateArgs'],
     };
     for (const [marker, names] of Object.entries(expected)) {
       const position = source.indexOf(`/*${marker}*/`);

@@ -1,16 +1,16 @@
 // Internal, platform-independent validation performed by .seal().
-import { documentationEqual } from './documentation-equal.js';
 function assert(condition: unknown, message: string): asserts condition {
   if (!condition) throw new TypeError(message);
 }
 assert.equal = (actual: unknown, expected: unknown, message: string) =>
   assert(Object.is(actual, expected), message);
 assert.deepEqual = (actual: unknown, expected: unknown, message: string) =>
-  assert(documentationEqual(actual, expected), message);
+  assert(stableWireKey(actual) === stableWireKey(expected), message);
 import type { z } from 'zod';
 import { decodeWire, encodeWire } from './zod-codec.js';
 import type { DocumentationShape } from './documentation.js';
 import { stableWireKey } from './keying.js';
+import { foreignValue } from './sealed-leaf.js';
 import type { AnyKind } from './types.js';
 
 type Semantic = AnyKind & {
@@ -90,7 +90,8 @@ export function validateDocumentation(kind: AnyKind, shape: DocumentationShape):
     assert(decoded.success, `${label}.input was rejected by codec.safeDecode`);
     if (!decoded.success) continue;
     const value: any = decoded.data;
-    assert(kind.is(value), `${label}: codec returned an invalid brand`);
+    assert(kind.is(value), foreignValue(kind.kind, value, `${label}: docs`));
+    for (const name of shape.view) void (value as any).view[name];
     const raw = encodeWire(semantic.codec, value);
     assert.deepEqual(
       raw,
@@ -105,8 +106,11 @@ export function validateDocumentation(kind: AnyKind, shape: DocumentationShape):
     const reparsed = decodeWire(semantic.codec, raw);
     assert(reparsed.success, `${label}: encoded output was rejected by codec`);
     if (!reparsed.success) continue;
-    assert(kind.is(reparsed.data), `${label}: round trip returned an invalid brand`);
-    assert(value.equals(reparsed.data), `${label}: round trip changed equality`);
+    assert(
+      kind.is(reparsed.data),
+      foreignValue(kind.kind, reparsed.data, `${label}: docs round trip`),
+    );
+    assert(value === reparsed.data, `${label}: round trip changed identity`);
     assert.deepEqual(
       encodeWire(semantic.codec, reparsed.data),
       example.encoded,

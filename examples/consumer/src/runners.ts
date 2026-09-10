@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import assert from 'node:assert/strict';
 import { ProjectId, UserId, type PreparedMembership } from './definitions/index.ts';
-import { fakeServer } from './examples/define-value/http-contract.ts';
-import type { Profile } from './examples/define-value/profile-cache.ts';
+import { fakeServer } from './examples/define-kind/http-contract.ts';
+import type { Profile } from './examples/define-kind/profile-cache.ts';
 import { MembershipBatch } from './examples/define-minted/membership-workflow/membership-batch.ts';
 import type {
   MembershipDatabase,
@@ -71,20 +71,16 @@ export async function runHttpRequestExample() {
 
 export function compareParsingExamples(results: {
   sameUserObject: boolean;
-  equalUsers: boolean;
   sameProjectObject: boolean;
-  equalProjects: boolean;
   encoded: unknown;
   userPassesProjectCheck: boolean;
 }) {
   console.log('UserId: same object:', results.sameUserObject);
-  console.log('UserId: equal value:', results.equalUsers);
   console.log('ProjectId: same object:', results.sameProjectObject);
-  console.log('ProjectId: equal value:', results.equalProjects);
   console.log('\nEncode the complete response again:', results.encoded);
   console.log('A UserId passes ProjectId.is:', results.userPassesProjectCheck);
-  assert(results.equalUsers, 'user_id not equal');
-  assert(results.equalProjects, 'project_id not equal');
+  assert(results.sameUserObject, 'user_id not equal');
+  assert(results.sameProjectObject, 'project_id not equal');
 }
 
 export async function runInvalidInputExample() {
@@ -121,7 +117,7 @@ export function runProfileCacheExample() {
         '  Database read:',
         UserId.is(id) ? z.encode(UserId.codec, id) : z.encode(ProjectId.codec, id),
       );
-      return { displayName: id.equals(alice) ? 'Alice' : 'Bob' };
+      return { displayName: id === alice ? 'Alice' : 'Bob' };
     },
     next(user: UserId, profile: Profile | undefined) {
       console.log('  Source:', reads === previousReads ? 'cache' : 'database');
@@ -169,11 +165,8 @@ export function runMintedBatchExample() {
         MembershipBatch.is({ view: batch.view }),
       );
       console.log('Save result:', saved);
-      const displayedPlans = batch.view.plans;
-      displayedPlans.pop();
-      console.log('\nRemove a row from a display copy');
-      console.log('  Display rows remaining:', displayedPlans.length);
-      console.log('  Batch users unchanged:', batch.view.count);
+      console.log('Stable observation:', batch.view.plans === batch.view.plans);
+      console.log('Immutable observation:', Object.isFrozen(batch.view.plans));
       assert.equal(batch.view.plans.length, 2);
     },
   };

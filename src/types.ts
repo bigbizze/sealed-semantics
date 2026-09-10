@@ -1,12 +1,11 @@
 import type { z } from 'zod';
-import type { ValueMap, ValueSet } from './collections.js';
 export type JsonValue =
   string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 export type ProducerResult<T, E = ValueError> =
   { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: E };
 export interface ValueError {
   readonly kind: string;
-  readonly reason: 'invalid_wire' | 'invalid_parts' | 'invalid_input';
+  readonly reason: 'invalid_input';
   readonly issues: readonly string[];
 }
 /** An impossible requirement that explains an invalid configuration in compiler errors. */
@@ -16,7 +15,6 @@ export type ConfigurationError<Message extends string> = {
 declare const BRAND: unique symbol;
 export interface Proof<K extends string> {
   readonly [BRAND]: K;
-  equals(other: Proof<K>): boolean;
   debug(): string;
   toJSON(): never;
   valueOf(): never;
@@ -38,7 +36,9 @@ type Views<O> = O extends { view: infer F }
     ? {}
     : {
         readonly view: {
-          readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R ? R : never;
+          readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R
+            ? DeepReadonly<R>
+            : never;
         };
       }
   : {};
@@ -53,8 +53,6 @@ export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
       W,
       z.ZodType<SemanticValue<K, W, O>, SemanticValue<K, W, O>>
     >;
-    map<V>(): ValueMap<ValueKind<K, W, O>, V>;
-    set(): ValueSet<ValueKind<K, W, O>>;
   } & (O extends { allocate: (...args: infer A) => unknown }
     ? { allocate(...args: A): SemanticValue<K, W, O> }
     : {})
@@ -63,8 +61,6 @@ export type MintedKind<K extends string, I, O> = Readonly<{
   readonly kind: K;
   is(x: unknown): x is MintedValue<K, O>;
   mint(input: I): ProducerResult<MintedValue<K, O>>;
-  map<V>(): ValueMap<MintedKind<K, I, O>, V>;
-  set(): ValueSet<MintedKind<K, I, O>>;
 }>;
 export type JsonSchema<W extends z.ZodType> = 0 extends 1 & z.input<W>
   ? ConfigurationError<'Wire schema input must not be any. Use a schema with a specific JSON input type.'>
@@ -72,37 +68,25 @@ export type JsonSchema<W extends z.ZodType> = 0 extends 1 & z.input<W>
     ? W
     : ConfigurationError<'Wire schema input must be JSON-compatible. Encode dates, bigints, and other non-JSON values as JSON wire data.'>;
 export type LiteralKind<K extends string> = K &
-  (string extends K
-    ? ConfigurationError<'kind must be a string literal, not a widened string. Use a literal or as const.'>
-    : unknown);
+  (K extends ''
+    ? ConfigurationError<'kind must be a non-empty string literal.'>
+    : string extends K
+      ? ConfigurationError<'kind must be a string literal, not a widened string. Use a literal or as const.'>
+      : unknown);
 
 export type ReservedField =
   | 'docs'
   | 'documentation'
   | 'view'
-  | 'map'
-  | 'set'
-  | 'get'
-  | 'value'
   | 'kind'
   | 'is'
-  | 'parse'
-  | 'parseOrThrow'
   | 'mint'
-  | 'wire'
   | 'schema'
   | 'codec'
   | 'seal'
   | 'allocate'
-  | 'canonical'
-  | 'encode'
-  | 'equals'
   | 'debug'
   | 'parts'
-  | 'raw'
-  | 'unwrap'
-  | 'fromParts'
-  | 'indexKey'
   | '__proto__'
   | 'constructor'
   | 'prototype'
@@ -110,7 +94,44 @@ export type ReservedField =
   | 'toJSON'
   | 'valueOf'
   | 'toString';
+export type SemanticKey = string | number | bigint | boolean | null | undefined;
+export type IdentityOptions<P> = [P] extends [SemanticKey]
+  ? {}
+  : {
+      /** Required identity for non-primitive Parts. Normalize Parts in the schema first. */
+      key: (parts: P) => SemanticKey;
+    };
+export type DeepReadonly<T> =
+  T extends Proof<string>
+    ? T
+    : T extends object
+      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+      : T;
+type ViewCheck<T> =
+  T extends Proof<string>
+    ? T
+    : T extends (...args: any[]) => any
+      ? never
+      : T extends
+            | Date
+            | Map<any, any>
+            | Set<any>
+            | WeakMap<any, any>
+            | WeakSet<any>
+            | ArrayBuffer
+            | ArrayBufferView
+            | Promise<any>
+        ? never
+        : T extends object
+          ? { [K in keyof T]: K extends symbol ? never : ViewCheck<T[K]> }
+          : T;
 export type CheckedView<F> = F & {
+  [N in keyof F]: F[N] extends (...args: any[]) => infer R
+    ? [R] extends [ViewCheck<R>]
+      ? unknown
+      : ConfigurationError<'View outputs must be primitives, sealed values, arrays, or plain data objects. They become deeply readonly.'>
+    : unknown;
+} & {
   [
     N in Extract<keyof F, ReservedField>
   ]: ConfigurationError<`Field name "${N}" is reserved. Choose a different projection name.`>;
@@ -129,7 +150,9 @@ export type ProjectionDocumentation<O> = Readonly<{ description?: string }> &
           readonly view: {
             readonly [N in keyof F]: Readonly<{
               description: string;
-              example?: F[N] extends (...args: any[]) => infer R ? R : never;
+              example?: F[N] extends (...args: any[]) => infer R
+                ? DeepReadonly<R>
+                : never;
             }>;
           };
         }
@@ -144,24 +167,18 @@ export type ValueDocumentation<W extends z.ZodType, O> = ProjectionDocumentation
     examples: readonly [ValueExample<W, O>, ...ValueExample<W, O>[]];
   }>;
 
-type DocumentationMessage<N> = N extends 'exampleCanonical' | 'exampleWire'
-  ? 'Separate exampleWire/exampleCanonical fields were replaced by examples: [{ input, encoded }].'
-  : N extends 'examples'
-    ? 'Minted definitions have no wire examples. Remove examples.'
-    : N extends 'view'
-      ? 'docs.view requires declared projections. Add projections to .view({ ... }) first.'
-      : N extends 'views'
-        ? 'The docs.views property was renamed to view. Use .docs({ view: ... }).'
-        : N extends string
-          ? `Unknown documentation property "${N}". Check the documentation property name.`
-          : 'Symbol-named documentation properties are not supported.';
+type DocumentationMessage<N> = N extends 'examples'
+  ? 'Minted definitions have no wire examples. Remove examples.'
+  : N extends 'view'
+    ? 'docs.view requires declared projections. Add projections to .view({ ... }) first.'
+    : N extends string
+      ? `Unknown documentation property "${N}". Check the documentation property name.`
+      : 'Symbol-named documentation properties are not supported.';
 type ExampleAt<A> = A extends { readonly examples: readonly (infer E)[] } ? E : {};
 type CheckedExample<P, A> = P & {
-  [N in Exclude<keyof P, keyof A>]: ConfigurationError<
-    N extends 'canonical'
-      ? 'Canonical examples are no longer supported. Use input and encoded codec examples.'
-      : 'Unknown example property. Use input and encoded.'
-  >;
+  [
+    N in Exclude<keyof P, keyof A>
+  ]: ConfigurationError<'Unknown example property. Use input and encoded.'>;
 };
 type DocumentationInput<P, A> = A &
   Record<keyof P, unknown> &

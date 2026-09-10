@@ -1,4 +1,4 @@
-// Internal only: never export representation keys through a package entry point.
+// Internal JSON comparison for executable documentation only. Never semantic identity.
 export function stableWireKey(raw: unknown): string {
   const ancestors = new Set<object>();
   const visit = (value: unknown): string => {

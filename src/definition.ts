@@ -4,29 +4,15 @@ const reservedFields = new Set([
   'docs',
   'documentation',
   'view',
-  'map',
-  'set',
-  'get',
-  'value',
   'kind',
   'is',
-  'parse',
-  'parseOrThrow',
   'mint',
-  'wire',
   'schema',
   'codec',
   'seal',
   'allocate',
-  'canonical',
-  'encode',
-  'equals',
   'debug',
   'parts',
-  'raw',
-  'unwrap',
-  'fromParts',
-  'indexKey',
   '__proto__',
   'constructor',
   'prototype',
@@ -86,19 +72,19 @@ export function validateDefinition(spec: unknown, semantic: boolean): void {
   keys(
     input,
     semantic
-      ? ['kind', 'schema', 'allocate', 'equals', 'debug']
+      ? ['kind', 'schema', 'allocate', 'key', 'debug']
       : ['kind', 'mint', 'debug'],
     'definition',
   );
   if (
     !Object.hasOwn(input, 'kind') ||
     typeof input.kind !== 'string' ||
-    !/^[^\s/]+\/\S+$/.test(input.kind)
+    input.kind.trim().length === 0
   ) {
-    throw new TypeError('kind must be a namespaced string literal');
+    throw new TypeError('kind must be a non-empty string literal');
   }
   if (!semantic) callback(input, 'mint', 'definition');
-  for (const name of ['allocate', 'equals', 'debug']) {
+  for (const name of ['allocate', 'key', 'debug']) {
     if (Object.hasOwn(input, name)) callback(input, name, 'definition');
   }
   if (semantic && (!Object.hasOwn(input, 'schema') || !isWireSchema(input.schema))) {

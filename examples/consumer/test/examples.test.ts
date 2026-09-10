@@ -8,8 +8,8 @@ import {
   fakeServer,
   readMembershipRequest,
   membershipResponse,
-} from '../src/examples/define-value/http-contract.ts';
-import { createProfileLookup } from '../src/examples/define-value/profile-cache.ts';
+} from '../src/examples/define-kind/http-contract.ts';
+import { createProfileLookup } from '../src/examples/define-kind/profile-cache.ts';
 import {
   addProjectMembers,
   saveMembershipBatch,
@@ -66,7 +66,7 @@ test('legacy and current identifiers share a cached profile', async () => {
   const a = UserId.codec.safeParse(legacy);
   const b = UserId.codec.safeParse(current);
   assert(a.success && b.success);
-  assert.notEqual(a.data, b.data);
+  assert.equal(a.data, b.data);
   assert.equal((await lookup(a.data))?.displayName, 'Alice');
   assert.equal((await lookup(b.data))?.displayName, 'Alice');
   assert.equal(reads, 1);
@@ -108,7 +108,10 @@ test('batch validation rejects mixed projects and preserves its private list', (
   assert.equal(batch.value.view.count, 1);
   assert.equal(batch.value.view.plans[0], first);
   input.length = 0;
-  batch.value.view.plans.pop();
+  assert.throws(() => {
+    // @ts-expect-error Cached view arrays are readonly.
+    batch.value.view.plans.pop();
+  }, TypeError);
   assert.equal(batch.value.view.plans.length, 1);
   assert.equal(MembershipBatch.mint(new Array<PreparedMembership>(1)).ok, false);
   const mixed = MembershipBatch.mint([first, plan(current, 'prj_0123456789abcdef')]);
@@ -133,7 +136,9 @@ test('saving requires a minted batch, not a matching object', async () => {
 type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
-type BatchPlans = Expect<Equal<MembershipBatch['view']['plans'], PreparedMembership[]>>;
+type BatchPlans = Expect<
+  Equal<MembershipBatch['view']['plans'], readonly PreparedMembership[]>
+>;
 type BatchProject = Expect<Equal<MembershipBatch['view']['projectId'], ProjectId>>;
 
 test('fake server decodes a request and returns normalized JSON', async () => {

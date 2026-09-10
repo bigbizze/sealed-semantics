@@ -4,8 +4,8 @@ import { z } from 'zod';
 import { defineKind, defineMinted } from '../src/index.js';
 import { ok } from './result.js';
 
-test('unknown options and removed conversion callbacks fail before registration', () => {
-  for (const name of ['decode', 'encode', 'canonical', 'fields', 'view', 'canoncal'])
+test('unknown definition options fail immediately', () => {
+  for (const name of ['equals', 'intern', 'view', 'surprise'])
     assert.throws(
       () =>
         defineKind({
@@ -17,10 +17,6 @@ test('unknown options and removed conversion callbacks fail before registration'
     );
   const K = defineKind({ kind: 'definition/retry', schema: z.string() }).seal();
   assert(K.is(K.codec.parse('x')));
-  assert.throws(
-    () => defineMinted({ kind: K.kind, mint: () => ok(0) }).seal(),
-    /Duplicate kind/,
-  );
 });
 
 test('declarations reject malformed schemas, callbacks, kind names, and minted options', () => {
@@ -28,20 +24,19 @@ test('declarations reject malformed schemas, callbacks, kind names, and minted o
     null,
     [],
     {},
-    { kind: 'invalid' },
+    { kind: '' },
     { kind: 'definition/bad', schema: {} },
     { kind: 'definition/bad', schema: z.string(), equals: 1 },
   ])
     assert.throws(() => defineKind(spec as any), TypeError);
   for (const spec of [
     { kind: 'definition/minted', mint: 1 },
-    { kind: 'definition/minted', derive: () => ok(1) },
+    { kind: 'definition/minted', surprise: () => ok(1) },
     { kind: 'definition/minted', mint: () => ok(1), schema: z.string() },
   ])
     assert.throws(() => defineMinted(spec as any), TypeError);
   const K = defineMinted({ kind: 'definition/minted', mint: () => ok(1) }).seal();
   assert(K.mint(undefined).ok);
-  assert(!('derive' in K));
 });
 
 test('configuration accessors, symbols, and hidden properties are rejected without running getters', () => {
@@ -73,14 +68,11 @@ test('reserved projection names and symbols cannot create conflicting surfaces',
     'view',
     'codec',
     'seal',
-    'equals',
     'debug',
     'parts',
     'constructor',
     'toJSON',
     'then',
-    'encode',
-    'canonical',
   ])
     assert.throws(() => B.view({ [name]: () => 0 } as any), /reserved/);
   assert.throws(() => B.view({ [Symbol.toPrimitive]: () => 0 } as any), /Symbol/);
@@ -90,7 +82,7 @@ test('reserved projection names and symbols cannot create conflicting surfaces',
   assert(!('view' in value.value));
 });
 
-test('builders register only at seal, capture callbacks, and complete once', () => {
+test('builders capture callbacks and each seal creates a definition', () => {
   const spec = { kind: 'definition/lifecycle' as const, mint: (s: string) => ok(s) };
   const B = defineMinted(spec);
   spec.mint = () => ok('replaced');
@@ -100,16 +92,16 @@ test('builders register only at seal, capture callbacks, and complete once', () 
   const configured = B.view(projections);
   projections.text = () => 'replaced';
   const K = configured.seal();
-  assert.equal(K, configured.seal());
+  assert.notEqual(K, configured.seal());
   const r = K.mint('original');
   assert(r.ok);
   assert.equal(r.value.view.text, 'original');
-  assert.throws(() => B.seal(), /Duplicate kind/);
+  assert.notEqual(B.seal(), K);
   assert(!('seal' in K));
   assert(!('docs' in K));
 });
 
-test('failed documentation leaves the name available and docs precede completion', () => {
+test('failed documentation can be corrected and docs precede completion', () => {
   const B = defineKind({ kind: 'definition/docs-retry', schema: z.string().min(2) });
   assert.throws(
     () => B.docs({ examples: [{ input: 'x', encoded: 'x' }] }).seal(),
@@ -118,6 +110,6 @@ test('failed documentation leaves the name available and docs precede completion
   const documented = B.docs({ examples: [{ input: 'ok', encoded: 'ok' }] });
   assert.throws(() => (documented as any).view({}), /before/);
   const K = documented.seal();
-  assert.equal(K, documented.seal());
+  assert.notEqual(K, documented.seal());
   assert(Object.isFrozen(K.documentation));
 });

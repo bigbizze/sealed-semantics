@@ -177,42 +177,42 @@ schema:foreignZod.string(),
 }).seal();
  assert(ForeignSchema.is(ForeignSchema.codec.parse('x')));
  const ABuilder=a.defineKind({kind:'consumer/id',schema:z.string()});
- const A=ABuilder.seal();
- assert.throws(()=>b.defineKind({kind:'consumer/id',
-schema:z.string(),
-}).seal(), /Duplicate kind/);
- assert.throws(()=>b.defineMinted({kind:'consumer/id',
-mint:i=>({ok:true,value:i})}).seal(), /Duplicate kind/);
+ const A=ABuilder.view({text:p=>p}).seal();
  const B=b.defineKind({kind:'consumer/other-id',
 schema:z.string(),
 }).seal();
  const x=A.codec.parse('x'),y=A.codec.parse('x');
+ const Same=b.defineKind({kind:'consumer/id',schema:z.string()}).seal();
+ assert(!Same.is(x)); assert.notEqual(Same.codec.parse('x'),x);
+ assert.throws(()=>z.encode(Same.codec,x),/different definition instance.*re-executed/);
+
  assert(!B.is(x)); assert(!A.is(B.codec.parse('x')));
- assert.equal(A.map().set(x,1).get(y),1);
- assert.equal(A.set().add(x).add(y).size,1);
+ assert.equal(x,y); assert.equal(new Map([[x,1]]).get(y),1);
+ assert.equal(new Set([x,y]).size,1);
  const D=a.defineMinted({kind:'consumer/proof',
 mint:i=>({ok:true,value:i})}).seal();
- assert.throws(()=>b.defineMinted({kind:'consumer/proof',
-mint:i=>({ok:true,value:i})}).seal(), /Duplicate kind/);
  const p=D.mint(1).value,q=D.mint(1).value;
- assert.equal(D.set().add(p).add(q).size,2);
+ const OtherD=b.defineMinted({kind:'consumer/proof',mint:i=>({ok:true,value:i})}).seal();
+ const foreignEvent=OtherD.mint(1).value;
+ assert(!OtherD.is(p));
+ assert.throws(()=>foreignEvent.debug.call(p),/debug.*different definition instance.*two copies/);
+ const EventHolder=b.defineMinted({kind:'consumer/event-holder',mint:i=>({ok:true,value:i})}).view({event:p=>p}).seal();
+ const heldEvent=EventHolder.mint(p).value;
+ assert.equal(heldEvent.view.event,p);
+
+ assert.notEqual(p,q); assert.equal(new Set([p,q]).size,2);
  const Composite=b.defineKind({kind:'consumer/composite',
-schema:z.object({id:A.codec}),
+schema:z.object({id:A.codec}),key:p=>p.id.view.text,
 }).view({id:p=>p.id}).seal();
  const c=Composite.codec.parse({id:'x'}),d=Composite.codec.parse({id:'x'});
- assert(A.is(c.view.id));assert.equal(Composite.map().set(c,1).get(d),1);
+ assert(A.is(c.view.id));assert.equal(c,d); assert.equal(new Map([[c,1]]).get(d),1);
  assert(Object.isFrozen(c.view));assert.equal(Object.getPrototypeOf(c.view),null);
  assert.deepEqual(Object.keys(a).sort(),['defineKind','defineMinted']);
- assert(!('IdMap' in a));assert(!('ValueMap' in a));
- // Internal cross-copy test: exported package paths remain blocked for consumers.
- const foreign=await import('./node_modules/sealed-semantics-copy/dist/collections.js');
- assert.equal(new foreign.ValueMap(A).set(x,1).get(y),1);
- assert.equal(new foreign.ValueSet(D).add(p).add(q).size,2);
- assert.equal(ABuilder.seal(),A);
+ assert.notEqual(ABuilder.seal(),A);
  assert.throws(()=>ABuilder.docs({examples:[{input:'x',encoded:'bad'}]}).seal(), /encoded does not match/);
  assertValueLaws(A,{validWire:fc.string()});
- assertValueLaws(Composite,{validWire:fc.record({id:fc.string()}),sealedKinds:[A]});
- for (const path of ['zod-codec','docs','registry','documentation-equal','seal','definition','documentation','codec','keying','collections','dist/seal.js','src/seal.ts']) await assert.rejects(import('sealed-semantics/'+path),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
+ assertValueLaws(Composite,{validWire:fc.record({id:fc.string()})});
+ for (const path of ['zod-codec','docs','seal','definition','documentation','codec','keying','interner','structure','sealed-leaf','dist/seal.js','src/seal.ts']) await assert.rejects(import('sealed-semantics/'+path),{code:'ERR_PACKAGE_PATH_NOT_EXPORTED'});
  `,
   );
   run(process.execPath, ['smoke.mjs'], temp);
@@ -227,7 +227,7 @@ schema:z.object({id:A.codec}),
     temp,
   );
   console.log(
-    `Package smoke passed with Zod ${process.argv[2] ?? '4.1.0'}: README, declaration constraints, cross-copy brands/collections, test-only entry, exports, synchronous docs validation.`,
+    `Package smoke passed with Zod ${process.argv[2] ?? '4.1.0'}: README, declaration constraints, cross-copy brands and native collections, test-only entry, exports, synchronous docs validation.`,
   );
   console.log(`Tarball: ${join(root, metadata.filename)}`);
 } catch (error) {
