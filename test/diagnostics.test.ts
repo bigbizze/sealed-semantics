@@ -124,3 +124,23 @@ test('configuration errors explain identity and capability constraints', () => {
   for (const [, message] of cases) assert(output.includes(message!), output);
   assert.equal((output.match(/error TS\d+:/g) ?? []).length, cases.length, output);
 });
+
+test('conversion diagnostics explain the supported return types', () => {
+  const output = compile(`
+const B=defineSeal({name:'diagnostic/to',schema:z.string(),key:s=>s});
+B.to({anything:s=>String(s)});
+B.to({anything:s=>({s})});
+B.to({anything:s=>[s]});
+B.to({anything:()=>Promise.resolve(1)});
+B.to({anything:()=>()=>1});
+B.to({string:s=>Buffer.from(s, "base64url")});
+B.to({unknown:():unknown=>"x"});
+`);
+  assert(
+    output.includes(
+      'This conversion returns an unsupported type. Functions defined in the .to method can only return types that .view cannot. Return Date, Map, Set, ArrayBuffer, Uint8Array, another supported typed array, or DataView. Use view for primitives, arrays, and plain objects.',
+    ),
+    output,
+  );
+  assert.equal((output.match(/error TS\d+:/g) ?? []).length, 7, output);
+});

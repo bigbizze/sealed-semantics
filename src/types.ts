@@ -47,8 +47,17 @@ export type Owned<T> = T extends Date | ArrayBuffer | ArrayBufferView
       : T extends object
         ? { -readonly [K in keyof T]: Owned<T[K]> }
         : T;
+// Detect Buffer structurally without requiring Node types in browser consumers.
+type NodeBufferShape = Uint8Array & {
+  readUInt8(offset?: number): number;
+  writeUInt8(value: number, offset?: number): number;
+};
 type CopyCheck<T> = T extends
-  Proof<string> | SharedArrayBuffer | symbol | ((...args: any[]) => any)
+  | Proof<string>
+  | NodeBufferShape
+  | SharedArrayBuffer
+  | symbol
+  | ((...args: any[]) => any)
   ? never
   : T extends
         | Date
@@ -83,11 +92,9 @@ type ConversionResult =
   | ReadonlySet<unknown>;
 export type CheckedConversions<F> = F & {
   [N in keyof F]: F[N] extends (...args: any[]) => infer R
-    ? unknown extends R
+    ? [R] extends [ConversionResult & CopyCheck<R>]
       ? unknown
-      : [R] extends [ConversionResult & CopyCheck<R>]
-        ? unknown
-        : ConfigurationError<'Conversions must return Date, Map, Set, ArrayBuffer, or a typed array/DataView. Use view for primitives, arrays, and plain objects; functions, sealed values, and shared memory cannot be copied.'>
+      : ConfigurationError<'This conversion returns an unsupported type. Functions defined in the .to method can only return types that .view cannot. Return Date, Map, Set, ArrayBuffer, Uint8Array, another supported typed array, or DataView. Use view for primitives, arrays, and plain objects.'>
     : unknown;
 } & {
   [
@@ -318,7 +325,7 @@ export interface ValueBuilder<
   O = {},
   D = undefined,
 > {
-  readonly to: <const F extends Record<string, (parts: P) => unknown>>(
+  readonly to: <const F extends Record<string, (parts: P) => any>>(
     conversions: F & CheckedConversions<NoInfer<F>>,
   ) => ValueBuilder<K, W, P, Omit<O, 'to'> & { to: F }, D>;
   readonly view: <const F extends Record<string, (parts: P) => unknown>>(
@@ -341,7 +348,7 @@ export interface ValueBuilder<
 }
 /** Configuration only. Call .seal() to create the completed kind. */
 export interface MintedBuilder<K extends string, I, P, E, O = {}, D = undefined> {
-  readonly to: <const F extends Record<string, (parts: P) => unknown>>(
+  readonly to: <const F extends Record<string, (parts: P) => any>>(
     conversions: F & CheckedConversions<NoInfer<F>>,
   ) => MintedBuilder<K, I, P, E, Omit<O, 'to'> & { to: F }, D>;
   readonly view: <const F extends Record<string, (parts: P) => unknown>>(
