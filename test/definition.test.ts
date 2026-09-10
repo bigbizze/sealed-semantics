@@ -1,41 +1,45 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { defineKind, defineMinted } from '../src/index.js';
+import { defineSeal, defineMint } from '../src/index.js';
 import { ok } from './result.js';
 
 test('unknown definition options fail immediately', () => {
   for (const name of ['equals', 'intern', 'view', 'surprise'])
     assert.throws(
       () =>
-        defineKind({
-          kind: 'definition/retry',
+        defineSeal({
+          name: 'definition/retry',
           schema: z.string(),
           [name]: () => 0,
         } as any),
       /Unknown definition property/,
     );
-  const K = defineKind({ kind: 'definition/retry', schema: z.string() }).seal();
+  const K = defineSeal({
+    key: (parts) => parts,
+    name: 'definition/retry',
+    schema: z.string(),
+  }).seal();
   assert(K.is(K.codec.parse('x')));
 });
 
-test('declarations reject malformed schemas, callbacks, kind names, and minted options', () => {
+test('declarations reject malformed schemas, callbacks, definition names, and minted options', () => {
   for (const spec of [
     null,
     [],
     {},
-    { kind: '' },
-    { kind: 'definition/bad', schema: {} },
-    { kind: 'definition/bad', schema: z.string(), equals: 1 },
+    { name: '' },
+    { name: 'definition/bad', schema: {} },
+    { name: 'definition/bad', schema: z.string(), equals: 1 },
   ])
-    assert.throws(() => defineKind(spec as any), TypeError);
+    assert.throws(() => defineSeal(spec as any), TypeError);
   for (const spec of [
-    { kind: 'definition/minted', mint: 1 },
-    { kind: 'definition/minted', surprise: () => ok(1) },
-    { kind: 'definition/minted', mint: () => ok(1), schema: z.string() },
+    { name: 'definition/minted', mint: 1 },
+    { name: 'definition/minted', surprise: () => ok(1) },
+    { name: 'definition/minted', mint: () => ok(1), schema: z.string() },
   ])
-    assert.throws(() => defineMinted(spec as any), TypeError);
-  const K = defineMinted({ kind: 'definition/minted', mint: () => ok(1) }).seal();
+    assert.throws(() => defineMint(spec as any), TypeError);
+  const K = defineMint({ name: 'definition/minted', mint: () => ok(1) }).seal();
   assert(K.mint(undefined).ok);
 });
 
@@ -53,16 +57,16 @@ test('configuration accessors, symbols, and hidden properties are rejected witho
     { [Symbol()]: () => '' },
   ]) {
     const spec = Object.defineProperties(
-      { kind: 'definition/descriptors', schema: z.string() },
+      { name: 'definition/descriptors', schema: z.string() },
       Object.getOwnPropertyDescriptors(extra),
     );
-    assert.throws(() => defineKind(spec as any), TypeError);
+    assert.throws(() => defineSeal(spec as any), TypeError);
   }
   assert.equal(calls, 0);
 });
 
 test('reserved projection names and symbols cannot create conflicting surfaces', () => {
-  const B = defineMinted({ kind: 'definition/views', mint: () => ok(0) });
+  const B = defineMint({ name: 'definition/views', mint: () => ok(0) });
   for (const name of [
     'mint',
     'view',
@@ -83,8 +87,8 @@ test('reserved projection names and symbols cannot create conflicting surfaces',
 });
 
 test('builders capture callbacks and each seal creates a definition', () => {
-  const spec = { kind: 'definition/lifecycle' as const, mint: (s: string) => ok(s) };
-  const B = defineMinted(spec);
+  const spec = { name: 'definition/lifecycle' as const, mint: (s: string) => ok(s) };
+  const B = defineMint(spec);
   spec.mint = () => ok('replaced');
   assert(Object.isFrozen(B));
   assert(!('mint' in B));
@@ -102,14 +106,55 @@ test('builders capture callbacks and each seal creates a definition', () => {
 });
 
 test('failed documentation can be corrected and docs precede completion', () => {
-  const B = defineKind({ kind: 'definition/docs-retry', schema: z.string().min(2) });
+  const B = defineSeal({
+    key: (parts) => parts,
+    name: 'definition/docs-retry',
+    schema: z.string().min(2),
+  });
   assert.throws(
     () => B.docs({ examples: [{ input: 'x', encoded: 'x' }] }).seal(),
     /rejected/,
   );
   const documented = B.docs({ examples: [{ input: 'ok', encoded: 'ok' }] });
-  assert.throws(() => (documented as any).view({}), /before/);
+  assert(documented.view({}).seal().documentation);
   const K = documented.seal();
   assert.notEqual(K, documented.seal());
   assert(Object.isFrozen(K.documentation));
+});
+
+test('docs and view work in either order and seal completes both factories', () => {
+  const B = defineSeal({ name: 'definition/order', schema: z.string(), key: (s) => s });
+  const docs = {
+    examples: [{ input: 'abc', encoded: 'abc' }] as const,
+    view: { text: { description: 'Text', example: 'abc' } },
+  };
+  const projections = { text: (s: string) => s };
+  const first = B.docs(docs).view(projections).seal();
+  const second = B.view(projections).docs(docs).seal();
+  for (const K of [first, second]) {
+    assert.equal(K.name, 'definition/order');
+    assert.equal(K.codec.parse('abc').view.text, 'abc');
+    assert.deepEqual(K.documentation, docs);
+    for (const method of ['docs', 'view', 'seal']) assert(!(method in K));
+  }
+  const M = defineMint({ name: 'definition/mint-order', mint: (s: string) => ok(s) });
+  for (const K of [
+    M.docs({ view: docs.view }).view(projections).seal(),
+    M.view(projections).docs({ view: docs.view }).seal(),
+  ]) {
+    const result = K.mint('abc');
+    assert(result.ok);
+    assert.equal(result.value.view.text, 'abc');
+    for (const method of ['docs', 'view', 'seal']) assert(!(method in K));
+  }
+  // Editing the view preserves docs; final runtime validation uses the new view.
+  assert.throws(
+    () => (B.docs(docs).view({ other: (s: string) => s }) as any).seal(),
+    /view/,
+  );
+  assert.throws(() => (B.docs(docs) as any).seal(), /view/);
+  assert.equal(
+    B.docs(docs).view(projections).docs(docs).seal().codec.parse('abc').view.text,
+    'abc',
+  );
 });

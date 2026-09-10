@@ -1,21 +1,25 @@
 // Stateless cross-copy protocol. Identity is always the definition's private brand.
-export const KIND = Symbol.for('sealed-semantics.kind');
-function kindOf(value: unknown): string | undefined {
+export const NAME_LABEL = Symbol.for('sealed-semantics.name');
+function nameOf(value: unknown): string | undefined {
   if (typeof value !== 'object' || value === null) return undefined;
   try {
-    const kind = (value as { [KIND]?: unknown })[KIND];
-    return typeof kind === 'string' ? kind : undefined;
+    const definitionName = (value as { [NAME_LABEL]?: unknown })[NAME_LABEL];
+    return typeof definitionName === 'string' ? definitionName : undefined;
   } catch {
     return undefined;
   }
 }
-export function foreignValue(kind: string, value: unknown, operation: string): string {
-  const other = kindOf(value);
-  if (other === kind)
-    return `${operation} for ${kind}: value belongs to a different definition instance of the same kind name. The defining module may have been re-executed (hot reload or test-runner module isolation), or two copies of sealed-semantics may be installed.`;
+export function foreignValue(
+  definitionName: string,
+  value: unknown,
+  operation: string,
+): string {
+  const other = nameOf(value);
+  if (other === definitionName)
+    return `${operation} for ${definitionName}: value belongs to a different definition instance of the same definition name. The defining module may have been re-executed (hot reload or test-runner module isolation), or two copies of sealed-semantics may be installed.`;
   if (other !== undefined)
-    return `${operation} for ${kind}: value belongs to a different kind (${other}).`;
-  return `${operation} for ${kind}: expected a sealed value from this definition instance.`;
+    return `${operation} for ${definitionName}: value belongs to a different definition (${other}).`;
+  return `${operation} for ${definitionName}: expected a sealed value from this definition instance.`;
 }
 // Package-copy authenticity. The token also guards the recoverable base constructor.
 export const LEAF_TOKEN: unique symbol = Symbol('sealed leaf construction');

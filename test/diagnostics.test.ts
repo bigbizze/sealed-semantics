@@ -11,7 +11,7 @@ function compile(source: string): string {
     const file = join(dir, 'fixture.mts');
     writeFileSync(
       file,
-      `import {defineKind,defineMinted,type ValueOf} from ${JSON.stringify(resolve('src/index.ts'))};
+      `import {defineSeal,defineMint,type ValueOf} from ${JSON.stringify(resolve('src/index.ts'))};
 import {assertValueLaws} from ${JSON.stringify(resolve('src/laws.ts'))};
 import {z} from 'zod'; import * as fc from 'fast-check';
 ${source}`,
@@ -50,8 +50,8 @@ ${source}`,
 }
 test('compiler diagnostics explain missing seal without expanding builders', () => {
   const output =
-    compile(`const B=defineKind({kind:'diagnostic/basic',schema:z.string()});
-const M=defineMinted({kind:'diagnostic/minted',mint:(s:string)=>({ok:true,value:s})});
+    compile(`const B=defineSeal({ key: parts => parts,name:'diagnostic/basic',schema:z.string()});
+const M=defineMint({name:'diagnostic/minted',mint:(s:string)=>({ok:true,value:s})});
 type A=ValueOf<typeof B>; type C=ValueOf<typeof M>;`);
   assert(output.includes('Call .seal() on the definition first.'), output);
   assert(output.includes('ValueBuilder<'), output);
@@ -61,20 +61,20 @@ type A=ValueOf<typeof B>; type C=ValueOf<typeof M>;`);
 test('configuration errors explain identity and capability constraints', () => {
   const cases = [
     [
-      "defineKind({kind:'diagnostic/object',schema:z.object({x:z.number()})});",
+      "defineSeal({name:'diagnostic/object',schema:z.object({x:z.number()})});",
       "Property 'key' is missing",
     ],
     [
-      "defineKind({kind:'diagnostic/primitive',schema:z.string(),key:()=> 'x'});",
-      'Primitive Parts already define identity.',
+      "defineSeal({name:'diagnostic/primitive',schema:z.string()});",
+      "Property 'key' is missing",
     ],
     ['B.view({bad:()=>new Date()});', 'View outputs must be primitives'],
     [
-      `defineKind({kind:'diagnostic/conversion',schema:z.string(),decode:(s:string)=>s});`,
+      `defineSeal({ key: parts => parts,name:'diagnostic/conversion',schema:z.string(),decode:(s:string)=>s});`,
       'Unknown definition option',
     ],
     [
-      `defineKind({kind:'diagnostic/unknown',schema:z.string(),surprise:(s:string)=>s});`,
+      `defineSeal({ key: parts => parts,name:'diagnostic/unknown',schema:z.string(),surprise:(s:string)=>s});`,
       'Unknown definition option',
     ],
     [
@@ -82,8 +82,8 @@ test('configuration errors explain identity and capability constraints', () => {
       'Unknown example property.',
     ],
     [
-      `B.docs({examples:[{input:'x',encoded:'x'}],view:{}});`,
-      'docs.view requires declared projections.',
+      `B.docs({examples:[{input:'x',encoded:'x'}],view:{}}).seal();`,
+      'Documentation must match the final view.',
     ],
     [
       `B.docs({examples:[{input:'x',encoded:'x'}],views:{}});`,
@@ -94,18 +94,21 @@ test('configuration errors explain identity and capability constraints', () => {
       'is reserved. Choose a different projection name.',
     ],
     [
-      `defineMinted({kind:'diagnostic/m',mint:()=>({ok:true,value:1}),schema:z.string()});`,
+      `defineMint({name:'diagnostic/m',mint:()=>({ok:true,value:1}),schema:z.string()});`,
       'Minted definitions cannot configure schema.',
     ],
     [
-      `defineKind({kind:'diagnostic/any',schema:z.any()});`,
+      `defineSeal({ key: parts => parts,name:'diagnostic/any',schema:z.any()});`,
       'Wire schema input must not be any.',
     ],
     [
-      `defineKind({kind:'diagnostic/date',schema:z.date()});`,
+      `defineSeal({ key: parts => parts.getTime(),name:'diagnostic/date',schema:z.date()});`,
       'Wire schema input must be JSON-compatible.',
     ],
-    [`defineKind({kind:widened,schema:z.string()});`, 'kind must be a string literal'],
+    [
+      `defineSeal({ key: parts => parts,name:widened,schema:z.string()});`,
+      'name must be a string literal',
+    ],
     [
       `assertValueLaws(K,{validWire:fc.string(),allocateArgs:fc.constant([])});`,
       'allocateArgs requires an allocator',
@@ -116,7 +119,7 @@ test('configuration errors explain identity and capability constraints', () => {
     ],
   ];
   const output = compile(
-    `const B=defineKind({kind:'diagnostic/b',schema:z.string()}); const K=B.seal(); const widened:string='diagnostic/w';\n${cases.map(([source]) => source).join('\n')}`,
+    `const B=defineSeal({ key: parts => parts,name:'diagnostic/b',schema:z.string()}); const K=B.seal(); const widened:string='diagnostic/w';\n${cases.map(([source]) => source).join('\n')}`,
   );
   for (const [, message] of cases) assert(output.includes(message!), output);
   assert.equal((output.match(/error TS\d+:/g) ?? []).length, cases.length, output);

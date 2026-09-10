@@ -1,11 +1,11 @@
 const succeed = <T>(value: T) => ({ ok: true as const, value });
 const fail = <E>(error: E) => ({ ok: false as const, error });
 import { z } from 'zod';
-import { defineKind, defineMinted, type ValueOf } from '../src/index.js';
+import { defineSeal, defineMint, type ValueOf } from '../src/index.js';
 export const normalizeUserSpelling = (w: string) =>
   w.startsWith('user:') ? `usr_${w.slice(5).replaceAll('-', '')}` : w;
-export const UserId = defineKind({
-  kind: 'example/user-id',
+export const UserId = defineSeal({
+  name: 'example/user-id',
   schema: z.codec(
     z.string().regex(/^(usr_[a-f0-9]{16,}|user:[0-9a-f-]{36})$/),
     z.object({ spelling: z.string().regex(/^usr_[a-f0-9]{16,}$/) }),
@@ -28,8 +28,9 @@ export const UserId = defineKind({
   })
   .seal();
 export type UserId = ValueOf<typeof UserId>;
-export const Sha256Digest = defineKind({
-  kind: 'example/sha256',
+export const Sha256Digest = defineSeal({
+  key: (parts) => parts,
+  name: 'example/sha256',
   schema: z.codec(
     z.string().regex(/^[a-f0-9]{64}$/),
     z.string().regex(/^[a-f0-9]{64}$/),
@@ -50,8 +51,9 @@ export const Sha256Digest = defineKind({
     ],
   })
   .seal();
-export const NamespaceId = defineKind({
-  kind: 'example/namespace-id',
+export const NamespaceId = defineSeal({
+  key: (parts) => parts,
+  name: 'example/namespace-id',
   schema: z.string().regex(/^ns:[a-z]+$/),
 })
   .view({ name: (p) => p })
@@ -60,8 +62,8 @@ export const NamespaceId = defineKind({
     view: { name: { description: 'Namespace name.' } },
   })
   .seal();
-export const ContentAddress = defineKind({
-  kind: 'example/content-address',
+export const ContentAddress = defineSeal({
+  name: 'example/content-address',
   key: (p) => `${p.namespace_id.view.name}:${p.content_class}:${p.digest.view.hex}`,
   schema: z.object({
     namespace_id: NamespaceId.codec,
@@ -105,12 +107,12 @@ export type WriteRows = { id: string; content: ContentAddress }[];
 export const copyWriteRows = (rows: WriteRows): WriteRows =>
   rows.map((row) => ({ ...row }));
 // Kept module-private in application code; exported here for the package's law tests.
-export const PreparedWrite = defineMinted({
-  kind: 'example/prepared-write',
+export const PreparedWrite = defineMint({
+  name: 'example/prepared-write',
   mint: (input: PrepareInput) => {
     if (!input || !Array.isArray(input.rows) || !Array.isArray(input.content))
       return fail({
-        kind: 'example/prepared-write',
+        name: 'example/prepared-write',
         reason: 'invalid_input' as const,
         issues: ['rows and content arrays required'],
       });

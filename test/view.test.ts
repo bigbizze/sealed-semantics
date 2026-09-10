@@ -1,15 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { defineKind, defineMinted } from '../src/index.js';
+import { defineSeal, defineMint } from '../src/index.js';
 
 test('each observation is lazy, cached once, deeply frozen, and preserves sealed leaf types', () => {
-  const Id = defineKind({ kind: 'view/id', schema: z.string() }).seal();
+  const Id = defineSeal({
+    key: (parts) => parts,
+    name: 'view/id',
+    schema: z.string(),
+  }).seal();
   const id = Id.codec.parse('x');
   let calls = 0,
     emptyCalls = 0;
-  const Batch = defineMinted({
-    kind: 'view/batch',
+  const Batch = defineMint({
+    name: 'view/batch',
     mint: (users: readonly (typeof id)[]) => ({
       ok: true,
       value: { users: [...users] },
@@ -52,7 +56,7 @@ test('each observation is lazy, cached once, deeply frozen, and preserves sealed
 
 test('view retries after evaluation or validation failure without caching invalid results', () => {
   let tries = 0;
-  const K = defineMinted({ kind: 'view/retry', mint: () => ({ ok: true, value: 1 }) })
+  const K = defineMint({ name: 'view/retry', mint: () => ({ ok: true, value: 1 }) })
     .view({
       retry: () => {
         tries++;
@@ -97,8 +101,8 @@ test('unsupported view outputs fail on first access without executing accessors 
   ];
   invalid.forEach((bad, i) => {
     const good = { nested: [1] };
-    const K = defineMinted({
-      kind: `view/invalid-${i}`,
+    const K = defineMint({
+      name: `view/invalid-${i}`,
       mint: () => ({ ok: true, value: 0 }),
     })
       .view({ bad: () => ({ good, bad }) } as any)
@@ -113,8 +117,8 @@ test('unsupported view outputs fail on first access without executing accessors 
 });
 
 test('exposed Parts freeze safely, shared subgraphs work, and later codec/debug reads still work', () => {
-  const K = defineKind({
-    kind: 'view/parts',
+  const K = defineSeal({
+    name: 'view/parts',
     schema: z.object({ rows: z.array(z.number()) }),
     key: (p) => p.rows.join(','),
     debug: (p) => String(p.rows.length),
@@ -131,11 +135,15 @@ test('exposed Parts freeze safely, shared subgraphs work, and later codec/debug 
 });
 
 test('a frozen prototype forgery cannot become a sealed view leaf', () => {
-  const Id = defineKind({ kind: 'view/real-leaf', schema: z.string() }).seal();
+  const Id = defineSeal({
+    key: (parts) => parts,
+    name: 'view/real-leaf',
+    schema: z.string(),
+  }).seal();
   const real = Id.codec.parse('x');
   const fake = Object.freeze(Object.create(Object.getPrototypeOf(real)));
-  const K = defineMinted({
-    kind: 'view/forged-leaf',
+  const K = defineMint({
+    name: 'view/forged-leaf',
     mint: () => ({ ok: true, value: fake }),
   })
     .view({ leaf: (p) => p })
@@ -147,8 +155,8 @@ test('a frozen prototype forgery cannot become a sealed view leaf', () => {
 
 test('recursive projections fail without caching and simple falsy results cache', () => {
   let value: any;
-  const K = defineMinted({
-    kind: 'view/recursive',
+  const K = defineMint({
+    name: 'view/recursive',
     mint: () => ({ ok: true, value: 1 }),
   })
     .view({ self: (): unknown => value.view.self })
@@ -160,8 +168,8 @@ test('recursive projections fail without caching and simple falsy results cache'
   assert.throws(() => value.view.self, /recursive projection access/);
   for (const [i, observation] of [false, 0, '', null, NaN, 1n, Symbol()].entries()) {
     let calls = 0;
-    const F = defineMinted({
-      kind: `view/falsy-${i}`,
+    const F = defineMint({
+      name: `view/falsy-${i}`,
       mint: () => ({ ok: true, value: 0 }),
     })
       .view({
@@ -180,15 +188,15 @@ test('recursive projections fail without caching and simple falsy results cache'
 
 test('a frozen hostile class with the kind symbol cannot impersonate a genuine leaf', () => {
   class Fake {
-    get [Symbol.for('sealed-semantics.kind')]() {
+    get [Symbol.for('sealed-semantics.name')]() {
       return 'view/claimed-id';
     }
   }
   Object.freeze(Fake.prototype);
   const fake = Object.freeze(new Fake());
   assert.deepEqual(Reflect.ownKeys(fake), []);
-  const Mint = defineMinted({
-    kind: 'view/fake-output',
+  const Mint = defineMint({
+    name: 'view/fake-output',
     mint: () => ({ ok: true, value: fake }),
   })
     .view({ leaf: (p) => p })
@@ -196,16 +204,20 @@ test('a frozen hostile class with the kind symbol cannot impersonate a genuine l
   const r = Mint.mint(undefined);
   assert(r.ok);
   assert.throws(() => r.value.view.leaf, /unsupported object/);
-  const K = defineKind({
-    kind: 'view/fake-parts',
+  const K = defineSeal({
+    name: 'view/fake-parts',
     schema: z.string().transform(() => ({ fake })),
     key: () => 1,
   }).seal();
   assert.throws(() => K.codec.parse('x'), /keyed Parts.*unsupported object/);
-  const Id = defineKind({ kind: 'view/local-leaf', schema: z.string() }).seal();
+  const Id = defineSeal({
+    key: (parts) => parts,
+    name: 'view/local-leaf',
+    schema: z.string(),
+  }).seal();
   const value = Id.codec.parse('x');
-  const Holder = defineMinted({
-    kind: 'view/local-holder',
+  const Holder = defineMint({
+    name: 'view/local-holder',
     mint: () => ({ ok: true, value }),
   })
     .view({ leaf: (p) => p })

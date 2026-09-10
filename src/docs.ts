@@ -35,8 +35,8 @@ function keys(value: object, allowed: readonly string[], label: string): void {
     assert(allowed.includes(name), `${label}: unknown property ${name}`);
 }
 function metadata(kind: AnyKind, shape: DocumentationShape) {
-  assert(Object.hasOwn(kind, 'documentation'), `${kind.kind}: missing .docs()`);
-  const doc = record((kind as any).documentation, `${kind.kind}.documentation`);
+  assert(Object.hasOwn(kind, 'documentation'), `${kind.name}: missing .docs()`);
+  const doc = record((kind as any).documentation, `${kind.name}.documentation`);
   keys(
     doc,
     [
@@ -44,27 +44,27 @@ function metadata(kind: AnyKind, shape: DocumentationShape) {
       ...(shape.semantic ? ['examples'] : []),
       ...(shape.view.length ? ['view'] : []),
     ],
-    kind.kind,
+    kind.name,
   );
   if (Object.hasOwn(doc, 'description'))
     assert.equal(
       typeof doc.description,
       'string',
-      `${kind.kind}.description must be a string`,
+      `${kind.name}.description must be a string`,
     );
   if (shape.view.length) {
-    const view = record(doc.view, `${kind.kind}.view`);
-    keys(view, shape.view, `${kind.kind}.view`);
+    const view = record(doc.view, `${kind.name}.view`);
+    keys(view, shape.view, `${kind.name}.view`);
     for (const name of shape.view) {
       assert(
         Object.hasOwn(view, name),
-        `${kind.kind}: view.${name} missing description`,
+        `${kind.name}: view.${name} missing description`,
       );
-      const field = record(view[name], `${kind.kind}.view.${name}`);
-      keys(field, ['description', 'example'], `${kind.kind}.view.${name}`);
+      const field = record(view[name], `${kind.name}.view.${name}`);
+      keys(field, ['description', 'example'], `${kind.name}.view.${name}`);
       assert(
         typeof field.description === 'string' && field.description.trim().length > 0,
-        `${kind.kind}: view.${name} missing description`,
+        `${kind.name}: view.${name} missing description`,
       );
     }
   }
@@ -77,10 +77,10 @@ export function validateDocumentation(kind: AnyKind, shape: DocumentationShape):
   const semantic = kind as Semantic;
   assert(
     Array.isArray(doc.examples) && doc.examples.length > 0,
-    `${kind.kind}: examples must be a non-empty array`,
+    `${kind.name}: examples must be a non-empty array`,
   );
   for (let i = 0; i < doc.examples.length; i++) {
-    const label = `${kind.kind}: examples[${i}]`;
+    const label = `${kind.name}: examples[${i}]`;
     const example = record(doc.examples[i], label);
     keys(example, ['input', 'encoded'], label);
     for (const key of ['input', 'encoded']) {
@@ -90,7 +90,7 @@ export function validateDocumentation(kind: AnyKind, shape: DocumentationShape):
     assert(decoded.success, `${label}.input was rejected by codec.safeDecode`);
     if (!decoded.success) continue;
     const value: any = decoded.data;
-    assert(kind.is(value), foreignValue(kind.kind, value, `${label}: docs`));
+    assert(kind.is(value), foreignValue(kind.name, value, `${label}: docs`));
     for (const name of shape.view) void (value as any).view[name];
     const raw = encodeWire(semantic.codec, value);
     assert.deepEqual(
@@ -108,7 +108,7 @@ export function validateDocumentation(kind: AnyKind, shape: DocumentationShape):
     if (!reparsed.success) continue;
     assert(
       kind.is(reparsed.data),
-      foreignValue(kind.kind, reparsed.data, `${label}: docs round trip`),
+      foreignValue(kind.name, reparsed.data, `${label}: docs round trip`),
     );
     assert(value === reparsed.data, `${label}: round trip changed identity`);
     assert.deepEqual(

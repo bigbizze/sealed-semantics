@@ -22,8 +22,8 @@ type PaymentError =
   | { code: 'unauthorized' }
   | { code: 'expired'; expiredAt: Date };
 
-const Payment = defineMinted({
-  kind: 'payment/authorized',
+const Payment = defineMint({
+  name: 'payment/authorized',
   mint: (input: string): ProducerResult<{ input: string }, PaymentError> =>
     input
       ? { ok: true, value: { input } }

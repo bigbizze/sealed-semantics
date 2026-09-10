@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import * as fc from 'fast-check';
 import { z } from 'zod';
 import { assertValueLaws, assertMintedLaws } from '../src/laws.js';
-import { defineKind, defineMinted } from '../src/index.js';
+import { defineSeal, defineMint } from '../src/index.js';
 import {
   UserId,
   Sha256Digest,
@@ -60,14 +60,18 @@ test('minted reference laws include copies of graphs with sealed nodes', () => {
 });
 
 test('laws accept shared immutable observations and detect invalid alias declarations', () => {
-  const K = defineMinted({
-    kind: 'law/shared',
+  const K = defineMint({
+    name: 'law/shared',
     mint: (n: number) => ok({ nested: { n } }),
   })
     .view({ nested: (p) => p.nested })
     .seal();
   assertMintedLaws(K, { validInput: fc.integer() });
-  const Id = defineKind({ kind: 'law/id', schema: z.string() }).seal();
+  const Id = defineSeal({
+    key: (parts) => parts,
+    name: 'law/id',
+    schema: z.string(),
+  }).seal();
   assert.throws(() =>
     assertValueLaws(Id, {
       validWire: fc.string(),
@@ -76,7 +80,7 @@ test('laws accept shared immutable observations and detect invalid alias declara
   );
 });
 test('laws exercise runtime rejection of unsupported observations', () => {
-  const K = defineMinted({ kind: 'law/invalid-view', mint: (n: number) => ok(n) })
+  const K = defineMint({ name: 'law/invalid-view', mint: (n: number) => ok(n) })
     .view({ bad: () => new Date() } as any)
     .seal();
   assert.throws(

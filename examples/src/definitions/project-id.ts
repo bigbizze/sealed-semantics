@@ -1,9 +1,10 @@
 import { z } from 'zod';
-import { defineKind, type ValueOf } from 'sealed-semantics';
+import { defineSeal, type ValueOf } from 'sealed-semantics';
 
 /** A project identifier, distinct from a user identifier. */
-export const ProjectId = defineKind({
-  kind: 'sealed-semantics-test/project-id',
+export const ProjectId = defineSeal({
+  key: (parts) => parts,
+  name: 'sealed-semantics-test/project-id',
   schema: z.string().regex(/^prj_[a-f0-9]{16,}$/),
 })
   .view({

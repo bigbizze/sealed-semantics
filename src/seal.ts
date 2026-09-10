@@ -1,10 +1,10 @@
 import { makeInterner } from './interner.js';
-import { KIND, foreignValue, SealedLeaf, LEAF_TOKEN } from './sealed-leaf.js';
+import { NAME_LABEL, foreignValue, SealedLeaf, LEAF_TOKEN } from './sealed-leaf.js';
 import { dataGraph, sameParts, immutableView } from './structure.js';
 import type { SemanticKey } from './types.js';
 const CONSTRUCT: unique symbol = Symbol('sealed-semantics/construct');
 function makeSeal<P>(
-  kind: string,
+  definitionName: string,
   ops: {
     semantic?: boolean;
     view?: Record<string, (parts: P) => unknown> | undefined;
@@ -21,8 +21,8 @@ function makeSeal<P>(
   const trap = (): never => {
     throw new TypeError(
       ops.semantic
-        ? `${kind} cannot be serialized implicitly; use z.encode(Kind.codec, value) or z.encode with the enclosing contract schema`
-        : `${kind} has no external representation and cannot be serialized`,
+        ? `${definitionName} cannot be serialized implicitly; use z.encode(Kind.codec, value) or z.encode with the enclosing contract schema`
+        : `${definitionName} has no external representation and cannot be serialized`,
     );
   };
   class Sealed extends SealedLeaf {
@@ -30,7 +30,7 @@ function makeSeal<P>(
     #view?: Readonly<Record<string, unknown>>;
     constructor(token: typeof CONSTRUCT, parts: P) {
       if (token !== CONSTRUCT)
-        throw new TypeError(`${kind} cannot be constructed directly`);
+        throw new TypeError(`${definitionName} cannot be constructed directly`);
       super(LEAF_TOKEN);
       this.#parts = parts;
       Object.freeze(this);
@@ -52,13 +52,13 @@ function makeSeal<P>(
                     if (ready) return cached;
                     if (computing)
                       throw new TypeError(
-                        `${kind}.view.${name}: recursive projection access`,
+                        `${definitionName}.view.${name}: recursive projection access`,
                       );
                     computing = true;
                     try {
                       cached = immutableView(
                         project(unseal(this, `view.${name}`)),
-                        `${kind}.view.${name}`,
+                        `${definitionName}.view.${name}`,
                       );
                       ready = true;
                       return cached;
@@ -76,25 +76,26 @@ function makeSeal<P>(
       hasBrand = (x: unknown): x is Sealed =>
         typeof x === 'object' && x !== null && #parts in x;
       unseal = (x: unknown, operation = 'unseal'): P => {
-        if (!hasBrand(x)) throw new TypeError(foreignValue(kind, x, operation));
+        if (!hasBrand(x))
+          throw new TypeError(foreignValue(definitionName, x, operation));
         return x.#parts;
       };
     }
-    get [KIND](): string {
-      if (!hasBrand(this)) throw new TypeError('Invalid sealed kind receiver');
-      return kind;
+    get [NAME_LABEL](): string {
+      if (!hasBrand(this)) throw new TypeError('Invalid sealed name receiver');
+      return definitionName;
     }
     [Symbol.for('nodejs.util.inspect.custom')](): string {
       unseal(this, 'inspection');
-      return `Sealed<${kind}>`;
+      return `Sealed<${definitionName}>`;
     }
     get [Symbol.toStringTag](): string {
       unseal(this, 'inspection');
-      return `Sealed<${kind}>`;
+      return `Sealed<${definitionName}>`;
     }
     debug(): string {
       const p = unseal(this, 'debug');
-      return ops.debug ? ops.debug(p) : kind;
+      return ops.debug ? ops.debug(p) : definitionName;
     }
     toJSON(): never {
       return trap();
@@ -116,49 +117,47 @@ function makeSeal<P>(
 }
 
 export function makeMintedSeal<P>(
-  kind: string,
+  definitionName: string,
   ops: {
     view?: Record<string, (parts: P) => unknown>;
     debug?: ((parts: P) => string) | undefined;
   },
 ) {
-  return makeSeal(kind, ops);
+  return makeSeal(definitionName, ops);
 }
-function semanticKey(value: unknown, kind: string): SemanticKey {
+function semanticKey(value: unknown, definitionName: string): SemanticKey {
   if (
     value === null ||
     ['string', 'number', 'bigint', 'boolean', 'undefined'].includes(typeof value)
   )
     return value as SemanticKey;
   throw new TypeError(
-    `${kind}: semantic key must be a string, number, bigint, boolean, null, or undefined. Non-primitive Parts require key(parts).`,
+    `${definitionName}: semantic key must be a string, number, bigint, boolean, null, or undefined. key(parts) must return a supported primitive.`,
   );
 }
 export function makeSemanticSeal<P>(
-  kind: string,
+  definitionName: string,
   ops: {
     view?: Record<string, (parts: P) => unknown>;
     debug?: ((parts: P) => string) | undefined;
-    key?: ((parts: P) => SemanticKey) | undefined;
+    key: (parts: P) => SemanticKey;
   },
 ) {
-  const bridge = makeSeal(kind, { ...ops, semantic: true });
+  const bridge = makeSeal(definitionName, { ...ops, semantic: true });
   const interner = makeInterner<object>();
   return {
     ...bridge,
     seal: (parts: P) => {
-      if (ops.key) dataGraph(parts, `${kind}: keyed Parts`, true);
-      const key = semanticKey(ops.key ? ops.key(parts) : parts, kind);
+      dataGraph(parts, `${definitionName}: keyed Parts`, true);
+      const key = semanticKey(ops.key(parts), definitionName);
       const existing = interner.get(key);
       if (existing) {
-        if (ops.key) {
-          const stored = bridge.read(existing);
-          dataGraph(stored, `${kind}: stored Parts`, true);
-          if (!sameParts(stored, parts))
-            throw new TypeError(
-              `${kind}: semantic identity collision for key ${typeof key === 'string' ? JSON.stringify(key) : String(key)}`,
-            );
-        }
+        const stored = bridge.read(existing);
+        dataGraph(stored, `${definitionName}: stored Parts`, true);
+        if (!sameParts(stored, parts))
+          throw new TypeError(
+            `${definitionName}: semantic identity collision for key ${typeof key === 'string' ? JSON.stringify(key) : String(key)}`,
+          );
         return existing;
       }
       const value = bridge.seal(parts);

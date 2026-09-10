@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { z } from 'zod';
-import { defineKind, defineMinted } from '../src/index.js';
+import { defineSeal, defineMint } from '../src/index.js';
 import {
   UserId,
   Sha256Digest,
@@ -12,8 +12,9 @@ import {
 import { ok } from './result.js';
 
 test('docs validate every input and normalized encoding at seal', () => {
-  const B = defineKind({
-    kind: 'docs/normalized',
+  const B = defineSeal({
+    key: (parts) => parts,
+    name: 'docs/normalized',
     schema: z.codec(z.string(), z.string(), {
       decode: (s) => s.toLowerCase(),
       encode: (s) => s,
@@ -36,7 +37,11 @@ test('docs validate every input and normalized encoding at seal', () => {
 });
 
 test('docs reject schema failures, missing properties, unknown fields, and empty examples', () => {
-  const B = defineKind({ kind: 'docs/strict', schema: z.string().regex(/^id_/) });
+  const B = defineSeal({
+    key: (parts) => parts,
+    name: 'docs/strict',
+    schema: z.string().regex(/^id_/),
+  });
   for (const docs of [
     {},
     { examples: [] },
@@ -51,11 +56,15 @@ test('docs reject schema failures, missing properties, unknown fields, and empty
 });
 
 test('docs round trips use the codec, including nested kinds', () => {
-  const Child = defineKind({ kind: 'docs/child', schema: z.string() })
+  const Child = defineSeal({
+    key: (parts) => parts,
+    name: 'docs/child',
+    schema: z.string(),
+  })
     .view({ text: (p) => p })
     .seal();
-  const Parent = defineKind({
-    kind: 'docs/parent',
+  const Parent = defineSeal({
+    name: 'docs/parent',
     key: (p) => p.child.view.text,
     schema: z.object({ child: Child.codec }),
   })
@@ -67,8 +76,8 @@ test('docs round trips use the codec, including nested kinds', () => {
 
 test('minted docs require exact view descriptions without running the producer', () => {
   let calls = 0;
-  const B = defineMinted({
-    kind: 'docs/minted',
+  const B = defineMint({
+    name: 'docs/minted',
     mint: () => {
       calls++;
       return ok({ n: 1 });
@@ -88,7 +97,11 @@ test('minted docs require exact view descriptions without running the producer',
 });
 
 test('documentation rejects accessors and symbols without invoking getters', () => {
-  const B = defineKind({ kind: 'docs/descriptors', schema: z.string() });
+  const B = defineSeal({
+    key: (parts) => parts,
+    name: 'docs/descriptors',
+    schema: z.string(),
+  });
   let calls = 0;
   assert.throws(
     () =>
@@ -115,8 +128,8 @@ test('documentation rejects accessors and symbols without invoking getters', () 
 
 test('docs samples remain caller-owned; metadata containers are frozen', () => {
   const sample = { data: [1, 2] };
-  const K = defineKind({
-    kind: 'docs/samples',
+  const K = defineSeal({
+    name: 'docs/samples',
     key: (p) => p.data.join(','),
     schema: z.object({ data: z.array(z.number()) }),
   })
@@ -133,7 +146,11 @@ test('reference definitions carry executable documentation', () => {
 });
 
 test('semantic documentation exercises views and rejects unsafe outputs at completion', () => {
-  const B = defineKind({ kind: 'docs/view-domain', schema: z.string() }).view({
+  const B = defineSeal({
+    key: (parts) => parts,
+    name: 'docs/view-domain',
+    schema: z.string(),
+  }).view({
     bad: () => new Date(),
   } as any);
   assert.throws(
