@@ -111,14 +111,7 @@ mints should never cross serialization boundaries and are non-serializable. This
 
 ___
 
-
-
-
-
-
-
-
-___
+## AI Generated Description:
 
 Define values once. Make their construction rules, identity, and permitted observations part of the API.
 
