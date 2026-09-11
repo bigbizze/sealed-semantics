@@ -29,7 +29,7 @@ The goal of this repository is to add two semantic datatype producers, both of w
 
 This comes from two distinct things: semantic seals, which are values, and semantic mints, which are wrapped datatypes that include a contract about rules and transformations any value of this mint type has undergone.
 
-**defineSeal** creates seals. They differ from  only using typescript types because seals have much stronger guarantees around the provenance of their data. Once a definition for a seal is provided, the only place that can create new values of that seal is Zod parse. The only methods that can be used to interact with a value of that seal are those in the definition. This allows you to distinguish between something that was merely produced from something that is legitimately entitled to be relied upon.
+**defineSeal** creates seals. They differ from  only using typescript types because seals have much stronger guarantees around the provenance of their data. Once a definition for a seal is provided, the only place that can create new values of that seal is Zod parse. The only methods that can be used to interact with a value of that seal are those in the definition. This allows you to distinguish between something that was merely produced, from something that is legitimately entitled to be relied upon.
 
 ```ts
 const UserId = defineSeal({
@@ -44,6 +44,16 @@ const UserId = defineSeal({
   .seal(); // Make the seal immutable from here.
 
 type UserId = ValueOf<typeof UserId>;
+```
+
+```ts
+// Decode incoming data into a UserId seal. Zod validates and normalizes it.
+const incoming: unknown = JSON.parse('"USR_0123456789abcdef"');
+const userId: UserId = UserId.codec.parse(incoming);
+
+// Encode the seal into its external representation, ready for transport.
+const outgoing: string = z.encode(UserId.codec, userId);
+const jsonBody = JSON.stringify(outgoing); // '"usr_0123456789abcdef"'
 ```
 
 seals are meant to trasit across serialization boundaries with no issues. they use zod for encoding and decoding as you already would.
