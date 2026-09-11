@@ -48,8 +48,8 @@ type UserId = ValueOf<typeof UserId>;
 
 ```ts
 // Decode incoming data into a UserId seal. Zod validates and normalizes it.
-const incoming: unknown = JSON.parse('"USR_0123456789abcdef"');
-const userId: UserId = UserId.codec.parse(incoming);
+const incoming = 'USR_0123456789abcdef';
+const userId: UserId = z.decode(UserId.codec, incoming);
 
 // Encode the seal into its external representation, ready for transport.
 const outgoing: string = z.encode(UserId.codec, userId);
