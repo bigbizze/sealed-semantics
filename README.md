@@ -27,26 +27,26 @@ ___
 
 The goal of this repository is to add two semantic datatype producers, both of which strive to create much stronger guarantees around making invalid semantic state impossible to use.
 
-This comes from two distinct things: semantic kinds, which are values, and semantic mints, which are wrapped datatypes that include a contract about rules and transformations any value of this mint type has undergone. 
+This comes from two distinct things: semantic seals, which are values, and semantic mints, which are wrapped datatypes that include a contract about rules and transformations any value of this mint type has undergone.
 
-**defineSeal** create kinds. They differ from  only using typescript types because kinds have much stronger guarantees around the provenance of their data. Once a definition for a kind is provided, the only place that can create new values of that kind is Zod parse. The only methods that can be used to interact with a value of that kind are those in the definition. This allows you to distinguish between something that was merely produced from something that is legitimately entitled to be relied upon.
+**defineSeal** creates seals. They differ from  only using typescript types because seals have much stronger guarantees around the provenance of their data. Once a definition for a seal is provided, the only place that can create new values of that seal is Zod parse. The only methods that can be used to interact with a value of that seal are those in the definition. This allows you to distinguish between something that was merely produced from something that is legitimately entitled to be relied upon.
 
 ```ts
 const UserId = defineSeal({
-  key: id => id, // key for checking equality between instances of this kind. `schema` can be an object, or anything, meaning complex keys can be needed for reference
-  name: 'app/user-id', // globally unique namespace for this kind.
+  key: id => id, // key for checking equality between instances of this seal. `schema` can be an object, or anything, meaning complex keys can be needed for reference
+  name: 'app/user-id', // globally unique namespace for this seal.
   schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/), // regular zod schema for handling serialization
 })
-  .view({ // You can define methods on the kind here. 
+  .view({ // You can define methods on the seal here.
     suffix: id => id.slice(-6),
     uiDisplay: id => `User ID: ${id}` 
    })
-  .seal(); // Make the kind immutable from here.
+  .seal(); // Make the seal immutable from here.
 
 type UserId = ValueOf<typeof UserId>;
 ```
 
-kinds are meant to trasit across serialization boundaries with no issues. they use zod for encoding and decoding as you already would.
+seals are meant to trasit across serialization boundaries with no issues. they use zod for encoding and decoding as you already would.
 
 ---
 
@@ -103,7 +103,7 @@ type PaymentObject = ValueOf<typeof PaymentObject>;
 
 Then any function taking `PaymentReady` as an argument can work from the guarantees this creates.
 
-You can also create minted datatypes which include kinds, or other mints. This allows the semantic attestations to compose naturally.
+You can also create minted datatypes which include seals, or other mints. This allows the semantic attestations to compose naturally.
 
 One result of this approach is that AI-generated code can't merely discover the shape of an execution-eligible value  and recreate it locally. It has to find the producer that is capable of minting one.
 
@@ -171,7 +171,7 @@ Call `.docs(...)`, `.view(...)`, and `.copy(...)` in any order; `.seal()` must c
 
 ## You can decode individual fields, or a whole response
 
-Zod owns representation boundaries. Use `Kind.codec.parse(unknown)` or `safeParse(unknown)` for external input. Use `z.decode` for statically typed input, and `z.encode` for output. A composed schema handles nested kinds and arrays without field-by-field conversion.
+Zod owns representation boundaries. Use `Seal.codec.parse(unknown)` or `safeParse(unknown)` for external input. Use `z.decode` for statically typed input, and `z.encode` for output. A composed schema handles nested seals and arrays without field-by-field conversion.
 
 ```ts
 import { z } from 'zod';
@@ -205,7 +205,7 @@ console.log(z.encode(ResponseSchema, response));
 
 Use a `z.codec(...)` as the definition's schema when external input and Parts have different types. Normalize in that schema before identity is computed. One-way Zod transforms can decode but cannot encode backward.
 
-## Every kind declares its identity key
+## Every seal declares its identity key
 
 Every `defineSeal` requires `key`, including primitive Parts. Use `key: id => id` for a normalized string identifier. Supported keys are strings, numbers, bigints, booleans, `null`, and `undefined`. Symbols are not semantic keys.
 
@@ -222,7 +222,7 @@ const c2 = Coordinate.codec.parse({ lat: 1, lng: 2 });
 console.log(c1 === c2); // true
 ```
 
-The key is the declared identity, not a hash hint. Parts must already be normalized for that identity. On a live hit, the library compares the Parts structurally. A key collision between different Parts throws instead of returning the wrong value. Errors include the kind and key, not private Parts.
+The key is the declared identity, not a hash hint. Parts must already be normalized for that identity. On a live hit, the library compares the Parts structurally. A key collision between different Parts throws instead of returning the wrong value. Errors include the seal and key, not private Parts.
 
 Keyed Parts support primitives, plain data objects, dense arrays, `Date`, and sealed values as atomic leaves. Dates compare by timestamp. Cycles, accessors, hidden properties, symbol keys, typed arrays, and other class instances are rejected on the first decode. Shared acyclic children are allowed.
 
@@ -285,7 +285,7 @@ The library ensures that the producer succeeded. The producer defines what that 
 
 Each view projection runs lazily. Its first successful result is validated, deeply frozen, and cached. Later reads return exactly that result, including `undefined` and other falsy values. Failed projections can be retried.
 
-Views allow primitives, sealed values, dense arrays, and plain data objects. Structured observations are deeply readonly in TypeScript. Functions, Dates, collections, other class instances, accessors, hidden properties, symbol-keyed structures, and cycles are rejected on access. Genuine sealed leaves from this installed package copy retain their exact type and remain usable. An ES-private brand authenticates them. The well-known kind symbol is only a diagnostic label; fake objects and values from another installed copy are rejected as graph leaves.
+Views allow primitives, sealed values, dense arrays, and plain data objects. Structured observations are deeply readonly in TypeScript. Functions, Dates, collections, other class instances, accessors, hidden properties, symbol-keyed structures, and cycles are rejected on access. Genuine sealed leaves from this installed package copy retain their exact type and remain usable. An ES-private brand authenticates them. The well-known name symbol is only a diagnostic label; fake objects and values from another installed copy are rejected as graph leaves.
 
 For digests and other byte-valued data, keep canonical string Parts and declare `.copy({ bytes: ... })` for a stable byte observation returned as a fresh `Uint8Array` at the binary API boundary. Buffers are mutable representations, not identity-bearing values or view outputs. See [digests and byte buffers](docs/bytes.md).
 
@@ -293,7 +293,7 @@ The library does not deep-freeze all private Parts merely because they are seale
 
 ## Definition identity and development
 
-A sealed value belongs to exactly one completed definition instance. `Kind.is(value)` is true only for that instance's values. Two definitions may use the same `name` string. They are unrelated, and their values are foreign to each other. The string is a diagnostic label, not runtime identity.
+A sealed value belongs to exactly one completed definition instance. `Seal.is(value)` is true only for that instance's values. Two definitions may use the same `name` string. They are unrelated, and their values are foreign to each other. The string is a diagnostic label, not runtime identity.
 
 Re-executing a definition module creates a new definition instance. Older values still work, but the new codec rejects them with a diagnostic. After editing a definition, refresh the page or restart the process to clear preserved state.
 
