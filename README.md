@@ -60,7 +60,18 @@ seals are meant to trasit across serialization boundaries with no issues. they u
 
 ---
 
-**defineMint** creates contracts that couple a typescript types to some set of rules specified in its definition. This means that when a function wants to only accept Payment objects, where payment object really means "Only payment objects that are validated, authorized and time-stamped through the officially sanctioned paths for doing such things in this repo", having PaymentObject be defined as just a typescript types which has these 3 string properties and one boolean is obviously not ideal. If PaymentObject were a minted datatype (we could call this `PaymentReady`), those requirements could be added to it's mint function, it's value guaranteed to have been run through them, and only values produced by `mint()` be allowed to be passed to functions expecting PaymentObject.
+**defineMint** creates contracts that couple a data (satisfying a typescript type)
+to a set of rules provided in its definition.
+For example, lets say we have a function that wants to only accept a PaymentObject.
+What that function often means by this is that they want some data which
+describes a payment which has been validated, authorized and time-stamped through
+the officially sanctioned paths for doing so in this system.
+What PaymentObject often means in typescript is "a JavaScript object with 3 properties with these names that have string values, and one property with this name that has a boolean value" or whatever.
+
+If PaymentObject were a mint (we might call a minted `PaymentObject` object `PaymentReady` or something), those requirements could
+be added to it's mint function. As a result every `PaymentReady` object guarantees that it it is a `PaymentObject` that has successfully
+had the rules needed for it to be ready applied, and that only values produced by `mint()` be allowed to be passed
+to functions expecting PaymentObject.
 
 ```ts
 

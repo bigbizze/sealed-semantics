@@ -1,6 +1,6 @@
 {
   "name": "sealed-semantics",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Runtime nominal identity and private semantic values for Zod codecs",
   "type": "module",
   "license": "MIT",
