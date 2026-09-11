@@ -2,11 +2,11 @@
 
 ## Why
 
-Typescript types mostly govern syntax:
+TypeScript types primarily describe structure:
 
-> Is this thing a string or not? If this this thing is an object instead of a number, then this property on that object needs this type. etc.
+> Is this thing a string or not? If this thing is an object instead of a number, then this property on that object needs this type. etc.
 
-AI agents often confuse locally coherent syntactical rules for globally coherent semantic ones. Human programmers are different in that they implicitly carry lots of semantic context in their heads when working in a repository they're familiar with, which they apply when making decisions.
+AI agents often confuse locally coherent structural rules for globally coherent semantic ones. Human programmers are different in that they implicitly carry lots of semantic context in their heads when working in a repository they're familiar with, which they apply when making decisions.
 
 A senior engineer who sees:
 
@@ -19,9 +19,9 @@ You can try to address this with better context selection: graph traversal or RA
 
 > “Never call capturePayment unless…”
 
-but then you're relying on the agent to remember. you're also encoding just one rule of the N you'll need with this approach where their ability to remember decreases proportional to N increasing. 
+but then you're relying on the agent to remember. you're also encoding just one rule of the N you'll need with this approach where their ability to remember decreases proportional to N increasing.
 
-So why don't we strive to make these implicit rules explicit, so that they're impossible to use incorrectly? AI agents don't get annoyed with strictness and rules in the way humans do, so the cost of making these things impossible by construction seems marginal today. 
+So why don't we strive to make these implicit rules explicit, so that they're impossible to use incorrectly? AI agents don't get annoyed with strictness and rules in the way humans do, so the cost of making these things impossible by construction seems marginal today.
 
 ___
 
@@ -29,19 +29,19 @@ The goal of this repository is to add two semantic datatype producers, both of w
 
 This comes from two distinct things: semantic seals, which are values, and semantic mints, which are wrapped datatypes that include a contract about rules and transformations any value of this mint type has undergone.
 
-**defineSeal** creates seals. They differ from  only using typescript types because seals have much stronger guarantees around the provenance of their data. Once a definition for a seal is provided, the only place that can create new values of that seal is Zod parse. The only methods that can be used to interact with a value of that seal are those in the definition. This allows you to distinguish between something that was merely produced, from something that is legitimately entitled to be relied upon.
+**defineSeal** creates seals. They provide runtime guarantees beyond TypeScript types alone because seals enforce the construction path of their data. Once a definition for a seal is provided, new values of that seal must pass through its configured Zod codec. The only methods that can be used to interact with a value of that seal are those in the definition. This allows you to distinguish between something that was merely produced, from something that is legitimately entitled to be relied upon.
 
 ```ts
 const UserId = defineSeal({
-  key: id => id, // key for checking equality between instances of this seal. `schema` can be an object, or anything, meaning complex keys can be needed for reference
-  name: 'app/user-id', // globally unique namespace for this seal.
+  key: id => id, // Same string means the same sealed value. For object data, combine the properties that identify the value, e.g. p => `${p.lat}:${p.lng}`.
+  name: 'app/user-id', // Diagnostic label for this definition; uniqueness is not enforced.
   schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/), // regular zod schema for handling serialization
 })
-  .view({ // You can define methods on the seal here.
+  .view({ // Declare the immutable observations callers can read.
     suffix: id => id.slice(-6),
-    uiDisplay: id => `User ID: ${id}` 
+    uiDisplay: id => `User ID: ${id}`
    })
-  .seal(); // Make the seal immutable from here.
+  .seal(); // Complete this definition.
 
 type UserId = ValueOf<typeof UserId>;
 ```
@@ -56,22 +56,22 @@ const outgoing: string = z.encode(UserId.codec, userId);
 const jsonBody = JSON.stringify(outgoing); // '"usr_0123456789abcdef"'
 ```
 
-seals are meant to trasit across serialization boundaries with no issues. they use zod for encoding and decoding as you already would.
+Seals are meant to transit across serialization boundaries with no issues. They use Zod for encoding and decoding as you already would.
 
 ---
 
-**defineMint** creates contracts that couple a data (satisfying a typescript type)
+**defineMint** creates contracts that couple data (satisfying a TypeScript type)
 to a set of rules provided in its definition.
-For example, lets say we have a function that wants to only accept a PaymentObject.
+For example, let's say we have a function that wants to only accept a PaymentObject.
 What that function often means by this is that they want some data which
-describes a payment which has been validated, authorized and time-stamped through
+describes a payment which has been validated and time-stamped through
 the officially sanctioned paths for doing so in this system.
-What PaymentObject often means in typescript is "a JavaScript object with 3 properties with these names that have string values, and one property with this name that has a boolean value" or whatever.
+What PaymentObject often means in TypeScript is "a JavaScript object with 3 properties with these names that have string values, and one property with this name that has a boolean value" or whatever.
 
 If PaymentObject were a mint (we might call a minted `PaymentObject` object `PaymentReady` or something), those requirements could
-be added to it's mint function. As a result every `PaymentReady` object guarantees that it it is a `PaymentObject` that has successfully
-had the rules needed for it to be ready applied, and that only values produced by `mint()` be allowed to be passed
-to functions expecting PaymentObject.
+be added to its mint function. As a result every `PaymentReady` object guarantees that it is a `PaymentObject` that has successfully
+had the rules needed for it to be ready applied, and only values produced by `mint()` can be passed
+to functions expecting PaymentReady.
 
 ```ts
 
@@ -85,16 +85,14 @@ const PaymentReady = defineMint({
   name: 'app/payment',
   mint: (input: PaymentObject) => {
     if (
-      !UserId.is(input?.recipientId) ||
-      !Number.isSafeInteger(input?.amountCents) ||
-      input.amountCents <= 0 ||
-      !['USD', 'EUR'].includes(input.currency)
+      !Number.isSafeInteger(input.amountCents) ||
+      input.amountCents <= 0
     ) {
       return {
         ok: false,
         error: {
           code: 'invalid_payment',
-          message: 'Expected a recipient, a positive whole-cent amount, and USD or EUR.',
+          message: 'Expected a positive safe-integer amount in cents.',
         },
       };
     }
@@ -118,7 +116,7 @@ const PaymentReady = defineMint({
   })
   .seal();
 
-type PaymentObject = ValueOf<typeof PaymentObject>;
+type PaymentReady = ValueOf<typeof PaymentReady>;
 
 ```
 
@@ -128,7 +126,7 @@ You can also create minted datatypes which include seals, or other mints. This a
 
 One result of this approach is that AI-generated code can't merely discover the shape of an execution-eligible value  and recreate it locally. It has to find the producer that is capable of minting one.
 
-mints should never cross serialization boundaries and are non-serializable. This is because producing a mint from plain JSON means making a claim about the data outside of what its contract can attest to as it's currently constructed. (There are of course some fun ways one might think about making this not an issue! Not for now though.)
+Mints should never cross serialization boundaries and are non-serializable. This is because producing a mint from plain JSON means making a claim about the data outside of what its contract can attest to as it's currently constructed. (There are of course some fun ways one might think about making this not an issue! Not for now though.)
 
 ___
 
@@ -136,7 +134,7 @@ ___
 
 Define values once. Make their construction rules, identity, and permitted observations part of the API.
 
-This package is for TypeScript codebases where an object with the right properties is not enough. You need to know how it was created.
+This package is for TypeScript codebases where an object with the right properties is not enough. You need to know how it was created. TypeScript usually compares types structurally: objects with matching members can be compatible. A nominal value belongs to a specific declared type; this library also enforces membership at runtime with ES private fields.
 
 This matters particularly in agent-heavy codebases. An engineer may remember that a value must pass a shared validator. An agent working on one function may instead assemble a matching object and add local helpers. The change can look reasonable while bypassing rules elsewhere in the application.
 
@@ -149,6 +147,14 @@ A carefully written class with a private constructor and ES private fields can e
 **`defineMint` represents a successful mint event.** Every successful `.mint(input)` call creates a distinct object. A downstream function can require that object as evidence that the configured producer succeeded.
 
 You supply the checks. The library prevents callers from creating a genuine instance without passing through its construction path. It does not prove that your checks are correct. Accepting a user ID does not prove that a database row exists, or establish authorization, persistence, or currentness.
+
+## What the runtime guarantee covers
+
+A genuine instance can only be created through its definition. TypeScript rejects ordinary objects passed as sealed values. However, `any`, casts, and suppressed errors can bypass that static protection; a type annotation does not authenticate a reference at runtime.
+
+Reading `value.view` or calling `value.copy.bytes()` does not authenticate an untrusted object. Genuine library accessors authenticate their receiver, but a forged object can supply its own properties and methods without invoking library code. Use the definition's codec for external representations and `UserId.is(value)` to check an existing object's membership when its origin is uncertain. Codec encoding also rejects values from a foreign definition.
+
+Typed internal functions normally trust their parameters when callers preserve those types. If the input can come from untyped code, deliberate casts, plugins, or a different definition instance, validate it before relying on its observations or performing effects. This applies to internal functions too: the distinction is the trust boundary, not whether the function is exported. The package is not a sandbox against code that deliberately bypasses or replaces validation.
 
 ## Requirements
 
@@ -243,7 +249,7 @@ const c2 = Coordinate.codec.parse({ lat: 1, lng: 2 });
 console.log(c1 === c2); // true
 ```
 
-The key is the declared identity, not a hash hint. Parts must already be normalized for that identity. On a live hit, the library compares the Parts structurally. A key collision between different Parts throws instead of returning the wrong value. Errors include the seal and key, not private Parts.
+The key is the declared identity, not a hash hint. Parts must already be normalized for that identity. On a live hit, the library compares the Parts structurally. A key collision between different Parts throws instead of returning the wrong value. Errors include the seal and key, not private Parts. The error occurs at the conflicting parse, which can be far from the definition. Test keys beside their definitions with the [generated-pair collision test](docs/laws.md#testing-key-collisions). The law harness checks individual generated values and configured aliases; it does not exhaustively prove key injectivity.
 
 Keyed Parts support primitives, plain data objects, dense arrays, `Date`, and sealed values as atomic leaves. Dates compare by timestamp. Cycles, accessors, hidden properties, symbol keys, typed arrays, and other class instances are rejected on the first decode. Shared acyclic children are allowed.
 
@@ -257,15 +263,12 @@ A save function can require a minted batch containing validated IDs. The produce
 const MembershipBatch = defineMint({
   name: 'app/membership-batch',
   mint: (input: { projectId: ProjectId; userIds: readonly UserId[] }) => {
-    if (!ProjectId.is(input?.projectId) ||
-        !Array.isArray(input?.userIds as unknown) ||
-        input.userIds.length === 0 ||
-        !Array.from(input.userIds).every(id => UserId.is(id))) {
+    if (input.userIds.length === 0) {
       return {
         ok: false,
         error: {
           code: 'invalid_membership_batch',
-          message: 'Expected a project and at least one user.',
+          message: 'Expected at least one user.',
         },
       };
     }
@@ -298,7 +301,7 @@ if (first.ok && second.ok) {
 }
 ```
 
-The producer owns its error format. `ProducerResult<Parts, Error>` can describe object unions or primitive errors; `.mint()` returns failures unchanged. Typed internal functions trust their parameters. Check runtime brands only at untyped or adversarial boundaries.
+The producer owns its error format. `ProducerResult<Parts, Error>` can describe object unions or primitive errors; `.mint()` returns failures unchanged. These typed examples assume their identifiers have already passed through the correct codecs. They check additional business rules, not the same input shape again. Use runtime membership checks when an object's origin is uncertain, including in internal functions that cross such a boundary.
 
 The library ensures that the producer succeeded. The producer defines what that success means. This example does not check user existence or permission to change project membership.
 
@@ -314,13 +317,13 @@ The library does not deep-freeze all private Parts merely because they are seale
 
 ## Definition identity and development
 
-A sealed value belongs to exactly one completed definition instance. `Seal.is(value)` is true only for that instance's values. Two definitions may use the same `name` string. They are unrelated, and their values are foreign to each other. The string is a diagnostic label, not runtime identity.
+A sealed value belongs to exactly one completed definition instance. `Seal.is(value)` is true only for that instance's values. Two definitions may use the same `name` string. They are unrelated, and their values are foreign to each other. The string is a diagnostic label, not runtime identity. Define each semantic meaning once in an owning module, export the completed definition, and import it everywhere it is used. Repeating `.seal()` creates another definition even from the same builder. A copied definition with the same name is not interchangeable with the original.
 
 Re-executing a definition module creates a new definition instance. Older values still work, but the new codec rejects them with a diagnostic. After editing a definition, refresh the page or restart the process to clear preserved state.
 
 Next.js dev, Vite, Vitest, Jest, and Node's test runner need no package-specific configuration. The package holds no global state that can survive a module reset. See [framework guidance](docs/frameworks.md).
 
-TypeScript cannot generate a fresh nominal type for each factory call. Literal definition names distinguish types statically, but two definitions using the same name can have compatible TypeScript types. Runtime brands and codecs remain authoritative.
+TypeScript cannot generate a fresh nominal type for each factory call. Literal definition names distinguish types statically, but two definitions using the same name can have compatible TypeScript types. Runtime brands and codecs remain authoritative. The law harness tests the definitions you supply individually; it does not discover duplicate definitions across your application. There is no duplicate-name registry.
 
 ## React and representation boundaries
 
@@ -331,6 +334,53 @@ Object identity does not cross workers, processes, server/client, network, or st
 Console inspection shows `Sealed<app/user-id>` without encoding, revealing Parts, or calling `debug()`. `JSON.stringify(value)` still throws. Structured/JSON logging requires explicit Zod encoding. Minted values are local construction attestations in the current API. Crossing a serialization boundary requires establishing the claim again on the receiving side.
 
 In Jest and Vitest, use `toBe` to test identity. Two distinct minted values can pass `toEqual` because their private state is not enumerable.
+
+## Executable documentation with `.docs()`
+
+`.docs()` adds descriptions and examples to a builder. `.seal()` checks the completed documentation: it parses each input, compares its encoded output, and verifies round-trip identity. An incorrect example throws during sealing, so documentation errors can fail module initialization. This is optional, but a semantic docs block must contain at least one input/encoded example.
+
+```ts
+const DocumentedUserId = defineSeal({
+  name: 'example/documented-user-id',
+  schema: z.string().toLowerCase().regex(/^usr_[a-f0-9]+$/),
+  key: id => id,
+})
+  .view({ suffix: id => id.slice(-6) })
+  .docs({
+    description: 'A normalized user identifier.',
+    examples: [{ input: 'USR_ABCDEF', encoded: 'usr_abcdef' }],
+    view: { suffix: { description: 'The final six characters.' } },
+  })
+  .seal();
+console.log(DocumentedUserId.documentation.description);
+```
+
+When docs are present, every declared view or copy observation needs a description. Observation samples are illustrative; they are not expected outputs linked to each input. Semantic examples exercise those observations during sealing. Minted documentation has no wire examples and does not execute the mint producer. Completed definitions expose the metadata as `.documentation`. Metadata does not generate editor JSDoc text. See the [documentation contract](docs/documentation.md).
+
+## What a law tests
+
+A law is an invariant that should hold for every valid input, such as “decoding the same semantic value twice returns the same live object.” The law harness uses fast-check to test generated inputs for identity, codec round trips, immutable views, independent byte copies, and other package guarantees. Minted laws check distinct mint events instead of semantic interning.
+
+```ts
+import * as fc from 'fast-check';
+import { assertValueLaws } from 'sealed-semantics/laws';
+
+assertValueLaws(Coordinate, {
+  validWire: fc.record({ lat: fc.integer(), lng: fc.integer() }),
+});
+```
+
+Install fast-check as a development dependency. Generators must produce accepted inputs. Sampling can expose counterexamples, but it does not prove all inputs are correct or that the producer implements the intended business meaning. Keep domain-specific tests as well. See [laws and key-collision testing](docs/laws.md).
+
+## Runtime cost
+
+Seals add work beyond the same plain Zod schema. Each decode validates the decoded Parts graph, computes a key, and looks up the per-definition weak intern table. A live hit also validates the stored Parts and compares the two representations to detect collisions. A miss allocates a frozen sealed instance, a WeakRef, and finalization bookkeeping. Zod validation still runs on hits.
+
+For primitive Parts with a constant-cost key, this extra work is constant per parse. For an object graph with N visited properties or elements, validation and comparison generally require work proportional to N, plus whatever the key callback costs. A hit performs two graph validations and one comparison; it does not skip that work just because the value was seen before. Large structured values can therefore cost much more than small string IDs.
+
+Each distinct live value retains its Parts and interning bookkeeping. Finalizer cleanup is delayed, not immediate. The first view access validates and freezes its result; later reads return the cached reference. A byte copy observation retains a private snapshot after first use and allocates/copies B bytes for each B-byte result.
+
+There is no qualified timing ratio against plain Zod for this exact implementation. Earlier prototype results predate the current collision guards and do not establish its cost. Measure representative schemas, sizes, and hit/miss rates before adopting seals for a performance-sensitive path. Interning guarantees identity; it is not a claim that parsing is faster.
 
 ## Examples and verification
 

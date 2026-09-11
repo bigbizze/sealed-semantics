@@ -8,7 +8,7 @@ A sealed value belongs to exactly one completed definition instance. `Kind.is(va
 
 Semantic decoding validates and normalizes input before computing identity. Equivalent live values are the same object. Native `Map` and `Set` therefore work. An existing live value cannot be displaced by another parse. Minting never interns; every success is a new event.
 
-Forged prototypes, recovered constructors, proxies, casts, and structured clones do not acquire the definition's private brand. A cast can bypass TypeScript, so JavaScript-facing functions should check `Kind.is` where they require a particular definition.
+Forged prototypes, recovered constructors, proxies, casts, and structured clones do not acquire the definition's private brand. A cast, `any`, or suppressed error can bypass TypeScript. A fake object can also supply its own view or copy members without invoking library code; property access is not authentication. Use a codec for external data, or the intended definition's `is` predicate for existing objects whose origin is uncertain. This applies at internal trust boundaries as well as JavaScript-facing APIs. Typed internal code may trust parameters when callers preserve those types.
 
 TypeScript cannot mint a fresh nominal type for each factory call. The declaration brand uses the literal label to distinguish ordinary definitions statically. Same-label definitions can have compatible static types. The runtime private brand, not the label, establishes membership.
 

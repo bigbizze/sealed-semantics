@@ -125,6 +125,38 @@ mint:i=>({ok:true,value:i})}).view({text:p=>p}).docs({view:{}}).seal();
   assert(intro.length > 0, 'README must include a runnable introductory example');
   writeFileSync(join(temp, 'intro.ts'), intro);
 
+  // The opening explanation has its own examples, including the PaymentReady mint.
+  const opening = readme.slice(
+    readme.indexOf('**defineSeal**'),
+    readme.indexOf('## AI Generated Description:'),
+  );
+  assert(opening.includes('const PaymentReady'), 'Opening payment example is missing');
+  writeFileSync(
+    join(temp, 'opening.ts'),
+    "import assert from 'node:assert/strict';\nimport { z } from 'zod';\n" +
+      "import { defineSeal, defineMint, type ValueOf } from 'sealed-semantics';\n" +
+      [...opening.matchAll(/```ts\n([\s\S]*?)```/g)].map((m) => m[1]).join('\n') +
+      `
+const payment = PaymentReady.mint({ recipientId: userId, amountCents: 100, currency: 'USD' });
+assert(payment.ok);
+assert.equal(payment.value.view.amountCents, 100);
+assert(!PaymentReady.mint({ recipientId: userId, amountCents: 0, currency: 'USD' }).ok);
+assert.equal(outgoing, 'usr_0123456789abcdef');
+assert.equal(JSON.parse(jsonBody), outgoing);
+`,
+  );
+  const lawDoc = readFileSync(join(root, 'docs/laws.md'), 'utf8');
+  writeFileSync(
+    join(temp, 'collision-example.ts'),
+    [
+      ...lawDoc
+        .slice(lawDoc.indexOf('## Testing key collisions'))
+        .matchAll(/```ts\n([\s\S]*?)```/g),
+    ]
+      .map((m) => m[1])
+      .join('\n'),
+  );
+
   writeFileSync(
     join(temp, 'tsconfig.json'),
     JSON.stringify({
@@ -138,7 +170,13 @@ mint:i=>({ok:true,value:i})}).view({text:p=>p}).docs({view:{}}).seal();
         skipLibCheck: true,
         types: ['node'],
       },
-      include: ['readme.ts', 'intro.ts', 'constraints.ts'],
+      include: [
+        'readme.ts',
+        'intro.ts',
+        'opening.ts',
+        'collision-example.ts',
+        'constraints.ts',
+      ],
     }),
   );
   const constraints = readFileSync(join(root, 'spike/inference.ts'), 'utf8')
@@ -268,6 +306,8 @@ schema:z.object({id:A.codec}),key:p=>p.id.view.text,
     [join(root, 'node_modules/tsx/dist/cli.mjs'), 'intro.ts'],
     temp,
   );
+  for (const file of ['opening.ts', 'collision-example.ts'])
+    run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), file], temp);
   console.log(
     `Package smoke passed with Zod ${process.argv[2] ?? '4.1.0'}: README, portable declaration emit (current TypeScript and 5.7), declaration constraints, cross-copy brands and native collections, test-only entry, exports, synchronous docs validation.`,
   );
