@@ -274,13 +274,12 @@ mint:i=>({ok:true,value:i})}).seal();
  assert(!OtherD.is(p));
  assert.throws(()=>foreignEvent.debug.call(p),/debug.*different definition instance.*two copies/);
  const EventHolder=b.defineMint({name:'consumer/event-holder',mint:i=>({ok:true,value:i})}).view({event:p=>p}).seal();
- const heldEvent=EventHolder.mint(p).value;
- assert.throws(()=>heldEvent.view.event,/unsupported object/);
+ assert.throws(()=>EventHolder.mint(p),/sealed-looking object.*another installed package copy.*imitations/);
  assert.equal(EventHolder.mint(foreignEvent).value.view.event,foreignEvent);
 
  assert.notEqual(p,q); assert.equal(new Set([p,q]).size,2);
  const ForeignComposite=b.defineSeal({name:'consumer/foreign-composite',schema:z.object({id:A.codec}),key:p=>p.id.view.text}).seal();
- assert.throws(()=>ForeignComposite.codec.parse({id:'x'}),/keyed Parts.*unsupported object/);
+ assert.throws(()=>ForeignComposite.codec.parse({id:'x'}),/keyed Parts.*sealed-looking object.*another installed package copy.*imitations/);
  const Composite=a.defineSeal({name:'consumer/composite',
 schema:z.object({id:A.codec}),key:p=>p.id.view.text,
 }).view({id:p=>p.id}).seal();

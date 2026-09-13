@@ -1,26 +1,26 @@
 import { snapshotBytes } from './copy.js';
 import { makeInterner } from './interner.js';
 import { NAME_LABEL, foreignValue, SealedLeaf, LEAF_TOKEN } from './sealed-leaf.js';
-import { dataGraph, sameParts, immutableView } from './structure.js';
-import type { SemanticKey } from './types.js';
+import { sameParts, immutableView, snapshotData } from './structure.js';
+import type { DeepReadonly, SemanticKey } from './types.js';
 const CONSTRUCT: unique symbol = Symbol('sealed-semantics/construct');
 function makeSeal<P>(
   definitionName: string,
   ops: {
     semantic?: boolean;
-    copy?: Record<string, (parts: P) => unknown> | undefined;
-    view?: Record<string, (parts: P) => unknown> | undefined;
-    debug?: ((parts: P) => string) | undefined;
+    copy?: Record<string, (parts: DeepReadonly<P>) => unknown> | undefined;
+    view?: Record<string, (parts: DeepReadonly<P>) => unknown> | undefined;
+    debug?: ((parts: DeepReadonly<P>) => string) | undefined;
   },
 ): {
   is: (x: unknown) => boolean;
-  read: (x: unknown) => P;
-  seal: (parts: P) => object;
+  read: (x: unknown) => DeepReadonly<P>;
+  seal: (parts: DeepReadonly<P>) => object;
 } {
   const view = Object.entries(ops.view ?? {});
   const copies = Object.entries(ops.copy ?? {});
   let hasBrand!: (x: unknown) => x is Sealed;
-  let unseal!: (x: unknown, operation?: string) => P;
+  let unseal!: (x: unknown, operation?: string) => DeepReadonly<P>;
   const trap = (): never => {
     throw new TypeError(
       ops.semantic
@@ -29,10 +29,10 @@ function makeSeal<P>(
     );
   };
   class Sealed extends SealedLeaf {
-    #parts: P;
+    #parts: DeepReadonly<P>;
     #view?: Readonly<Record<string, unknown>>;
     #copy?: Readonly<Record<string, () => unknown>>;
-    constructor(token: typeof CONSTRUCT, parts: P) {
+    constructor(token: typeof CONSTRUCT, parts: DeepReadonly<P>) {
       if (token !== CONSTRUCT)
         throw new TypeError(`${definitionName} cannot be constructed directly`);
       super(LEAF_TOKEN);
@@ -114,7 +114,7 @@ function makeSeal<P>(
         });
       hasBrand = (x: unknown): x is Sealed =>
         typeof x === 'object' && x !== null && #parts in x;
-      unseal = (x: unknown, operation = 'unseal'): P => {
+      unseal = (x: unknown, operation = 'unseal'): DeepReadonly<P> => {
         if (!hasBrand(x))
           throw new TypeError(foreignValue(definitionName, x, operation));
         return x.#parts;
@@ -151,19 +151,24 @@ function makeSeal<P>(
   return {
     is: hasBrand,
     read: unseal,
-    seal: (parts: P) => new Sealed(CONSTRUCT, parts),
+    seal: (parts: DeepReadonly<P>) => new Sealed(CONSTRUCT, parts),
   };
 }
 
 export function makeMintedSeal<P>(
   definitionName: string,
   ops: {
-    copy?: Record<string, (parts: P) => unknown>;
-    view?: Record<string, (parts: P) => unknown>;
-    debug?: ((parts: P) => string) | undefined;
+    copy?: Record<string, (parts: DeepReadonly<P>) => unknown>;
+    view?: Record<string, (parts: DeepReadonly<P>) => unknown>;
+    debug?: ((parts: DeepReadonly<P>) => string) | undefined;
   },
 ) {
-  return makeSeal(definitionName, ops);
+  const bridge = makeSeal(definitionName, ops);
+  return {
+    ...bridge,
+    seal: (parts: P) =>
+      bridge.seal(snapshotData(parts, `${definitionName}: successful mint Parts`)),
+  };
 }
 function semanticKey(value: unknown, definitionName: string): SemanticKey {
   if (
@@ -178,10 +183,10 @@ function semanticKey(value: unknown, definitionName: string): SemanticKey {
 export function makeSemanticSeal<P>(
   definitionName: string,
   ops: {
-    copy?: Record<string, (parts: P) => unknown>;
-    view?: Record<string, (parts: P) => unknown>;
-    debug?: ((parts: P) => string) | undefined;
-    key: (parts: P) => SemanticKey;
+    copy?: Record<string, (parts: DeepReadonly<P>) => unknown>;
+    view?: Record<string, (parts: DeepReadonly<P>) => unknown>;
+    debug?: ((parts: DeepReadonly<P>) => string) | undefined;
+    key: (parts: DeepReadonly<P>) => SemanticKey;
   },
 ) {
   const bridge = makeSeal(definitionName, { ...ops, semantic: true });
@@ -189,19 +194,18 @@ export function makeSemanticSeal<P>(
   return {
     ...bridge,
     seal: (parts: P) => {
-      dataGraph(parts, `${definitionName}: keyed Parts`, true);
-      const key = semanticKey(ops.key(parts), definitionName);
+      const snapshot = snapshotData(parts, `${definitionName}: keyed Parts`);
+      const key = semanticKey(ops.key(snapshot), definitionName);
       const existing = interner.get(key);
       if (existing) {
         const stored = bridge.read(existing);
-        dataGraph(stored, `${definitionName}: stored Parts`, true);
-        if (!sameParts(stored, parts))
+        if (!sameParts(stored, snapshot))
           throw new TypeError(
             `${definitionName}: semantic identity collision for key ${typeof key === 'string' ? JSON.stringify(key) : String(key)}`,
           );
         return existing;
       }
-      const value = bridge.seal(parts);
+      const value = bridge.seal(snapshot);
       interner.put(key, value);
       return value;
     },

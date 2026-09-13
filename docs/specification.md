@@ -8,9 +8,9 @@ The main entry exports `defineSeal` and `defineMint`, plus TypeScript types. `Se
 
 Every semantic definition requires `key(parts)`, returning `string | number | bigint | boolean | null | undefined`. Primitive Parts use an explicit callback too, for example `key: id => id`. Normalize Parts in the schema before computing the key. Different Parts sharing a live key cause a collision error, including primitive Parts.
 
-For every key, the runtime validates every decoded Parts graph before computing identity, including the first creation. Supported structures are primitives, dense arrays, plain data objects, Dates without own properties, and sealed leaves. Cycles, symbol keys, accessors, hidden properties, and other objects fail. Shared acyclic subgraphs are allowed.
+For every key, the runtime snapshots every decoded Parts graph before computing identity, including the first creation. Supported structures are primitives, dense arrays, plain data objects, and genuine sealed leaves from this installed package copy. The snapshot copies containers, preserves shared acyclic children, preserves sealed leaves by reference, and freezes only the copies it creates. Cycles, Dates, collections, array buffers/views, functions, arbitrary class instances, symbol keys, accessors, hidden properties, and other unsupported objects fail. Snapshot failure happens before key evaluation and before intern-table mutation.
 
-Each completed definition owns a private weak table. After Zod normalization, the key selects an existing live instance or a new one. Every live hit must also pass structural collision comparison. Arrays compare in order, plain properties by name independent of insertion order, Dates by timestamp, and sealed leaves by identity. Numeric properties compare with `Object.is`; identity keys also distinguish signed zero and intern NaN with itself. Differing Parts for the same live key throw.
+Each completed definition owns a private weak table. After Zod normalization and snapshotting, the key selects an existing live instance or a new one. Every live hit also compares the stored snapshot with the new snapshot. Arrays compare in order, plain properties by name independent of insertion order, object and null prototypes remain distinct, and sealed leaves compare by identity. Numeric properties compare with `Object.is`; identity keys also distinguish signed zero and intern NaN with itself. Differing Parts for the same live key throw.
 
 Weak cleanup removes an entry only if it still contains the exact reference associated with the finalized object. Cleanup timing is unspecified. No public control changes interning. This is an identity guarantee, not a speed guarantee.
 
@@ -18,7 +18,7 @@ The completed kind exposes `name`, `is`, `codec`, and `allocate` only when confi
 
 ## Minted definitions
 
-`defineMint({ name, mint, debug? })` creates a builder. The producer returns `ProducerResult<Parts, Error>`. Parts and Error are inferred independently. Error is producer-owned and defaults to `never` for an infallible producer. Failure passes through unchanged. Every success creates a fresh instance without an intern table. The completed definition exposes `name`, `is`, and `mint`.
+`defineMint({ name, mint, debug? })` creates a builder. The producer returns `ProducerResult<Parts, Error>`. Parts and Error are inferred independently. Error is producer-owned and defaults to `never` for an infallible producer. Failure passes through unchanged. Every success snapshots Parts and creates a fresh instance without an intern table. Invalid successful Parts throw a misuse error before an instance is constructed. The completed definition exposes `name`, `is`, and `mint`.
 
 ## Completion
 
@@ -26,19 +26,19 @@ Optional `.view(projections)` returns a builder with that projection map. Option
 
 A sealed value belongs to exactly one completed definition instance. `is` checks its ES private-field brand and returns a boolean. Definitions with the same label are permitted and unrelated. No global or module-level mutable table tracks names or instances.
 
-Each instance also possesses an ES-private leaf brand shared within this installed package copy. Only that brand authenticates atomic graph leaves. Other package copies and objects mimicking a label are rejected by graph validation.
+Each instance also possesses an ES-private leaf brand shared within this installed package copy. Only that brand authenticates atomic graph leaves. The diagnostic name symbol is separate from authenticity. Rejected sealed-looking objects may come from another installed package copy or may be imitations.
 
 The stateless `Symbol.for('sealed-semantics.name')` protocol reports the label across package copies. It never grants a definition's brand. Foreign codec inputs receive an operation-specific diagnostic. Matching labels explain module re-execution and duplicate package installation as likely causes.
 
 ## Instances and views
 
-Instances have frozen ordinary surfaces, frozen prototypes, ES private Parts, and a guarded constructor. Standard observations are explicit `debug()` and optional `view`. Implicit JSON, numeric, and string conversion throw. Node inspection and `Symbol.toStringTag` expose only the definition name.
+Instances have frozen ordinary surfaces, frozen prototypes, frozen ES private Parts snapshots, and a guarded constructor. Standard observations are explicit `debug()` and optional `view`. Implicit JSON, numeric, and string conversion throw. Node inspection and `Symbol.toStringTag` expose only the definition name.
 
-The view facade is lazy, frozen, and null-prototype. Each projection separately validates, deeply freezes, and caches its first successful result. Results allow primitives, plain data objects, dense arrays, and sealed leaves. Dates and other classes, functions, accessors, hidden properties, symbol keys, and cycles are rejected. Validation precedes any freezing. Recursive projection access throws. Failed evaluation or validation does not populate the cache.
+The view facade is lazy, frozen, and null-prototype. Each projection receives readonly private Parts, then separately validates, snapshots, freezes, and caches its first successful result. Results allow primitives, plain data objects, dense arrays, and sealed leaves. Dates and other classes, collections, array buffers/views, functions, accessors, hidden properties, symbol keys, and cycles are rejected. Validation precedes any freezing. Recursive projection access throws. Failed evaluation or validation does not populate the cache.
 
 `DeepReadonly<T>` retains precise nested types and treats sealed types as terminal. Runtime validation remains necessary for class prototypes and descriptors, which TypeScript cannot reliably distinguish from plain data shapes.
 
-Private Parts are logically immutable. The library does not freeze all Parts at construction, but it freezes any graph exposed through a view. Producers must own or copy mutable inputs and must not mutate them later.
+Private Parts are frozen snapshots. Producer-owned containers are not frozen and are not retained as private state. Later producer mutations cannot change an existing instance, but later decodes or mint successes use new snapshots. The author still owns semantic correctness, normalization, and domain facts.
 
 ## Scope
 

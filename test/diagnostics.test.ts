@@ -106,6 +106,30 @@ test('configuration errors explain identity and capability constraints', () => {
       'Wire schema input must be JSON-compatible.',
     ],
     [
+      `defineSeal({ key: () => 'x',name:'diagnostic/date-parts',schema:z.string().transform(s=>({when:new Date(s)}))});`,
+      'Parts must be primitives',
+    ],
+    [
+      `defineSeal({ key: () => 'x',name:'diagnostic/bytes-parts',schema:z.string().transform(()=>new Uint8Array())});`,
+      'Parts must be primitives',
+    ],
+    [
+      `defineMint({name:'diagnostic/shared-buffer-parts',mint:()=>({ok:true,value:new SharedArrayBuffer(1)})});`,
+      'Parts must be primitives',
+    ],
+    [
+      `defineMint({name:'diagnostic/function-parts',mint:()=>({ok:true,value:()=>1})});`,
+      'Parts must be primitives',
+    ],
+    [
+      `defineMint({name:'diagnostic/promise-parts',mint:()=>({ok:true,value:Promise.resolve(1)})});`,
+      'Parts must be primitives',
+    ],
+    [
+      `defineMint({name:'diagnostic/map-parts',mint:()=>({ok:true,value:new Map()})});`,
+      'Parts must be primitives',
+    ],
+    [
       `defineSeal({ key: parts => parts,name:widened,schema:z.string()});`,
       'name must be a string literal',
     ],

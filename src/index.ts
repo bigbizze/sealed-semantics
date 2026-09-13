@@ -11,6 +11,9 @@ import type {
   IdentityOptions,
   ValueBuilder,
   MintedBuilder,
+  PartsSchema,
+  CheckedParts,
+  DeepReadonly,
 } from './types.js';
 export type {
   Proof as SealedValue,
@@ -78,9 +81,9 @@ export function defineSeal<
 >(
   spec: {
     name: LiteralName<K>;
-    schema: W & JsonSchema<W>;
+    schema: W & JsonSchema<W> & PartsSchema<W>;
     allocate?: (...args: A) => NoInfer<z.input<W>>;
-    debug?: (parts: NoInfer<z.output<W>>) => string;
+    debug?: (parts: NoInfer<DeepReadonly<z.output<W>>>) => string;
   } & IdentityOptions<NoInfer<z.output<W>>> &
     Record<Keys, unknown> & {
       [
@@ -101,7 +104,13 @@ export function defineSeal<
   const { name, schema, debug, allocate, key } = spec;
   return builder((view, metadata, copy) => {
     const bridge = makeSemanticSeal<z.output<W>>(name, { debug, view, key, copy });
-    const codec = makeWireCodec(schema, name, bridge.seal, bridge.is, bridge.read);
+    const codec = makeWireCodec(
+      schema,
+      name,
+      bridge.seal,
+      bridge.is,
+      (value) => bridge.read(value) as z.output<W>,
+    );
     const result = { name, is: bridge.is, codec };
     if (allocate)
       Object.assign(result, {
@@ -136,8 +145,9 @@ export function defineMint<
   spec: {
     name: LiteralName<K>;
     mint: (input: I) => R;
-    debug?: (parts: NoInfer<MintParts<R>>) => string;
-  } & Record<Keys, unknown> & {
+    debug?: (parts: NoInfer<DeepReadonly<MintParts<R>>>) => string;
+  } & CheckedParts<NoInfer<MintParts<R>>> &
+    Record<Keys, unknown> & {
       [N in Exclude<Keys, 'name' | 'mint' | 'debug'>]: ConfigurationError<
         N extends 'allocate' | 'key' | 'schema'
           ? `Minted definitions cannot configure ${N}. Only semantic definitions support this option.`

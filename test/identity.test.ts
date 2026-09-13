@@ -76,9 +76,15 @@ test('keyed Parts are validated on first decode and collisions never substitute 
     },
   );
   assert.equal(Bad.codec.parse({ id: 'private-A', version: 1 }), first);
-  const invalid = [
+  const invalid: unknown[] = [
+    new Date(),
     new Map(),
     new Set(),
+    new WeakMap(),
+    new WeakSet(),
+    new ArrayBuffer(1),
+    new SharedArrayBuffer(1),
+    new DataView(new ArrayBuffer(1)),
     new Uint8Array(),
     new (class {
       n = 1;
@@ -121,20 +127,88 @@ test('keyed Parts are validated on first decode and collisions never substitute 
   assert.throws(() => Wrong.codec.parse({ n: 1 }), /semantic key must/);
 });
 
-test('collision guard supports Dates and sealed leaves without treating opaque lookalikes as data', () => {
+test('semantic Parts snapshots isolate retained aliases and keep caller containers mutable', () => {
+  const retained = { id: 'a', rows: [1, 2] };
+  let keyCalls = 0;
+  const K = defineSeal({
+    name: 'identity/private-snapshot',
+    schema: z.string().transform(() => retained),
+    key: (p) => {
+      keyCalls++;
+      assert(Object.isFrozen(p));
+      assert(Object.isFrozen(p.rows));
+      assert.throws(() => (p.rows as number[]).push(3), TypeError);
+      return p.id;
+    },
+    debug: (p) => p.rows.join(','),
+  }).seal();
+  const value = K.codec.parse('x');
+  assert.equal(keyCalls, 1);
+  assert(!Object.isFrozen(retained));
+  assert(!Object.isFrozen(retained.rows));
+  retained.rows[0] = 99;
+  assert.equal(value.debug(), '1,2');
+  assert.throws(() => K.codec.parse('x'), /semantic identity collision/);
+  retained.rows[0] = 1;
+  assert.equal(K.codec.parse('x'), value);
+  retained.rows[1] = 100;
+  assert.throws(() => K.codec.parse('x'), /semantic identity collision/);
+});
+
+test('semantic snapshots leave input containers mutable and preserve encoding', () => {
+  const K = defineSeal({
+    name: 'identity/input-snapshot',
+    schema: z.codec(
+      z.object({ id: z.string(), rows: z.array(z.number()) }),
+      z.object({ id: z.string(), rows: z.array(z.number()) }),
+      {
+        decode: (input) => input,
+        encode: (parts) => ({ id: parts.id, rows: [...parts.rows] }),
+      },
+    ),
+    key: (p) => p.id,
+  }).seal();
+  const input = { id: 'a', rows: [1, 2] };
+  const value = K.codec.parse(input);
+  assert(!Object.isFrozen(input));
+  assert(!Object.isFrozen(input.rows));
+  input.rows.push(3);
+  assert.deepEqual(z.encode(K.codec, value), { id: 'a', rows: [1, 2] });
+  assert.equal(K.codec.parse({ id: 'a', rows: [1, 2] }), value);
+  assert.throws(() => K.codec.parse(input), /semantic identity collision/);
+});
+
+test('snapshot failure precedes key evaluation and intern-table mutation', () => {
+  let current: any = Object.defineProperty({ nested: { rows: [1] } }, 'hidden', {
+    value: 1,
+  });
+  let keyCalls = 0;
+  const K = defineSeal({
+    name: 'identity/snapshot-order',
+    schema: z.string().transform(() => current),
+    key: () => {
+      keyCalls++;
+      return 'x';
+    },
+  }).seal();
+  assert.throws(() => K.codec.parse('x'), /accessors and hidden properties/);
+  assert.equal(keyCalls, 0);
+  assert(!Object.isFrozen(current));
+  assert(!Object.isFrozen(current.nested));
+  current = { nested: { rows: [1] } };
+  const value = K.codec.parse('x');
+  assert(K.is(value));
+  assert.equal(keyCalls, 1);
+});
+
+test('Parts snapshots reject Dates and preserve sealed leaves as collision atoms', () => {
   const DateKind = defineSeal({
     name: 'identity/date',
-    schema: z.codec(z.string(), z.date(), {
-      decode: (s) => new Date(s),
-      encode: (d) => d.toISOString(),
-    }),
-    key: (d) => d.getTime(),
-  })
-    .view({ timestamp: (d) => d.getTime() })
-    .seal();
-  const a = DateKind.codec.parse('2020-01-01');
-  assert.equal(a, DateKind.codec.parse('2020-01-01T00:00:00.000Z'));
-  assert.equal(a.view.timestamp, 1577836800000);
+    schema: z.string().transform((s) => new Date(s)) as any,
+    key: (d: Date) => d.getTime(),
+  }).seal();
+  assert.throws(() => DateKind.codec.parse('2020-01-01'), /unsupported object/);
+
   const Event = defineMint({
     name: 'identity/event',
     mint: () => ({ ok: true, value: 0 }),
@@ -152,6 +226,58 @@ test('collision guard supports Dates and sealed leaves without treating opaque l
   const held = Holder.codec.parse('one');
   assert.equal(held, Holder.codec.parse('one'));
   assert.throws(() => Holder.codec.parse('two'), /collision/);
+});
+
+test('mint snapshots preserve shared children, null prototypes, __proto__ data, and sealed leaves', () => {
+  const Id = defineSeal({
+    key: (parts) => parts,
+    name: 'identity/snapshot-leaf',
+    schema: z.string(),
+  }).seal();
+  const id = Id.codec.parse('leaf');
+  const child = { count: 1 };
+  const parts = Object.create(null);
+  Object.defineProperty(parts, '__proto__', { value: 'data', enumerable: true });
+  parts.child = child;
+  parts.again = child;
+  parts.leaf = id;
+  const M = defineMint({
+    name: 'identity/mint-snapshot',
+    mint: () => ({ ok: true as const, value: parts }),
+    debug: (p) => `${p.child.count}:${p.__proto__}`,
+  })
+    .view({ snapshot: (p) => p, leaf: (p) => p.leaf })
+    .seal();
+  const result = M.mint(undefined);
+  assert(result.ok);
+  assert(!Object.isFrozen(parts));
+  assert(!Object.isFrozen(child));
+  child.count = 2;
+  const view = result.value.view.snapshot as any;
+  assert.equal(Object.getPrototypeOf(view), null);
+  assert.equal(Object.getOwnPropertyDescriptor(view, '__proto__')!.value, 'data');
+  assert.equal(view.child, view.again);
+  assert.equal(view.child.count, 1);
+  assert.equal(view.leaf, id);
+  assert.equal(result.value.view.leaf, id);
+  assert.equal(result.value.debug(), '1:data');
+});
+
+test('mint failures pass through but invalid successful Parts throw misuse errors', () => {
+  const error = { code: 'rejected' as const };
+  let success = false;
+  const M = defineMint({
+    name: 'identity/mint-invalid',
+    mint: () =>
+      success
+        ? ({ ok: true as const, value: new Date() } as any)
+        : { ok: false as const, error },
+  }).seal();
+  const rejected = M.mint(undefined);
+  assert(!rejected.ok);
+  assert.equal(rejected.error, error);
+  success = true;
+  assert.throws(() => M.mint(undefined), /successful mint Parts.*unsupported object/);
 });
 
 test('stale cleanup cannot delete a replacement and current cleanup releases its entry', () => {

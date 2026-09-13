@@ -1,8 +1,8 @@
 # Type inference and API checks
 
-Private Parts are inferred from the Zod schema output. Key and debug callbacks receive that type. `.view()` supplies a separate inference stage. `.seal()` completes the definition. Optional documentation follows view configuration.
+Private Parts are inferred from the Zod schema output. Key, debug, view, and copy callbacks receive `DeepReadonly<Parts>`. `.view()` supplies a separate inference stage. `.seal()` completes the definition. Optional documentation follows view configuration.
 
-`spike/inference.ts` checks precise codec input/output, required keys for primitive and object Parts, readonly nested views, terminal sealed leaves, allocation arguments, exact documentation, and minted inputs containing different kinds.
+`spike/inference.ts` checks precise codec input/output, required keys for primitive and object Parts, readonly callback inputs, readonly nested views, terminal sealed leaves, allocation arguments, exact documentation, index signatures, unsupported Parts diagnostics, and minted inputs containing different kinds.
 
 Compiler-output tests verify readable diagnostics. Language-service tests check member lists for primitive and object definitions, builders, completed kinds, instances, documentation, and laws. Both TypeScript 5.7 and the development compiler run the constraints.
 
