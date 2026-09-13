@@ -129,6 +129,7 @@ test('exposed Parts freeze safely, shared subgraphs work, and later codec/debug 
   const rows = value.view.rows;
   assert(Object.isFrozen(rows));
   assert.equal(value.view.shared.a, value.view.shared.b);
+  assert.equal(value.view.shared.a, rows);
   assert.deepEqual(z.encode(K.codec, value), { rows: [1, 2] });
   assert.equal(value.debug(), '2');
   assert.equal(K.codec.parse({ rows: [1, 2] }), value);

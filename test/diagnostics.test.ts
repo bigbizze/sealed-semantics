@@ -114,6 +114,10 @@ test('configuration errors explain identity and capability constraints', () => {
       'Parts must be primitives',
     ],
     [
+      `const symbolPart=Symbol('diagnostic/symbol-part'); defineSeal({ key: () => 'x',name:'diagnostic/symbol-parts',schema:z.string().transform(()=>({[symbolPart]:1}))});`,
+      'Parts must be primitives',
+    ],
+    [
       `defineMint({name:'diagnostic/shared-buffer-parts',mint:()=>({ok:true,value:new SharedArrayBuffer(1)})});`,
       'Parts must be primitives',
     ],

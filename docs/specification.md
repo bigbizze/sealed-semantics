@@ -14,7 +14,7 @@ Each completed definition owns a private weak table. After Zod normalization and
 
 Weak cleanup removes an entry only if it still contains the exact reference associated with the finalized object. Cleanup timing is unspecified. No public control changes interning. This is an identity guarantee, not a speed guarantee.
 
-The completed kind exposes `name`, `is`, `codec`, and `allocate` only when configured. Allocation sends its generated input through the same codec and intern table. Zod provides parsing, validation, composition, and encoding. Async schemas use Zod's async APIs; allocation and documentation are synchronous.
+The completed kind exposes `name`, `is`, `codec`, and `allocate` only when configured. Allocation sends its generated input through the same codec and intern table. Zod provides parsing, validation, composition, and encoding. Async schemas use Zod's async APIs; allocation and documentation are synchronous. During encoding, the sealed codec reads the stored frozen Parts snapshot. Zod may validate or copy that value before a schema encoder runs. Encoders must be correct without mutating Parts. TypeScript cannot express this through the external Zod codec type, so runtime freezing remains authoritative for stored Parts.
 
 ## Minted definitions
 
@@ -34,7 +34,7 @@ The stateless `Symbol.for('sealed-semantics.name')` protocol reports the label a
 
 Instances have frozen ordinary surfaces, frozen prototypes, frozen ES private Parts snapshots, and a guarded constructor. Standard observations are explicit `debug()` and optional `view`. Implicit JSON, numeric, and string conversion throw. Node inspection and `Symbol.toStringTag` expose only the definition name.
 
-The view facade is lazy, frozen, and null-prototype. Each projection receives readonly private Parts, then separately validates, snapshots, freezes, and caches its first successful result. Results allow primitives, plain data objects, dense arrays, and sealed leaves. Dates and other classes, collections, array buffers/views, functions, accessors, hidden properties, symbol keys, and cycles are rejected. Validation precedes any freezing. Recursive projection access throws. Failed evaluation or validation does not populate the cache.
+The view facade is lazy, frozen, and null-prototype. Each projection receives readonly private Parts, then separately validates and snapshots its first successful result before caching it. Already snapshotted library-owned nodes can be reused by reference. Results allow primitives, plain data objects, dense arrays, and sealed leaves. Dates and other classes, collections, array buffers/views, functions, accessors, hidden properties, symbol keys, and cycles are rejected. Validation precedes freezing of newly copied containers. Recursive projection access throws. Failed evaluation or validation does not populate the cache.
 
 `DeepReadonly<T>` retains precise nested types and treats sealed types as terminal. Runtime validation remains necessary for class prototypes and descriptors, which TypeScript cannot reliably distinguish from plain data shapes.
 

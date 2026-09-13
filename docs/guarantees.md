@@ -22,13 +22,13 @@ Keyed Parts permit primitives, dense arrays, plain data objects, and genuine sea
 
 For byte-valued semantic data, use a canonical string such as lowercase hex. Typed arrays and Node buffers are not supported semantic Parts or view outputs. Convert strings to fresh mutable buffers at binary API boundaries; buffer reference identity does not carry semantic identity. See [digests and byte buffers](bytes.md).
 
-The library copies successful Parts into frozen private snapshots. Producer-owned containers are not frozen and are not retained as private state. Later mutations to retained aliases cannot change existing values. Do not mutate the schema or callback behavior after completion.
+The library copies successful Parts into frozen private snapshots. Producer-owned containers are not frozen and are not retained as private state. Later mutations to retained aliases cannot change existing values. During `z.encode`, the sealed codec reads the frozen snapshot. Zod may validate or copy it before a schema encoder runs, so encoders must be correct without mutating Parts. Do not mutate the schema or callback behavior after completion.
 
 Genuine graph leaves possess a package-local ES-private brand. A diagnostic kind symbol cannot authenticate a leaf. Rejected sealed-looking objects may be values from another installed copy or may be imitations; the runtime does not need to decide which. Browser JavaScript has no general proxy detector, so producer code must not rely on adversarial proxies. This package is not a sandbox against malicious producer code or changes to JavaScript intrinsics.
 
 ## Observations and logging
 
-Views are lazy and separately cached. Successful results are stable frozen snapshots. Genuine local sealed leaves retain their original identity and are not recursively frozen. Unsupported structures and cycles throw on first access. Shared acyclic structures work. If evaluation fails, later access retries.
+Views are lazy and separately cached. Successful results are stable frozen snapshots. Already snapshotted library-owned nodes can be reused by reference. Genuine local sealed leaves retain their original identity and are not recursively frozen. Unsupported structures and cycles throw on first access. Shared acyclic structures work. If evaluation fails, later access retries.
 
 Explicit debug callbacks may reveal information chosen by the producer. Console inspection does not call them or encode Parts. It displays `Sealed<kind>`. JSON and structured logging must explicitly encode semantic values through Zod. Minted values have no external representation.
 

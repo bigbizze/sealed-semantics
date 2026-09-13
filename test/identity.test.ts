@@ -178,6 +178,33 @@ test('semantic snapshots leave input containers mutable and preserve encoding', 
   assert.throws(() => K.codec.parse(input), /semantic identity collision/);
 });
 
+test('schema encoders can receive frozen Parts snapshots', () => {
+  const K = defineSeal({
+    name: 'identity/frozen-encoder',
+    schema: z.codec(
+      z.string(),
+      z.custom<{ rows: number[] }>(
+        (input) =>
+          typeof input === 'object' &&
+          input !== null &&
+          Array.isArray((input as { rows?: unknown }).rows),
+      ),
+      {
+        decode: (input) => ({ rows: input.split(',').map(Number) }),
+        encode: (parts) => {
+          assert(Object.isFrozen(parts));
+          assert(Object.isFrozen(parts.rows));
+          assert.throws(() => parts.rows.push(3), TypeError);
+          return parts.rows.join(',');
+        },
+      },
+    ),
+    key: (p) => p.rows.join(','),
+  }).seal();
+  const value = K.codec.parse('1,2');
+  assert.equal(z.encode(K.codec, value), '1,2');
+});
+
 test('snapshot failure precedes key evaluation and intern-table mutation', () => {
   let current: any = Object.defineProperty({ nested: { rows: [1] } }, 'hidden', {
     value: 1,

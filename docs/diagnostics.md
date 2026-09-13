@@ -7,7 +7,7 @@ Public types expose only configured capabilities. Generic checks explain invalid
 - Keys must return supported primitives. A symbol or object is invalid.
 - Completed definitions expose only their construction operations and codec, where applicable.
 - Key, debug, view, and copy callbacks receive `DeepReadonly<Parts>`.
-- Schema outputs and successful mint Parts reject identifiable unsupported types such as Dates, collections, array buffers/views, functions, and promises. Runtime validation remains authoritative for prototypes, accessors, hidden properties, symbol keys, and cycles.
+- Schema outputs and successful mint Parts reject identifiable unsupported types such as Dates, collections, array buffers/views, functions, promises, and symbol-keyed object shapes. Runtime validation remains authoritative for prototypes, accessors, hidden properties, symbol keys TypeScript cannot see, and cycles.
 - View results preserve their inferred shape but become deeply readonly. Known unsupported results get a configuration diagnostic. Runtime validation checks prototypes and descriptors on first access.
 - Documentation requires typed input/output examples and exact projection descriptions.
 - Law options include allocation generators only when allocation is configured.

@@ -215,6 +215,13 @@ defineMint({
   name: 'types/shared-buffer-parts',
   mint: () => ({ ok: true, value: new SharedArrayBuffer(1) }),
 });
+const symbolPart = Symbol('types/symbol-part');
+defineSeal({
+  key: () => 'x',
+  name: 'types/symbol-parts',
+  // @ts-expect-error Symbol-keyed Parts are unsupported.
+  schema: z.string().transform(() => ({ [symbolPart]: 1 })),
+});
 // @ts-expect-error Kind identity must be a literal.
 defineSeal({ key: (parts) => parts, name: '' as string, schema: z.string() });
 // @ts-expect-error Examples must be non-empty.

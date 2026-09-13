@@ -2,6 +2,7 @@ import { NAME_LABEL, isSealed } from './sealed-leaf.js';
 import type { DeepReadonly } from './types.js';
 
 const arrayIndex = /^(0|[1-9][0-9]*)$/;
+const ownedSnapshots = new WeakSet<object>();
 
 function hasDiagnosticName(value: object): boolean {
   let cursor: object | null = value;
@@ -31,15 +32,26 @@ function defineFrozenValue(target: object, key: string, value: unknown): void {
   });
 }
 
+function freezeSnapshot<T extends object>(snapshot: T): T {
+  Object.freeze(snapshot);
+  ownedSnapshots.add(snapshot);
+  return snapshot;
+}
+
 // Snapshot the graph before it becomes private state or a public view. The
 // traversal reads descriptors, so accessors are rejected without invocation.
-export function snapshotData<T>(value: T, label: string): DeepReadonly<T> {
+function snapshotValue<T>(
+  value: T,
+  label: string,
+  reuseOwnedSnapshots: boolean,
+): DeepReadonly<T> {
   const active = new WeakSet<object>();
   const snapshots = new WeakMap<object, object>();
   const visit = (x: unknown): unknown => {
     if (typeof x === 'function')
       throw new TypeError(`${label}: functions are unsupported`);
     if (x === null || typeof x !== 'object' || isSealed(x)) return x;
+    if (reuseOwnedSnapshots && ownedSnapshots.has(x)) return x;
     if (active.has(x)) throw new TypeError(`${label}: cycles are unsupported`);
     const ready = snapshots.get(x);
     if (ready) return ready;
@@ -57,51 +69,50 @@ export function snapshotData<T>(value: T, label: string): DeepReadonly<T> {
     }
 
     active.add(x);
-    try {
-      if (array) {
-        const source = x as unknown[];
-        const snapshot = new Array(source.length);
-        snapshots.set(x, snapshot);
-        for (const key of keys as string[]) {
-          if (key === 'length') continue;
-          if (!arrayIndex.test(key) || Number(key) >= source.length)
-            throw new TypeError(`${label}: arrays cannot have extra properties`);
-        }
-        for (let index = 0; index < source.length; index++) {
-          const key = String(index);
-          const descriptor = descriptors[key];
-          if (!descriptor || !('value' in descriptor) || !descriptor.enumerable)
-            throw new TypeError(
-              `${label}: arrays must be dense and contain only enumerable data properties`,
-            );
-          defineFrozenValue(snapshot, key, visit(descriptor.value));
-        }
-        active.delete(x);
-        return Object.freeze(snapshot);
-      }
-
-      const snapshot = Object.create(proto) as Record<string, unknown>;
+    if (array) {
+      const source = x as unknown[];
+      const snapshot = new Array(source.length);
       snapshots.set(x, snapshot);
       for (const key of keys as string[]) {
-        const descriptor = descriptors[key]!;
-        if (!('value' in descriptor) || !descriptor.enumerable)
+        if (key === 'length') continue;
+        if (!arrayIndex.test(key) || Number(key) >= source.length)
+          throw new TypeError(`${label}: arrays cannot have extra properties`);
+      }
+      for (let index = 0; index < source.length; index++) {
+        const key = String(index);
+        const descriptor = descriptors[key];
+        if (!descriptor || !('value' in descriptor) || !descriptor.enumerable)
           throw new TypeError(
-            `${label}: accessors and hidden properties are unsupported`,
+            `${label}: arrays must be dense and contain only enumerable data properties`,
           );
         defineFrozenValue(snapshot, key, visit(descriptor.value));
       }
       active.delete(x);
-      return Object.freeze(snapshot);
-    } catch (error) {
-      active.delete(x);
-      throw error;
+      return freezeSnapshot(snapshot);
     }
+
+    const snapshot = Object.create(proto) as Record<string, unknown>;
+    snapshots.set(x, snapshot);
+    for (const key of keys as string[]) {
+      const descriptor = descriptors[key]!;
+      if (!('value' in descriptor) || !descriptor.enumerable)
+        throw new TypeError(
+          `${label}: accessors and hidden properties are unsupported`,
+        );
+      defineFrozenValue(snapshot, key, visit(descriptor.value));
+    }
+    active.delete(x);
+    return freezeSnapshot(snapshot);
   };
   return visit(value) as DeepReadonly<T>;
 }
 
+export function snapshotData<T>(value: T, label: string): DeepReadonly<T> {
+  return snapshotValue(value, label, false);
+}
+
 export function immutableView<T>(value: T, label: string): DeepReadonly<T> {
-  return snapshotData(value, label);
+  return snapshotValue(value, label, true);
 }
 
 // Collision assertion only. Callers pass snapshotted graphs. Property order and

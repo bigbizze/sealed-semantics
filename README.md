@@ -232,7 +232,7 @@ console.log(z.encode(ResponseSchema, response));
 // { user_id: 'usr_123abc', project_id: 'prj_123abc' }
 ```
 
-Use a `z.codec(...)` as the definition's schema when external input and Parts have different types. Normalize in that schema before identity is computed. One-way Zod transforms can decode but cannot encode backward.
+Use a `z.codec(...)` as the definition's schema when external input and Parts have different types. Normalize in that schema before identity is computed. One-way Zod transforms can decode but cannot encode backward. When `z.encode(Kind.codec, value)` runs, the sealed codec reads the frozen Parts snapshot. Zod may validate or copy that value before a schema encoder runs. Write schema encoders as read-only code; do not rely on mutating Parts.
 
 ## Every seal declares its identity key
 
@@ -309,13 +309,13 @@ The library ensures that the producer succeeded. The producer defines what that 
 
 ## Stable, immutable views
 
-Each view projection runs lazily. Its first successful result is validated, copied into a frozen snapshot, and cached. Later reads return exactly that result, including `undefined` and other falsy values. Failed projections can be retried.
+Each view projection runs lazily. Its first successful result is validated, snapshotted as frozen data, and cached. Already snapshotted library-owned nodes can be reused by reference. Later reads return exactly that result, including `undefined` and other falsy values. Failed projections can be retried.
 
 Views allow primitives, sealed values, dense arrays, and plain data objects. Structured observations are deeply readonly in TypeScript. Functions, Dates, collections, array buffers/views, other class instances, accessors, hidden properties, symbol-keyed structures, and cycles are rejected on access. Genuine sealed leaves from this installed package copy retain their exact type and remain usable. An ES-private brand authenticates them. The well-known name symbol is only a diagnostic label. Rejected sealed-looking objects may come from another installed package copy or may be imitations; the runtime does not need to decide which.
 
 For digests and other byte-valued data, keep canonical string Parts and declare `.copy({ bytes: ... })` for a stable byte observation returned as a fresh `Uint8Array` at the binary API boundary. Buffers are mutable representations, not identity-bearing values or view outputs. See [digests and byte buffers](docs/bytes.md).
 
-Successful semantic Parts and mint Parts are copied into frozen private snapshots. Anything exposed through `view` becomes a separate frozen snapshot. If a projection returns an internal array, callers receive a frozen copy of that array. Mutating a retained producer alias cannot change an existing value, but a later decode or mint uses a new snapshot. The author still owns semantic correctness, normalization, units, authorization checks, and other domain facts.
+Successful semantic Parts and mint Parts are copied into frozen private snapshots. Anything exposed through `view` becomes a frozen snapshot; already snapshotted library-owned nodes can be reused by reference. If a projection returns an internal array, callers receive a frozen array. Mutating a retained producer alias cannot change an existing value, but a later decode or mint uses a new snapshot. The author still owns semantic correctness, normalization, units, authorization checks, and other domain facts.
 
 ## Definition identity and development
 
@@ -380,7 +380,7 @@ Seals add work beyond the same plain Zod schema. Each decode snapshots the decod
 
 For primitive Parts with a constant-cost key, this extra work is constant per parse. For an object graph with N visited properties or elements, snapshotting and comparison generally require work proportional to N, plus whatever the key callback costs. A hit does not skip snapshot allocation or comparison just because the value was seen before. Large structured values can therefore cost much more than small string IDs.
 
-Each distinct live value retains its frozen Parts snapshot and interning bookkeeping. Finalizer cleanup is delayed, not immediate. The first view access snapshots its result; later reads return the cached reference. A byte copy observation retains a private snapshot after first use and allocates/copies B bytes for each B-byte result.
+Each distinct live value retains its frozen Parts snapshot and interning bookkeeping. Finalizer cleanup is delayed, not immediate. The first view access snapshots its result, reusing already snapshotted library-owned nodes when present; later reads return the cached reference. A byte copy observation retains a private snapshot after first use and allocates/copies B bytes for each B-byte result.
 
 There is no qualified timing ratio against plain Zod for this exact implementation. Earlier prototype results predate the current collision guards and do not establish its cost. Measure representative schemas, sizes, and hit/miss rates before adopting seals for a performance-sensitive path. Interning guarantees identity; it is not a claim that parsing is faster.
 

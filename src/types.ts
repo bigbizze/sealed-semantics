@@ -148,11 +148,11 @@ type GraphCheck<T> =
         : T extends readonly unknown[]
           ? { readonly [K in keyof T]: GraphCheck<T[K]> }
           : T extends object
-            ? { [K in keyof T]: GraphCheck<T[K]> }
+            ? { [K in keyof T]: K extends symbol ? never : GraphCheck<T[K]> }
             : T;
 export type CheckedParts<P> = [P] extends [GraphCheck<P>]
   ? unknown
-  : ConfigurationError<'Parts must be primitives, sealed values, arrays, or plain data objects. Dates, collections, array buffers/views, functions, and promises are not Parts.'>;
+  : ConfigurationError<'Parts must be primitives, sealed values, arrays, or plain data objects. Dates, collections, array buffers/views, functions, promises, and symbol-keyed object shapes are not Parts.'>;
 export type PartsSchema<W extends z.ZodType> = CheckedParts<z.output<W>>;
 type ViewCheck<T> = GraphCheck<T>;
 export type CheckedView<F> = F & {
