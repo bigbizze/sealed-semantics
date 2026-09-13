@@ -119,15 +119,17 @@ export type ReservedField =
 export type SemanticKey = string | number | bigint | boolean | null | undefined;
 export type IdentityOptions<P> = {
   /** Required semantic identity. Normalize Parts in the schema before key runs. */
-  key: (parts: P) => SemanticKey;
+  key: (parts: DeepReadonly<P>) => SemanticKey;
 };
 export type DeepReadonly<T> =
   T extends Proof<string>
     ? T
-    : T extends object
-      ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
-      : T;
-type ViewCheck<T> =
+    : T extends (...args: any[]) => any
+      ? T
+      : T extends object
+        ? { readonly [K in keyof T]: DeepReadonly<T[K]> }
+        : T;
+type GraphCheck<T> =
   T extends Proof<string>
     ? T
     : T extends (...args: any[]) => any
@@ -139,12 +141,20 @@ type ViewCheck<T> =
             | WeakMap<any, any>
             | WeakSet<any>
             | ArrayBuffer
+            | SharedArrayBuffer
             | ArrayBufferView
             | Promise<any>
         ? never
-        : T extends object
-          ? { [K in keyof T]: K extends symbol ? never : ViewCheck<T[K]> }
-          : T;
+        : T extends readonly unknown[]
+          ? { readonly [K in keyof T]: GraphCheck<T[K]> }
+          : T extends object
+            ? { [K in keyof T]: K extends symbol ? never : GraphCheck<T[K]> }
+            : T;
+export type CheckedParts<P> = [P] extends [GraphCheck<P>]
+  ? unknown
+  : ConfigurationError<'Parts must be primitives, sealed values, arrays, or plain data objects. Dates, collections, array buffers/views, functions, promises, and symbol-keyed object shapes are not Parts.'>;
+export type PartsSchema<W extends z.ZodType> = CheckedParts<z.output<W>>;
+type ViewCheck<T> = GraphCheck<T>;
 export type CheckedView<F> = F & {
   [N in keyof F]: F[N] extends (...args: any[]) => infer R
     ? [R] extends [ViewCheck<R>]
@@ -275,10 +285,10 @@ export interface ValueBuilder<
   D = undefined,
 > {
   /** Lazy byte producers. Each successful result is privately snapshotted once. */
-  readonly copy: <const F extends Record<string, (parts: P) => any>>(
+  readonly copy: <const F extends Record<string, (parts: DeepReadonly<P>) => any>>(
     copies: F & CheckedCopies<NoInfer<F>>,
   ) => ValueBuilder<K, W, P, Omit<O, 'copy'> & { copy: F }, D>;
-  readonly view: <const F extends Record<string, (parts: P) => unknown>>(
+  readonly view: <const F extends Record<string, (parts: DeepReadonly<P>) => unknown>>(
     projections: CheckedView<F>,
   ) => ValueBuilder<K, W, P, Omit<O, 'view'> & { view: F }, D>;
   readonly docs: <
@@ -299,10 +309,10 @@ export interface ValueBuilder<
 /** Configuration only. Call .seal() to create the completed kind. */
 export interface MintedBuilder<K extends string, I, P, E, O = {}, D = undefined> {
   /** Lazy byte producers. Each successful result is privately snapshotted once. */
-  readonly copy: <const F extends Record<string, (parts: P) => any>>(
+  readonly copy: <const F extends Record<string, (parts: DeepReadonly<P>) => any>>(
     copies: F & CheckedCopies<NoInfer<F>>,
   ) => MintedBuilder<K, I, P, E, Omit<O, 'copy'> & { copy: F }, D>;
-  readonly view: <const F extends Record<string, (parts: P) => unknown>>(
+  readonly view: <const F extends Record<string, (parts: DeepReadonly<P>) => unknown>>(
     projections: CheckedView<F>,
   ) => MintedBuilder<K, I, P, E, Omit<O, 'view'> & { view: F }, D>;
   readonly docs: <

@@ -3,8 +3,7 @@ import assert from 'node:assert/strict';
 import * as fc from 'fast-check';
 import type { z } from 'zod';
 import { encodeWire, parseCodec } from './zod-codec.js';
-import { foreignValue } from './sealed-leaf.js';
-import { dataGraph } from './structure.js';
+import { foreignValue, isSealed } from './sealed-leaf.js';
 import type { AnyKind, ProducerResult, Proof, ConfigurationError } from './types.js';
 
 type Semantic = AnyKind & { codec: z.ZodType<Proof<string>, any> };
@@ -61,6 +60,28 @@ function copies(value: any, equivalent: any): void {
   }
 }
 
+function assertFrozenGraph(value: unknown, label: string): void {
+  const active = new Set<object>();
+  const done = new Set<object>();
+  const visit = (node: unknown): void => {
+    if (node === null || typeof node !== 'object' || isSealed(node)) return;
+    if (active.has(node)) assert.fail(`${label} must be acyclic`);
+    if (done.has(node)) return;
+    active.add(node);
+    assert(Object.isFrozen(node), `${label} must be deeply frozen`);
+    assert(!Reflect.set(node, '__law_probe__', true));
+    const descriptors = Object.getOwnPropertyDescriptors(node);
+    for (const key of Reflect.ownKeys(descriptors)) {
+      if (Array.isArray(node) && key === 'length') continue;
+      const descriptor = descriptors[key as keyof typeof descriptors];
+      if (descriptor && 'value' in descriptor) visit(descriptor.value);
+    }
+    active.delete(node);
+    done.add(node);
+  };
+  visit(value);
+}
+
 function shared(kind: AnyKind, value: any, equivalent: any = value): void {
   assert(Boolean(kind.is(value)), foreignValue(kind.name, value, 'laws'));
   for (const x of [kind, value, Object.getPrototypeOf(value)])
@@ -80,10 +101,7 @@ function shared(kind: AnyKind, value: any, equivalent: any = value): void {
     for (const name of Object.keys(value.view)) {
       const first = value.view[name];
       assert.equal(first, value.view[name], `view.${name} must be stable`);
-      for (const node of dataGraph(first, `view.${name}`, false)) {
-        assert(Object.isFrozen(node), `view.${name} must be deeply frozen`);
-        assert(!Reflect.set(node, '__law_probe__', true));
-      }
+      assertFrozenGraph(first, `view.${name}`);
     }
   }
 }

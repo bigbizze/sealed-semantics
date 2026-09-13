@@ -190,9 +190,11 @@ const users = new Map<UserId, string>([[a, 'Alice']]);
 console.log(users.get(b)); // Alice
 ```
 
-The schema validates and normalizes input. Its output becomes the private representation, called **Parts**. Interning happens after that normalization. It makes semantic identity coincide with object identity; it is not a promise of faster parsing.
+The schema validates and normalizes input. Its output is copied into frozen private **Parts** before identity is computed. Producer-owned containers are not frozen or retained. Interning happens after that normalization. It makes semantic identity coincide with object identity; it is not a promise of faster parsing.
 
 Call `.docs(...)`, `.view(...)`, and `.copy(...)` in any order; `.seal()` must come last and checks documentation against the final view and copy observations. Completed definitions have no builder methods.
+
+`key`, `debug`, `view`, and `copy` callbacks receive `DeepReadonly<Parts>` in TypeScript. Normalize and copy mutable data before those callbacks run. This readonly callback contract is a public breaking change for code that mutated Parts in callbacks.
 
 `ValueOf<typeof UserId>` gives the instance type. A cast cannot construct an instance. `UserId.is(value)` checks the actual private brand.
 
@@ -230,7 +232,7 @@ console.log(z.encode(ResponseSchema, response));
 // { user_id: 'usr_123abc', project_id: 'prj_123abc' }
 ```
 
-Use a `z.codec(...)` as the definition's schema when external input and Parts have different types. Normalize in that schema before identity is computed. One-way Zod transforms can decode but cannot encode backward.
+Use a `z.codec(...)` as the definition's schema when external input and Parts have different types. Normalize in that schema before identity is computed. One-way Zod transforms can decode but cannot encode backward. When `z.encode(Kind.codec, value)` runs, the sealed codec reads the frozen Parts snapshot. Zod may validate or copy that value before a schema encoder runs. Write schema encoders as read-only code; do not rely on mutating Parts.
 
 ## Every seal declares its identity key
 
@@ -251,7 +253,7 @@ console.log(c1 === c2); // true
 
 The key is the declared identity, not a hash hint. Parts must already be normalized for that identity. On a live hit, the library compares the Parts structurally. A key collision between different Parts throws instead of returning the wrong value. Errors include the seal and key, not private Parts. The error occurs at the conflicting parse, which can be far from the definition. Test keys beside their definitions with the [generated-pair collision test](docs/laws.md#testing-key-collisions). The law harness checks individual generated values and configured aliases; it does not exhaustively prove key injectivity.
 
-Keyed Parts support primitives, plain data objects, dense arrays, `Date`, and sealed values as atomic leaves. Dates compare by timestamp. Cycles, accessors, hidden properties, symbol keys, typed arrays, and other class instances are rejected on the first decode. Shared acyclic children are allowed.
+Decoded Parts are snapshotted before `key(parts)` runs. Snapshot failure happens before key evaluation and before the intern table can change. Supported Parts are primitives, dense arrays, plain data objects, and genuine sealed values from this installed package copy. Use timestamps or strings instead of `Date` Parts. Dates, collections, array buffers/views, functions, arbitrary class instances, accessors, hidden properties, symbol-keyed structures, and cycles are rejected on the first decode. Shared acyclic children are preserved in the frozen snapshot.
 
 Keys use `Object.is` value semantics: `0` and `-0` are distinct keys, and all `NaN` keys share one key. The schema must accept or produce those values first. This does not make non-finite numbers valid JSON.
 
@@ -307,13 +309,13 @@ The library ensures that the producer succeeded. The producer defines what that 
 
 ## Stable, immutable views
 
-Each view projection runs lazily. Its first successful result is validated, deeply frozen, and cached. Later reads return exactly that result, including `undefined` and other falsy values. Failed projections can be retried.
+Each view projection runs lazily. Its first successful result is validated, snapshotted as frozen data, and cached. Already snapshotted library-owned nodes can be reused by reference. Later reads return exactly that result, including `undefined` and other falsy values. Failed projections can be retried.
 
-Views allow primitives, sealed values, dense arrays, and plain data objects. Structured observations are deeply readonly in TypeScript. Functions, Dates, collections, other class instances, accessors, hidden properties, symbol-keyed structures, and cycles are rejected on access. Genuine sealed leaves from this installed package copy retain their exact type and remain usable. An ES-private brand authenticates them. The well-known name symbol is only a diagnostic label; fake objects and values from another installed copy are rejected as graph leaves.
+Views allow primitives, sealed values, dense arrays, and plain data objects. Structured observations are deeply readonly in TypeScript. Functions, Dates, collections, array buffers/views, other class instances, accessors, hidden properties, symbol-keyed structures, and cycles are rejected on access. Genuine sealed leaves from this installed package copy retain their exact type and remain usable. An ES-private brand authenticates them. The well-known name symbol is only a diagnostic label. Rejected sealed-looking objects may come from another installed package copy or may be imitations; the runtime does not need to decide which.
 
 For digests and other byte-valued data, keep canonical string Parts and declare `.copy({ bytes: ... })` for a stable byte observation returned as a fresh `Uint8Array` at the binary API boundary. Buffers are mutable representations, not identity-bearing values or view outputs. See [digests and byte buffers](docs/bytes.md).
 
-The library does not deep-freeze all private Parts merely because they are sealed. Anything exposed through `view` becomes deeply immutable. Parts must remain logically immutable after sealing. If a projection returns an internal array, that array is frozen too. Producers must not retain aliases that they later mutate.
+Successful semantic Parts and mint Parts are copied into frozen private snapshots. Anything exposed through `view` becomes a frozen snapshot; already snapshotted library-owned nodes can be reused by reference. If a projection returns an internal array, callers receive a frozen array. Mutating a retained producer alias cannot change an existing value, but a later decode or mint uses a new snapshot. The author still owns semantic correctness, normalization, units, authorization checks, and other domain facts.
 
 ## Definition identity and development
 
@@ -374,11 +376,11 @@ Install fast-check as a development dependency. Generators must produce accepted
 
 ## Runtime cost
 
-Seals add work beyond the same plain Zod schema. Each decode validates the decoded Parts graph, computes a key, and looks up the per-definition weak intern table. A live hit also validates the stored Parts and compares the two representations to detect collisions. A miss allocates a frozen sealed instance, a WeakRef, and finalization bookkeeping. Zod validation still runs on hits.
+Seals add work beyond the same plain Zod schema. Each decode snapshots the decoded Parts graph, computes a key from that frozen snapshot, and looks up the per-definition weak intern table. A live hit still allocates the new snapshot and compares it with the stored snapshot to detect collisions. A miss allocates a frozen sealed instance, a WeakRef, and finalization bookkeeping. Zod validation still runs on hits.
 
-For primitive Parts with a constant-cost key, this extra work is constant per parse. For an object graph with N visited properties or elements, validation and comparison generally require work proportional to N, plus whatever the key callback costs. A hit performs two graph validations and one comparison; it does not skip that work just because the value was seen before. Large structured values can therefore cost much more than small string IDs.
+For primitive Parts with a constant-cost key, this extra work is constant per parse. For an object graph with N visited properties or elements, snapshotting and comparison generally require work proportional to N, plus whatever the key callback costs. A hit does not skip snapshot allocation or comparison just because the value was seen before. Large structured values can therefore cost much more than small string IDs.
 
-Each distinct live value retains its Parts and interning bookkeeping. Finalizer cleanup is delayed, not immediate. The first view access validates and freezes its result; later reads return the cached reference. A byte copy observation retains a private snapshot after first use and allocates/copies B bytes for each B-byte result.
+Each distinct live value retains its frozen Parts snapshot and interning bookkeeping. Finalizer cleanup is delayed, not immediate. The first view access snapshots its result, reusing already snapshotted library-owned nodes when present; later reads return the cached reference. A byte copy observation retains a private snapshot after first use and allocates/copies B bytes for each B-byte result.
 
 There is no qualified timing ratio against plain Zod for this exact implementation. Earlier prototype results predate the current collision guards and do not establish its cost. Measure representative schemas, sizes, and hit/miss rates before adopting seals for a performance-sensitive path. Interning guarantees identity; it is not a claim that parsing is faster.
 

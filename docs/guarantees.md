@@ -6,7 +6,7 @@ Zod controls representation boundaries. `defineSeal` creates semantic values who
 
 A sealed value belongs to exactly one completed definition instance. `Kind.is(value)` is true only for values produced by that instance. Two definitions may use the same definition name. They are unrelated, and values of one are not values of the other.
 
-Semantic decoding validates and normalizes input before computing identity. Equivalent live values are the same object. Native `Map` and `Set` therefore work. An existing live value cannot be displaced by another parse. Minting never interns; every success is a new event.
+Semantic decoding validates and normalizes input, snapshots the decoded Parts, then computes identity from that frozen snapshot. Equivalent live values are the same object. Native `Map` and `Set` therefore work. An existing live value cannot be displaced by another parse. Minting never interns; every success snapshots Parts and creates a new event.
 
 Forged prototypes, recovered constructors, proxies, casts, and structured clones do not acquire the definition's private brand. A cast, `any`, or suppressed error can bypass TypeScript. A fake object can also supply its own view or copy members without invoking library code; property access is not authentication. Use a codec for external data, or the intended definition's `is` predicate for existing objects whose origin is uncertain. This applies at internal trust boundaries as well as JavaScript-facing APIs. Typed internal code may trust parameters when callers preserve those types.
 
@@ -18,17 +18,17 @@ A schema establishes only its configured contract. A UserId does not prove datab
 
 Normalize Parts before computing an explicit key. The key is identity, not a collision-tolerant hash. Different canonical Parts for the same live key throw with the label and key. Key strings can contain sensitive data, so choose diagnostic-safe keys when that matters.
 
-Keyed Parts permit primitives, dense arrays, plain data objects, Dates, and sealed leaves. They reject unsupported graphs on first decode. Dates compare by timestamp and remain logically immutable. Views cannot expose a Date; expose a timestamp or string instead.
+Keyed Parts permit primitives, dense arrays, plain data objects, and genuine sealed leaves from this installed package copy. They reject unsupported graphs on first decode before key evaluation or intern-table mutation. Use timestamps or strings instead of Date Parts.
 
 For byte-valued semantic data, use a canonical string such as lowercase hex. Typed arrays and Node buffers are not supported semantic Parts or view outputs. Convert strings to fresh mutable buffers at binary API boundaries; buffer reference identity does not carry semantic identity. See [digests and byte buffers](bytes.md).
 
-The library does not deep-freeze all private Parts merely because they are sealed. Anything exposed through `view` becomes deeply immutable. Parts must remain logically immutable after sealing. Copy caller-owned mutable containers before retaining them. Do not mutate retained aliases, the schema, or callback behavior after completion.
+The library copies successful Parts into frozen private snapshots. Producer-owned containers are not frozen and are not retained as private state. Later mutations to retained aliases cannot change existing values. During `z.encode`, the sealed codec reads the frozen snapshot. Zod may validate or copy it before a schema encoder runs, so encoders must be correct without mutating Parts. Do not mutate the schema or callback behavior after completion.
 
-Genuine graph leaves possess a package-local ES-private brand. A diagnostic kind symbol cannot authenticate a leaf. Forged objects and sealed values from another installed copy are rejected as leaves. Browser JavaScript has no general proxy detector, so producer code must not rely on adversarial proxies. This package is not a sandbox against malicious producer code or changes to JavaScript intrinsics.
+Genuine graph leaves possess a package-local ES-private brand. A diagnostic kind symbol cannot authenticate a leaf. Rejected sealed-looking objects may be values from another installed copy or may be imitations; the runtime does not need to decide which. Browser JavaScript has no general proxy detector, so producer code must not rely on adversarial proxies. This package is not a sandbox against malicious producer code or changes to JavaScript intrinsics.
 
 ## Observations and logging
 
-Views are lazy and separately cached. Successful results are stable and deeply frozen. Genuine local sealed leaves retain their original identity and are not recursively frozen. Unsupported structures and cycles throw on first access. Shared acyclic structures work. If evaluation fails, later access retries.
+Views are lazy and separately cached. Successful results are stable frozen snapshots. Already snapshotted library-owned nodes can be reused by reference. Genuine local sealed leaves retain their original identity and are not recursively frozen. Unsupported structures and cycles throw on first access. Shared acyclic structures work. If evaluation fails, later access retries.
 
 Explicit debug callbacks may reveal information chosen by the producer. Console inspection does not call them or encode Parts. It displays `Sealed<kind>`. JSON and structured logging must explicitly encode semantic values through Zod. Minted values have no external representation.
 

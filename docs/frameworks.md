@@ -1,6 +1,6 @@
 # Frameworks and development
 
-Semantic values can be used in React state and dependency arrays. Equivalent decodes from the same definition return the same live object. Structured view results are cached, so they need no caller-written `useMemo` solely for reference stability. Producers and projection callbacks must remain deterministic and logically immutable.
+Semantic values can be used in React state and dependency arrays. Equivalent decodes from the same definition return the same live object. Structured view results are cached frozen snapshots, so they need no caller-written `useMemo` solely for reference stability. Producers and projection callbacks must remain deterministic and semantically correct.
 
 Server/client, worker, network, and storage boundaries still require Zod encoding and decoding. Sealed objects are not transport data.
 

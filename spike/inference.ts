@@ -61,13 +61,74 @@ const converted = defineSeal({
 })
   .view({
     count: (p) => {
-      type Parts = Assert<Equal<typeof p, { count: number }>>;
+      type Parts = Assert<Equal<typeof p, { readonly count: number }>>;
       return p.count;
     },
   })
   .seal();
 type ConvertedInput = Assert<Equal<z.input<typeof converted.codec>, string>>;
 type Count = Assert<Equal<ValueOf<typeof converted>['view']['count'], number>>;
+const ReadonlyCallbacks = defineSeal({
+  name: 'types/readonly-callbacks',
+  schema: z.object({
+    rows: z.array(z.string()),
+    record: z.record(z.string(), z.number()),
+    id: Id.codec,
+  }),
+  key: (p) => {
+    type Rows = Assert<Equal<typeof p.rows, readonly string[]>>;
+    type RecordValue = Assert<Equal<typeof p.record, { readonly [x: string]: number }>>;
+    type Child = Assert<Equal<typeof p.id, Id>>;
+    // @ts-expect-error Key callbacks receive readonly Parts.
+    p.rows.push('x');
+    // @ts-expect-error Nested Parts are readonly.
+    p.record.x = 1;
+    return `${p.id.debug()}:${p.rows.join(',')}`;
+  },
+  debug: (p) => {
+    type Child = Assert<Equal<typeof p.id, Id>>;
+    // @ts-expect-error Debug callbacks receive readonly Parts.
+    p.id = Id.codec.parse('y');
+    return p.id.debug();
+  },
+})
+  .view({
+    rows: (p) => p.rows,
+    record: (p) => p.record,
+    id: (p) => p.id,
+  })
+  .copy({
+    bytes: (p) => {
+      // @ts-expect-error Copy callbacks receive readonly Parts.
+      p.rows[0] = 'x';
+      return new TextEncoder().encode(p.rows.join(','));
+    },
+  })
+  .seal();
+const readonlyValue = ReadonlyCallbacks.codec.parse({
+  rows: ['a'],
+  record: { a: 1 },
+  id: 'x',
+});
+type ReadonlyRows = Assert<Equal<typeof readonlyValue.view.rows, readonly string[]>>;
+type ReadonlyRecord = Assert<
+  Equal<typeof readonlyValue.view.record, { readonly [x: string]: number }>
+>;
+type ReadonlyChild = Assert<Equal<typeof readonlyValue.view.id, Id>>;
+// @ts-expect-error View array observations are readonly.
+readonlyValue.view.rows.push('b');
+// @ts-expect-error View index-signature observations are readonly.
+readonlyValue.view.record.a = 2;
+const IndexedMint = defineMint({
+  name: 'types/index-signature',
+  mint: (input: Record<string, string[]>) => ({ ok: true as const, value: input }),
+})
+  .view({ first: (p) => p.main?.[0] })
+  .seal();
+const indexed = IndexedMint.mint({ main: ['x'] });
+if (indexed.ok) {
+  type First = Assert<Equal<typeof indexed.value.view.first, string | undefined>>;
+}
 const allocated = defineSeal({
   key: (parts) => parts,
   name: 'types/allocate',
@@ -120,8 +181,47 @@ defineSeal({
 });
 // @ts-expect-error Schema input must be JSON, not any.
 defineSeal({ key: (parts) => parts, name: 'types/any', schema: z.any() });
-// @ts-expect-error Raw dates are not JSON input. Decode a string schema into Date Parts instead.
+// @ts-expect-error Raw dates are not JSON input. Decode a timestamp or string instead.
 defineSeal({ key: (parts) => parts, name: 'types/date', schema: z.date() });
+defineSeal({
+  key: (parts) => parts.getTime(),
+  name: 'types/date-parts',
+  // @ts-expect-error Date Parts are unsupported. Keep timestamps or strings as Parts.
+  schema: z.codec(z.string(), z.date(), {
+    decode: (s) => new Date(s),
+    encode: (d) => d.toISOString(),
+  }),
+});
+defineSeal({
+  key: () => 'x',
+  name: 'types/nested-date-parts',
+  // @ts-expect-error Nested Date Parts are unsupported.
+  schema: z.string().transform((s) => ({ when: new Date(s) })),
+});
+// @ts-expect-error Function Parts are unsupported.
+defineMint({
+  name: 'types/function-parts',
+  mint: () => ({ ok: true, value: () => 1 }),
+});
+// @ts-expect-error Promise Parts are unsupported.
+defineMint({
+  name: 'types/promise-parts',
+  mint: () => ({ ok: true, value: Promise.resolve(1) }),
+});
+// @ts-expect-error Collection Parts are unsupported.
+defineMint({ name: 'types/map-parts', mint: () => ({ ok: true, value: new Map() }) });
+// @ts-expect-error Shared array buffer Parts are unsupported.
+defineMint({
+  name: 'types/shared-buffer-parts',
+  mint: () => ({ ok: true, value: new SharedArrayBuffer(1) }),
+});
+const symbolPart = Symbol('types/symbol-part');
+defineSeal({
+  key: () => 'x',
+  name: 'types/symbol-parts',
+  // @ts-expect-error Symbol-keyed Parts are unsupported.
+  schema: z.string().transform(() => ({ [symbolPart]: 1 })),
+});
 // @ts-expect-error Kind identity must be a literal.
 defineSeal({ key: (parts) => parts, name: '' as string, schema: z.string() });
 // @ts-expect-error Examples must be non-empty.

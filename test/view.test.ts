@@ -129,12 +129,13 @@ test('exposed Parts freeze safely, shared subgraphs work, and later codec/debug 
   const rows = value.view.rows;
   assert(Object.isFrozen(rows));
   assert.equal(value.view.shared.a, value.view.shared.b);
+  assert.equal(value.view.shared.a, rows);
   assert.deepEqual(z.encode(K.codec, value), { rows: [1, 2] });
   assert.equal(value.debug(), '2');
   assert.equal(K.codec.parse({ rows: [1, 2] }), value);
 });
 
-test('a frozen prototype forgery cannot become a sealed view leaf', () => {
+test('a frozen prototype forgery cannot become sealed Parts', () => {
   const Id = defineSeal({
     key: (parts) => parts,
     name: 'view/real-leaf',
@@ -148,9 +149,10 @@ test('a frozen prototype forgery cannot become a sealed view leaf', () => {
   })
     .view({ leaf: (p) => p })
     .seal();
-  const result = K.mint(undefined);
-  assert(result.ok);
-  assert.throws(() => result.value.view.leaf, /unsupported object/);
+  assert.throws(
+    () => K.mint(undefined),
+    /sealed-looking object.*another installed package copy.*imitations/,
+  );
 });
 
 test('recursive projections fail without caching and simple falsy results cache', () => {
@@ -201,15 +203,19 @@ test('a frozen hostile class with the kind symbol cannot impersonate a genuine l
   })
     .view({ leaf: (p) => p })
     .seal();
-  const r = Mint.mint(undefined);
-  assert(r.ok);
-  assert.throws(() => r.value.view.leaf, /unsupported object/);
+  assert.throws(
+    () => Mint.mint(undefined),
+    /sealed-looking object.*another installed package copy.*imitations/,
+  );
   const K = defineSeal({
     name: 'view/fake-parts',
     schema: z.string().transform(() => ({ fake })),
     key: () => 1,
   }).seal();
-  assert.throws(() => K.codec.parse('x'), /keyed Parts.*unsupported object/);
+  assert.throws(
+    () => K.codec.parse('x'),
+    /keyed Parts.*sealed-looking object.*another installed package copy.*imitations/,
+  );
   const Id = defineSeal({
     key: (parts) => parts,
     name: 'view/local-leaf',
