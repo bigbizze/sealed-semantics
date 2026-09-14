@@ -8,7 +8,12 @@ export type ConfigurationError<Message extends string> = {
   readonly [Explanation in Message]: never;
 };
 declare const BRAND: unique symbol;
-export interface Proof<K extends string> {
+/** Opaque sealed value. Do not cast; grep the name and construct via `.codec.parse()` or `.mint()`. */
+export interface Proof<
+  K extends string,
+  Hint extends string =
+    'sealed value: do not cast; grep the name to find its definition; construct via .codec.parse() or .mint()',
+> {
   readonly [BRAND]: K;
   debug(): string;
   toJSON(): never;

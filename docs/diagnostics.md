@@ -15,3 +15,5 @@ Public types expose only configured capabilities. Generic checks explain invalid
 Configuration rejects unknown keys, accessors, hidden properties, symbol keys, and malformed callbacks. A definition name must be a non-empty string literal.
 
 Foreign codec values report the receiving definition and attempted operation. A matching label explains that module re-execution or duplicate installation may have created another definition instance. Rejected sealed-looking graph leaves explain that they may be package-copy values or imitations. `is()` remains a boolean predicate.
+
+`Proof<Name>` carries a default type argument that tells agents not to cast, to grep the definition name, and to construct through `.codec.parse()` or `.mint()`. `ValueOf<typeof Kind>` still prints as `Proof<"the/name", "sealed value: ...">` for ordinary seals, so the compiler error names the search string. Runtime errors and Node inspection include that same name and `Defined at file:line` captured when `defineSeal` or `defineMint` ran. See [agent instructions](AGENTS.md).

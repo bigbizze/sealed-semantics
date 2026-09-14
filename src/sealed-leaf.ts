@@ -1,3 +1,5 @@
+import { locateMessage } from './location.js';
+
 // Stateless cross-copy protocol. Identity is always the definition's private brand.
 export const NAME_LABEL = Symbol.for('sealed-semantics.name');
 function nameOf(value: unknown): string | undefined {
@@ -13,13 +15,16 @@ export function foreignValue(
   definitionName: string,
   value: unknown,
   operation: string,
+  definedAt?: string,
 ): string {
   const other = nameOf(value);
-  if (other === definitionName)
-    return `${operation} for ${definitionName}: value belongs to a different definition instance of the same definition name. The defining module may have been re-executed (hot reload or test-runner module isolation), or two copies of sealed-semantics may be installed.`;
-  if (other !== undefined)
-    return `${operation} for ${definitionName}: value belongs to a different definition (${other}).`;
-  return `${operation} for ${definitionName}: expected a sealed value from this definition instance.`;
+  const detail =
+    other === definitionName
+      ? `${operation} for ${definitionName}: value belongs to a different definition instance of the same definition name. The defining module may have been re-executed (hot reload or test-runner module isolation), or two copies of sealed-semantics may be installed.`
+      : other !== undefined
+        ? `${operation} for ${definitionName}: value belongs to a different definition (${other}).`
+        : `${operation} for ${definitionName}: expected a sealed value from this definition instance.`;
+  return locateMessage(detail, definitionName, definedAt);
 }
 // Package-copy authenticity. The token also guards the recoverable base constructor.
 export const LEAF_TOKEN: unique symbol = Symbol('sealed leaf construction');

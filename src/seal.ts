@@ -1,17 +1,20 @@
 import { snapshotBytes } from './copy.js';
 import { makeInterner } from './interner.js';
+import { locateError, locateMessage } from './location.js';
 import { NAME_LABEL, foreignValue, SealedLeaf, LEAF_TOKEN } from './sealed-leaf.js';
 import { sameParts, immutableView, snapshotData } from './structure.js';
 import type { DeepReadonly, SemanticKey } from './types.js';
 const CONSTRUCT: unique symbol = Symbol('sealed-semantics/construct');
+type SealOps<P> = {
+  semantic?: boolean;
+  copy?: Record<string, (parts: DeepReadonly<P>) => unknown> | undefined;
+  view?: Record<string, (parts: DeepReadonly<P>) => unknown> | undefined;
+  debug?: ((parts: DeepReadonly<P>) => string) | undefined;
+  definedAt?: string | undefined;
+};
 function makeSeal<P>(
   definitionName: string,
-  ops: {
-    semantic?: boolean;
-    copy?: Record<string, (parts: DeepReadonly<P>) => unknown> | undefined;
-    view?: Record<string, (parts: DeepReadonly<P>) => unknown> | undefined;
-    debug?: ((parts: DeepReadonly<P>) => string) | undefined;
-  },
+  ops: SealOps<P>,
 ): {
   is: (x: unknown) => boolean;
   read: (x: unknown) => DeepReadonly<P>;
@@ -19,10 +22,14 @@ function makeSeal<P>(
 } {
   const view = Object.entries(ops.view ?? {});
   const copies = Object.entries(ops.copy ?? {});
+  const definedAt = ops.definedAt;
+  const fail = (message: string): never => {
+    throw new TypeError(locateMessage(message, definitionName, definedAt));
+  };
   let hasBrand!: (x: unknown) => x is Sealed;
   let unseal!: (x: unknown, operation?: string) => DeepReadonly<P>;
   const trap = (): never => {
-    throw new TypeError(
+    return fail(
       ops.semantic
         ? `${definitionName} cannot be serialized implicitly; use z.encode(Kind.codec, value) or z.encode with the enclosing contract schema`
         : `${definitionName} has no external representation and cannot be serialized`,
@@ -33,8 +40,7 @@ function makeSeal<P>(
     #view?: Readonly<Record<string, unknown>>;
     #copy?: Readonly<Record<string, () => unknown>>;
     constructor(token: typeof CONSTRUCT, parts: DeepReadonly<P>) {
-      if (token !== CONSTRUCT)
-        throw new TypeError(`${definitionName} cannot be constructed directly`);
+      if (token !== CONSTRUCT) fail(`${definitionName} cannot be constructed directly`);
       super(LEAF_TOKEN);
       this.#parts = parts;
       Object.freeze(this);
@@ -54,15 +60,20 @@ function makeSeal<P>(
                   value: () => {
                     if (snapshot !== undefined) return new Uint8Array(snapshot);
                     if (computing)
-                      throw new TypeError(
+                      fail(
                         `${definitionName}.copy.${name}: recursive copy observation access`,
                       );
                     computing = true;
                     try {
-                      snapshot = snapshotBytes(
-                        observe(unseal(this, `copy.${name}`)),
-                        `${definitionName}.copy.${name}`,
-                      );
+                      const produced = observe(unseal(this, `copy.${name}`));
+                      try {
+                        snapshot = snapshotBytes(
+                          produced,
+                          `${definitionName}.copy.${name}`,
+                        );
+                      } catch (error) {
+                        return locateError(error, definitionName, definedAt);
+                      }
                       return new Uint8Array(snapshot);
                     } finally {
                       computing = false;
@@ -90,15 +101,20 @@ function makeSeal<P>(
                   get: () => {
                     if (ready) return cached;
                     if (computing)
-                      throw new TypeError(
+                      fail(
                         `${definitionName}.view.${name}: recursive projection access`,
                       );
                     computing = true;
                     try {
-                      cached = immutableView(
-                        project(unseal(this, `view.${name}`)),
-                        `${definitionName}.view.${name}`,
-                      );
+                      const produced = project(unseal(this, `view.${name}`));
+                      try {
+                        cached = immutableView(
+                          produced,
+                          `${definitionName}.view.${name}`,
+                        );
+                      } catch (error) {
+                        return locateError(error, definitionName, definedAt);
+                      }
                       ready = true;
                       return cached;
                     } finally {
@@ -116,7 +132,7 @@ function makeSeal<P>(
         typeof x === 'object' && x !== null && #parts in x;
       unseal = (x: unknown, operation = 'unseal'): DeepReadonly<P> => {
         if (!hasBrand(x))
-          throw new TypeError(foreignValue(definitionName, x, operation));
+          throw new TypeError(foreignValue(definitionName, x, operation, definedAt));
         return x.#parts;
       };
     }
@@ -126,7 +142,9 @@ function makeSeal<P>(
     }
     [Symbol.for('nodejs.util.inspect.custom')](): string {
       unseal(this, 'inspection');
-      return `Sealed<${definitionName}>`;
+      return definedAt
+        ? `Sealed<${definitionName}> defined at ${definedAt}`
+        : `Sealed<${definitionName}>`;
     }
     get [Symbol.toStringTag](): string {
       unseal(this, 'inspection');
@@ -161,23 +179,39 @@ export function makeMintedSeal<P>(
     copy?: Record<string, (parts: DeepReadonly<P>) => unknown>;
     view?: Record<string, (parts: DeepReadonly<P>) => unknown>;
     debug?: ((parts: DeepReadonly<P>) => string) | undefined;
+    definedAt?: string | undefined;
   },
 ) {
   const bridge = makeSeal(definitionName, ops);
   return {
     ...bridge,
-    seal: (parts: P) =>
-      bridge.seal(snapshotData(parts, `${definitionName}: successful mint Parts`)),
+    seal: (parts: P) => {
+      try {
+        return bridge.seal(
+          snapshotData(parts, `${definitionName}: successful mint Parts`),
+        );
+      } catch (error) {
+        return locateError(error, definitionName, ops.definedAt);
+      }
+    },
   };
 }
-function semanticKey(value: unknown, definitionName: string): SemanticKey {
+function semanticKey(
+  value: unknown,
+  definitionName: string,
+  definedAt: string | undefined,
+): SemanticKey {
   if (
     value === null ||
     ['string', 'number', 'bigint', 'boolean', 'undefined'].includes(typeof value)
   )
     return value as SemanticKey;
   throw new TypeError(
-    `${definitionName}: semantic key must be a string, number, bigint, boolean, null, or undefined. key(parts) must return a supported primitive.`,
+    locateMessage(
+      `${definitionName}: semantic key must be a string, number, bigint, boolean, null, or undefined. key(parts) must return a supported primitive.`,
+      definitionName,
+      definedAt,
+    ),
   );
 }
 export function makeSemanticSeal<P>(
@@ -186,6 +220,7 @@ export function makeSemanticSeal<P>(
     copy?: Record<string, (parts: DeepReadonly<P>) => unknown>;
     view?: Record<string, (parts: DeepReadonly<P>) => unknown>;
     debug?: ((parts: DeepReadonly<P>) => string) | undefined;
+    definedAt?: string | undefined;
     key: (parts: DeepReadonly<P>) => SemanticKey;
   },
 ) {
@@ -194,14 +229,23 @@ export function makeSemanticSeal<P>(
   return {
     ...bridge,
     seal: (parts: P) => {
-      const snapshot = snapshotData(parts, `${definitionName}: keyed Parts`);
-      const key = semanticKey(ops.key(snapshot), definitionName);
+      let snapshot: DeepReadonly<P>;
+      try {
+        snapshot = snapshotData(parts, `${definitionName}: keyed Parts`);
+      } catch (error) {
+        return locateError(error, definitionName, ops.definedAt);
+      }
+      const key = semanticKey(ops.key(snapshot), definitionName, ops.definedAt);
       const existing = interner.get(key);
       if (existing) {
         const stored = bridge.read(existing);
         if (!sameParts(stored, snapshot))
           throw new TypeError(
-            `${definitionName}: semantic identity collision for key ${typeof key === 'string' ? JSON.stringify(key) : String(key)}`,
+            locateMessage(
+              `${definitionName}: semantic identity collision for key ${typeof key === 'string' ? JSON.stringify(key) : String(key)}`,
+              definitionName,
+              ops.definedAt,
+            ),
           );
         return existing;
       }

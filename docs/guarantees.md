@@ -32,7 +32,7 @@ Genuine graph leaves possess a package-local ES-private brand. A diagnostic kind
 
 Views are lazy and separately cached. Successful results are stable frozen snapshots. Already snapshotted library-owned nodes can be reused by reference. Genuine local sealed leaves retain their original identity and are not recursively frozen. Unsupported structures and cycles throw on first access. Shared acyclic structures work. If evaluation fails, later access retries.
 
-Explicit debug callbacks may reveal information chosen by the producer. Console inspection does not call them or encode Parts. It displays `Sealed<kind>`. JSON and structured logging must explicitly encode semantic values through Zod. Minted values have no external representation.
+Explicit debug callbacks may reveal information chosen by the producer. Console inspection does not call them or encode Parts. It displays `Sealed<kind> defined at file:line`. JSON and structured logging must explicitly encode semantic values through Zod. Minted values have no external representation.
 
 Use `===`, Node strict equality assertions, or Jest/Vitest `toBe` for identity. Enumerable deep comparison can mistake two different mint events for equal objects.
 

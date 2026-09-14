@@ -1,6 +1,7 @@
 import type { z } from 'zod';
 import { validateDefinition, validateView, validateCopies } from './definition.js';
 import { documentedKind, type Metadata } from './documentation.js';
+import { captureDefinedAt } from './location.js';
 import { makeSemanticSeal, makeMintedSeal } from './seal.js';
 import { makeWireCodec, parseCodec } from './zod-codec.js';
 import type {
@@ -100,16 +101,24 @@ export function defineSeal<
   z.output<W>,
   [A] extends [never] ? {} : { allocate: (...args: A) => unknown }
 > {
+  const definedAt = captureDefinedAt();
   validateDefinition(spec, true);
   const { name, schema, debug, allocate, key } = spec;
   return builder((view, metadata, copy) => {
-    const bridge = makeSemanticSeal<z.output<W>>(name, { debug, view, key, copy });
+    const bridge = makeSemanticSeal<z.output<W>>(name, {
+      debug,
+      view,
+      key,
+      copy,
+      definedAt,
+    });
     const codec = makeWireCodec(
       schema,
       name,
       bridge.seal,
       bridge.is,
       (value) => bridge.read(value) as z.output<W>,
+      definedAt,
     );
     const result = { name, is: bridge.is, codec };
     if (allocate)
@@ -157,10 +166,11 @@ export function defineMint<
       >;
     },
 ): MintedBuilder<K, I, MintParts<R>, MintError<R>> {
+  const definedAt = captureDefinedAt();
   validateDefinition(spec, false);
   const { name, mint, debug } = spec;
   return builder((view, metadata, copy) => {
-    const bridge = makeMintedSeal<MintParts<R>>(name, { debug, view, copy });
+    const bridge = makeMintedSeal<MintParts<R>>(name, { debug, view, copy, definedAt });
     const result = {
       name,
       is: bridge.is,

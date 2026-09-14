@@ -10,6 +10,7 @@
   "files": [
     "dist",
     "docs/acceptance-audit.md",
+    "docs/AGENTS.md",
     "docs/bytes.md",
     "docs/diagnostics.md",
     "docs/documentation.md",
