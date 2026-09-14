@@ -1,5 +1,11 @@
 # Release notes
 
+## 0.4.2
+
+- `Proof<Name>` now prints a default type argument in compiler errors: do not cast, grep the definition name, and construct through `.codec.parse()` or `.mint()`. `ValueOf<typeof Kind>` still displays as `Proof<...>` for ordinary seals.
+- `defineSeal` and `defineMint` capture the caller `file:line` once at definition time. Runtime errors that name a definition include that path and tell the caller to search for the exact name string. Node inspection shows `Sealed<kind> defined at file:line`.
+- The package includes [agent instructions](AGENTS.md) for consumers to paste into `AGENTS.md` or `CLAUDE.md`.
+
 ## 0.4.1
 
 - Plain-object snapshots now use canonical property order before any callback receives them. JavaScript array-index keys are ordered numerically, then other string keys are ordered lexically by UTF-16 code unit.
