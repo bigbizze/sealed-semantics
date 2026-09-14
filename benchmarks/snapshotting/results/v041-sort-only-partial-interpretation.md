@@ -1,0 +1,33 @@
+# Snapshotting benchmark interpretation
+Evidence label: `v041-sort-only-partial`.
+Measured 7 planned fresh-process repetitions per throughput case.
+This run is partial. Completed case repetitions range from 1 to 2.
+Primary results are elapsed time, throughput, heap delta, and RSS delta from non-GC-observed timing workers.
+Retained-heap diagnostics are recorded separately in `gc-diagnostics.json` after explicit GC opportunities.
+| shape | live-hit ratio | seal ops/s | plain Zod ops/s | seal/Zod elapsed |
+| --- | ---: | ---: | ---: | ---: |
+| flat100 | 100% | 10193 | 10426335 | 1023.12x |
+| flat100 | 90% | 10197 | 8739219 | 857.53x |
+| flat100 | 50% | 11538 | 5643464 | 487.42x |
+| flat100 | 0% | 12443 | 3419062 | 274.77x |
+| flat50 | 100% | 23431 | 11573252 | 494.43x |
+| flat50 | 90% | 23949 | 8906097 | 367.63x |
+| flat50 | 50% | 23662 | 5460568 | 231.96x |
+| flat50 | 0% | 26320 | 3890838 | 146.67x |
+| flat500 | 100% | 1675 | 9552100 | 5703.15x |
+| flat500 | 90% | 1673 | 8278413 | 4947.18x |
+| flat500 | 50% | 1652 | 4977013 | 3012.94x |
+| flat500 | 0% | 1655 | 3354572 | 2026.86x |
+| nested50x10 | 100% | 2069 | 8692985 | 4201.41x |
+| nested50x10 | 90% | 2048 | 7021504 | 3427.93x |
+| nested50x10 | 50% | 2055 | 3888308 | 1892.57x |
+| nested50x10 | 0% | 1662 | 2595523 | 1562.06x |
+| string | 100% | 3028901 | 71211336 | 23.51x |
+| string | 90% | 2687593 | 49109068 | 18.27x |
+| string | 50% | 1321383 | 54210215 | 41.03x |
+| string | 0% | 703160 | 48843558 | 69.67x |
+Interpretation:
+- Seal parsing includes Zod validation, snapshot allocation, key computation, interning, and live-hit collision comparison.
+- Structured values cost more as descriptor access, property definition, allocation, and freezing increase with graph size.
+- 0.4.1 includes a measured snapshot hot-path optimization. Sorting alone was not the main cost; descriptor reads and per-property definition were the larger avoidable costs.
+- No performance threshold is attached to 0.4.1.
