@@ -4,7 +4,7 @@ The main entry exports `defineSeal` and `defineMint`, plus TypeScript types. `Se
 
 ## Semantic definitions
 
-`defineSeal({ name, schema, key, allocate?, debug? })` creates a builder. Schema output is private Parts. Schema input must be JSON-compatible and cannot be `any`. The definition name must be a non-empty string literal.
+`defineSeal({ name, schema, key, allocate?, debug? })` creates a builder. Schema output is private Parts. Schema input must be JSON-compatible and cannot be `any`. The definition name must be a non-empty string literal. Write the name verbatim in the owning module; a path-shaped label such as `app/user-id` is the search string compiler and runtime errors tell callers to grep.
 
 Every semantic definition requires `key(parts)`, returning `string | number | bigint | boolean | null | undefined`. Primitive Parts use an explicit callback too, for example `key: id => id`. Normalize Parts in the schema before computing the key. Different Parts sharing a live key cause a collision error, including primitive Parts.
 
@@ -32,7 +32,7 @@ The stateless `Symbol.for('sealed-semantics.name')` protocol reports the label a
 
 ## Instances and views
 
-Instances have frozen ordinary surfaces, frozen prototypes, frozen ES private Parts snapshots, and a guarded constructor. Standard observations are explicit `debug()` and optional `view`. Implicit JSON, numeric, and string conversion throw. Node inspection and `Symbol.toStringTag` expose only the definition name.
+Instances have frozen ordinary surfaces, frozen prototypes, frozen ES private Parts snapshots, and a guarded constructor. Standard observations are explicit `debug()` and optional `view`. Implicit JSON, numeric, and string conversion throw. Node inspection shows `Sealed<kind>` and, in development, `defined at file:line` relative to the working directory. `Symbol.toStringTag` exposes only the definition name. Runtime errors that name a definition always tell the caller to search for that exact name string. `Defined at` is a development-time pointer only.
 
 The view facade is lazy, frozen, and null-prototype. Each projection receives readonly private Parts, then separately validates and snapshots its first successful result before caching it. Already snapshotted library-owned nodes can be reused by reference. Results allow primitives, plain data objects, dense arrays, and sealed leaves. Plain-object view results use the same canonical property order as Parts snapshots. Dates and other classes, collections, array buffers/views, functions, accessors, hidden properties, symbol keys, and cycles are rejected. Validation precedes freezing of newly copied containers. Recursive projection access throws. Failed evaluation or validation does not populate the cache.
 

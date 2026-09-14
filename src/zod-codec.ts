@@ -6,12 +6,13 @@ export function makeWireCodec<W extends z.ZodType, V>(
   seal: (parts: z.output<W>) => V,
   is: (x: unknown) => boolean,
   read: (x: V) => z.output<W>,
+  definedAt?: string,
 ) {
   return z.codec(
     schema,
     z.custom<V>(is, {
       error: (issue) =>
-        foreignValue(definitionName, issue.input, 'codec encode/validation'),
+        foreignValue(definitionName, issue.input, 'codec encode/validation', definedAt),
     }),
     {
       decode: seal,

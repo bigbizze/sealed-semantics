@@ -173,3 +173,24 @@ B.copy({unknown:():unknown=>"x"});
   );
   assert.equal((output.match(/error TS\d+:/g) ?? []).length, 8, output);
 });
+
+test('assignability failures print Proof with a construction hint rather than ValueOf', () => {
+  const output = compile(`
+const DeviceId=defineSeal({key:parts=>parts,name:'kwa/semantic/NormalizedDeviceId',schema:z.string()}).seal();
+type DeviceId=ValueOf<typeof DeviceId>;
+declare function takesDevice(id: DeviceId): void;
+takesDevice('usr_1');
+takesDevice({});
+const Other=defineSeal({key:parts=>parts,name:'other/id',schema:z.string()}).seal();
+takesDevice(Other.codec.parse('x'));
+`);
+  const printed =
+    'Proof<"kwa/semantic/NormalizedDeviceId", "sealed value: do not cast; grep the name to find its definition; construct via .codec.parse() or .mint()">';
+  assert(output.includes(printed), output);
+  assert(
+    output.includes("Argument of type 'string' is not assignable to parameter of type"),
+    output,
+  );
+  assert(!output.includes('ValueOf<'), output);
+  assert.equal((output.match(/error TS\d+:/g) ?? []).length, 3, output);
+});

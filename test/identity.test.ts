@@ -481,7 +481,7 @@ test('mint success is an event and inspection does not expose Parts or call debu
     b = M.mint('secret');
   assert(a.ok && b.ok);
   assert.notEqual(a.value, b.value);
-  assert.equal(inspect(a.value), 'Sealed<identity/minted>');
+  assert.match(inspect(a.value), /^Sealed<identity\/minted> defined at .+:\d+$/);
   assert.equal(
     Object.prototype.toString.call(a.value),
     '[object Sealed<identity/minted>]',
