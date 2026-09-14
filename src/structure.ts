@@ -4,6 +4,29 @@ import type { DeepReadonly } from './types.js';
 const arrayIndex = /^(0|[1-9][0-9]*)$/;
 const ownedSnapshots = new WeakSet<object>();
 
+function isArrayIndexKey(key: string): boolean {
+  const first = key.charCodeAt(0);
+  if (!(first >= 48 && first <= 57)) return false;
+  if (!arrayIndex.test(key)) return false;
+  return Number(key) < 2 ** 32 - 1;
+}
+
+function canonicalKeys(keys: readonly string[]): string[] {
+  let indexKeys: string[] | undefined;
+  let stringKeys: string[] | undefined;
+  for (const key of keys) {
+    if (isArrayIndexKey(key)) (indexKeys ??= []).push(key);
+    else (stringKeys ??= []).push(key);
+  }
+  if (indexKeys) indexKeys.sort((a, b) => Number(a) - Number(b));
+  if (stringKeys) stringKeys.sort();
+  return indexKeys
+    ? stringKeys
+      ? indexKeys.concat(stringKeys)
+      : indexKeys
+    : (stringKeys ?? []);
+}
+
 function hasDiagnosticName(value: object): boolean {
   let cursor: object | null = value;
   while (cursor !== null) {
@@ -23,7 +46,7 @@ function unsupportedObject(label: string, value: object): TypeError {
   );
 }
 
-function defineFrozenValue(target: object, key: string, value: unknown): void {
+function defineDataProperty(target: object, key: string, value: unknown): void {
   Object.defineProperty(target, key, {
     value,
     enumerable: true,
@@ -61,31 +84,31 @@ function snapshotValue<T>(
     if (!array && proto !== Object.prototype && proto !== null)
       throw unsupportedObject(label, x);
 
-    const descriptors = Object.getOwnPropertyDescriptors(x);
-    const keys = Reflect.ownKeys(descriptors);
+    const keys = Reflect.ownKeys(x);
     for (const key of keys) {
       if (typeof key !== 'string')
         throw new TypeError(`${label}: symbol keys are unsupported`);
     }
+    const orderedKeys = canonicalKeys(keys as string[]);
 
     active.add(x);
     if (array) {
       const source = x as unknown[];
-      const snapshot = new Array(source.length);
+      const snapshot: unknown[] = [];
       snapshots.set(x, snapshot);
-      for (const key of keys as string[]) {
+      for (const key of orderedKeys) {
         if (key === 'length') continue;
-        if (!arrayIndex.test(key) || Number(key) >= source.length)
+        if (!isArrayIndexKey(key) || Number(key) >= source.length)
           throw new TypeError(`${label}: arrays cannot have extra properties`);
       }
       for (let index = 0; index < source.length; index++) {
         const key = String(index);
-        const descriptor = descriptors[key];
+        const descriptor = Object.getOwnPropertyDescriptor(source, key);
         if (!descriptor || !('value' in descriptor) || !descriptor.enumerable)
           throw new TypeError(
             `${label}: arrays must be dense and contain only enumerable data properties`,
           );
-        defineFrozenValue(snapshot, key, visit(descriptor.value));
+        snapshot.push(visit(descriptor.value));
       }
       active.delete(x);
       return freezeSnapshot(snapshot);
@@ -93,13 +116,16 @@ function snapshotValue<T>(
 
     const snapshot = Object.create(proto) as Record<string, unknown>;
     snapshots.set(x, snapshot);
-    for (const key of keys as string[]) {
-      const descriptor = descriptors[key]!;
+    for (const key of orderedKeys) {
+      const descriptor = Object.getOwnPropertyDescriptor(x, key)!;
       if (!('value' in descriptor) || !descriptor.enumerable)
         throw new TypeError(
           `${label}: accessors and hidden properties are unsupported`,
         );
-      defineFrozenValue(snapshot, key, visit(descriptor.value));
+      const value = visit(descriptor.value);
+      if (key === '__proto__' && proto === Object.prototype)
+        defineDataProperty(snapshot, key, value);
+      else snapshot[key] = value;
     }
     active.delete(x);
     return freezeSnapshot(snapshot);
@@ -118,21 +144,24 @@ export function immutableView<T>(value: T, label: string): DeepReadonly<T> {
 // Collision assertion only. Callers pass snapshotted graphs. Property order and
 // frozen descriptors do not affect comparison. Sealed leaves are atomic.
 export function sameParts(a: unknown, b: unknown): boolean {
-  const pairs = new WeakMap<object, WeakSet<object>>();
+  const forward = new WeakMap<object, object>();
+  const reverse = new WeakMap<object, object>();
   const equal = (x: unknown, y: unknown): boolean => {
-    if (Object.is(x, y)) return true;
     if (x === null || y === null || typeof x !== 'object' || typeof y !== 'object')
-      return false;
-    if (isSealed(x) || isSealed(y)) return false;
+      return Object.is(x, y);
+    if (isSealed(x) || isSealed(y)) return Object.is(x, y);
+    const mappedY = forward.get(x);
+    const mappedX = reverse.get(y);
+    if (mappedY || mappedX) return mappedY === y && mappedX === x;
     if (Array.isArray(x) !== Array.isArray(y)) return false;
     if (Array.isArray(x) && (x as unknown[]).length !== (y as unknown[]).length)
       return false;
     if (Object.getPrototypeOf(x) !== Object.getPrototypeOf(y)) return false;
-    if (pairs.get(x)?.has(y)) return true;
-    if (!pairs.has(x)) pairs.set(x, new WeakSet());
-    pairs.get(x)!.add(y);
+    forward.set(x, y);
+    reverse.set(y, x);
     const keys = Object.keys(x);
-    if (keys.length !== Object.keys(y).length) return false;
+    const otherKeys = Object.keys(y);
+    if (keys.length !== otherKeys.length) return false;
     return keys.every(
       (key) =>
         Object.hasOwn(y, key) &&

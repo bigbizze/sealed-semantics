@@ -1,6 +1,6 @@
 {
   "name": "sealed-semantics",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "description": "Runtime nominal identity and private semantic values for Zod codecs",
   "type": "module",
   "license": "MIT",
@@ -9,7 +9,18 @@
   },
   "files": [
     "dist",
-    "docs",
+    "docs/acceptance-audit.md",
+    "docs/bytes.md",
+    "docs/diagnostics.md",
+    "docs/documentation.md",
+    "docs/frameworks.md",
+    "docs/guarantees.md",
+    "docs/laws.md",
+    "docs/producer-results.md",
+    "docs/release-notes.md",
+    "docs/releasing.md",
+    "docs/specification.md",
+    "docs/viability.md",
     "README.md",
     "LICENSE",
     "src"
@@ -35,7 +46,8 @@
     "format:check": "prettier --check \"src/**/*.ts\" \"test/**/*.ts\" \"examples/**/*.ts\" \"spike/**/*.ts\" \"scripts/*.mjs\"",
     "check:readme": "node scripts/check-readme.mjs",
     "typecheck:5.7": "node node_modules/typescript-5-7/bin/tsc --noEmit",
-    "test:consumer": "npm test --prefix examples"
+    "test:consumer": "npm test --prefix examples",
+    "bench:snapshotting": "node benchmarks/snapshotting/run.mjs"
   },
   "peerDependencies": {
     "fast-check": "^4.9.0",

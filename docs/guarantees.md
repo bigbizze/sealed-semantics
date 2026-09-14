@@ -6,7 +6,7 @@ Zod controls representation boundaries. `defineSeal` creates semantic values who
 
 A sealed value belongs to exactly one completed definition instance. `Kind.is(value)` is true only for values produced by that instance. Two definitions may use the same definition name. They are unrelated, and values of one are not values of the other.
 
-Semantic decoding validates and normalizes input, snapshots the decoded Parts, then computes identity from that frozen snapshot. Equivalent live values are the same object. Native `Map` and `Set` therefore work. An existing live value cannot be displaced by another parse. Minting never interns; every success snapshots Parts and creates a new event.
+Semantic decoding validates and normalizes input, snapshots the decoded Parts, then computes identity from that frozen snapshot. Plain-object snapshot properties are canonicalized before callbacks receive them, with JavaScript array-index keys first in numeric order and other string keys next in UTF-16 lexical order. Equivalent live values are the same object. Native `Map` and `Set` therefore work. An existing live value cannot be displaced by another parse. Minting never interns; every success snapshots Parts and creates a new event.
 
 Forged prototypes, recovered constructors, proxies, casts, and structured clones do not acquire the definition's private brand. A cast, `any`, or suppressed error can bypass TypeScript. A fake object can also supply its own view or copy members without invoking library code; property access is not authentication. Use a codec for external data, or the intended definition's `is` predicate for existing objects whose origin is uncertain. This applies at internal trust boundaries as well as JavaScript-facing APIs. Typed internal code may trust parameters when callers preserve those types.
 
@@ -16,9 +16,11 @@ TypeScript cannot mint a fresh nominal type for each factory call. The declarati
 
 A schema establishes only its configured contract. A UserId does not prove database existence. A successful mint does not prove producer correctness, authorization, persistence, or currentness.
 
-Normalize Parts before computing an explicit key. The key is identity, not a collision-tolerant hash. Different canonical Parts for the same live key throw with the label and key. Key strings can contain sensitive data, so choose diagnostic-safe keys when that matters.
+Normalize Parts before computing an explicit key. The key is identity, not a collision-tolerant hash. Different canonical Parts for the same live key throw with the label and key. Insertion order is non-semantic because callbacks never receive unsnapshotted plain objects. Alias topology is semantic because callbacks can observe reference equality between child objects. Key strings can contain sensitive data, so choose diagnostic-safe keys when that matters.
 
 Keyed Parts permit primitives, dense arrays, plain data objects, and genuine sealed leaves from this installed package copy. They reject unsupported graphs on first decode before key evaluation or intern-table mutation. Use timestamps or strings instead of Date Parts.
+
+Seals fit identifiers and small canonical values. Keep large records as ordinary Zod output that contains sealed leaves. A 500-property record is usually data, not identity.
 
 For byte-valued semantic data, use a canonical string such as lowercase hex. Typed arrays and Node buffers are not supported semantic Parts or view outputs. Convert strings to fresh mutable buffers at binary API boundaries; buffer reference identity does not carry semantic identity. See [digests and byte buffers](bytes.md).
 

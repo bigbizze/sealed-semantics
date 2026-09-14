@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { z } from 'zod';
 import { defineSeal, defineMint } from '../src/index.js';
 import { cleanup, makeInterner } from '../src/interner.js';
+import { sameParts } from '../src/structure.js';
 import type { SemanticKey } from '../src/types.js';
 
 test('normalized Parts give reference identity, native collection lookup, and allocation identity', () => {
@@ -255,6 +256,54 @@ test('Parts snapshots reject Dates and preserve sealed leaves as collision atoms
   assert.throws(() => Holder.codec.parse('two'), /collision/);
 });
 
+test('plain-object snapshots use canonical string property order', () => {
+  const order = (value: object) => Object.keys(value).join('|');
+  let semanticOrder = '';
+  const S = defineSeal({
+    key: (parts: object) => {
+      semanticOrder = order(parts);
+      return 'same';
+    },
+    name: 'identity/canonical-order',
+    schema: z.unknown(),
+    debug: (parts: object) => order(parts),
+  } as any).seal();
+  const source = Object.create(null);
+  Object.defineProperty(source, '__proto__', {
+    value: 'data',
+    enumerable: true,
+  });
+  Object.assign(source, {
+    z: 1,
+    10: 'ten',
+    2: 'two',
+    a: 2,
+    4294967294: 'max-index',
+    4294967295: 'not-index',
+  });
+  const value = S.codec.parse(source);
+  assert.equal(semanticOrder, '2|10|4294967294|4294967295|__proto__|a|z');
+  assert.equal(value.debug(), semanticOrder);
+  assert.equal(Object.getPrototypeOf(S.codec.parse(source).debug), Function.prototype);
+
+  const M = defineMint({
+    name: 'identity/canonical-mint',
+    mint: () => ({ ok: true as const, value: source }),
+    debug: (parts) => `${Object.getPrototypeOf(parts) === null}:${order(parts)}`,
+  })
+    .view({ snapshot: (parts) => parts })
+    .seal();
+  const minted = M.mint(undefined);
+  assert(minted.ok);
+  assert.equal(minted.value.debug(), `true:${semanticOrder}`);
+  assert.equal(order(minted.value.view.snapshot as object), semanticOrder);
+  assert.equal(
+    Object.getOwnPropertyDescriptor(minted.value.view.snapshot as object, '__proto__')!
+      .value,
+    'data',
+  );
+});
+
 test('mint snapshots preserve shared children, null prototypes, __proto__ data, and sealed leaves', () => {
   const Id = defineSeal({
     key: (parts) => parts,
@@ -288,6 +337,100 @@ test('mint snapshots preserve shared children, null prototypes, __proto__ data, 
   assert.equal(view.leaf, id);
   assert.equal(result.value.view.leaf, id);
   assert.equal(result.value.debug(), '1:data');
+});
+
+test('snapshot validation preserves prototypes and rejects unsupported properties without getter reads', () => {
+  let reads = 0;
+  const accessor = {
+    get x() {
+      reads++;
+      return 1;
+    },
+  };
+  const hidden = Object.defineProperty({ id: 'hidden' }, 'secret', {
+    value: 1,
+  });
+  const symbolKey = { id: 'symbol', [Symbol('secret')]: 1 };
+  const sparse = [1, , 3];
+  const extra = [1, 2] as number[] & { extra?: number };
+  extra.extra = 3;
+  const hiddenArray = Object.defineProperty([1, 2], 'secret', {
+    value: 3,
+  });
+  for (const [label, value, pattern] of [
+    ['accessor', accessor, /accessors and hidden properties/],
+    ['hidden', hidden, /accessors and hidden properties/],
+    ['symbol', symbolKey, /symbol keys/],
+    ['sparse', sparse, /arrays must be dense/],
+    ['extra', extra, /arrays cannot have extra properties/],
+    ['hidden-array', hiddenArray, /arrays cannot have extra properties/],
+  ] as const) {
+    const K = defineSeal({
+      name: `identity/snapshot-validation-${label}`,
+      schema: z.unknown().transform(() => value),
+      key: () => label,
+    } as any).seal();
+    assert.throws(() => K.codec.parse(undefined), pattern);
+  }
+  assert.equal(reads, 0);
+
+  const plain = Object.defineProperty({ id: 'plain' }, '__proto__', {
+    value: 'data',
+    enumerable: true,
+  });
+  const nullProto = Object.create(null) as { id: string; child: { n: number } };
+  nullProto.id = 'null';
+  nullProto.child = { n: 1 };
+  const P = defineSeal({
+    name: 'identity/snapshot-prototype-preservation',
+    schema: z
+      .literal('plain')
+      .or(z.literal('null'))
+      .transform((value) => (value === 'plain' ? plain : nullProto)),
+    key: (parts) => parts.id,
+    debug: (parts) => {
+      const snapshot = parts as { child?: { n: number } };
+      return `${Object.getPrototypeOf(parts) === null}:${Object.getOwnPropertyDescriptor(parts, '__proto__')?.value ?? ''}:${snapshot.child?.n ?? ''}`;
+    },
+  }).seal();
+  assert.equal(P.codec.parse('plain').debug(), 'false:data:');
+  assert.equal(P.codec.parse('null').debug(), 'true::1');
+});
+
+test('collision comparison treats one-to-one alias topology as semantic', () => {
+  let current: unknown;
+  const K = defineSeal({
+    key: () => 'alias',
+    name: 'identity/alias-topology',
+    schema: z.unknown().transform(() => current),
+  } as any).seal();
+
+  const shared = { n: 1 };
+  const first = { left: shared, right: shared };
+  current = first;
+  const value = K.codec.parse(first);
+  assert.equal(K.codec.parse(first), value);
+
+  current = { left: { n: 1 }, right: { n: 1 } };
+  assert.throws(() => K.codec.parse(undefined), /semantic identity collision/);
+
+  const D = defineSeal({
+    key: () => 'dup',
+    name: 'identity/duplicate-topology',
+    schema: z.unknown().transform(() => current),
+  } as any).seal();
+  current = { left: { n: 1 }, right: { n: 1 } };
+  const duplicated = D.codec.parse(undefined);
+  assert.equal(D.codec.parse(undefined), duplicated);
+  const laterShared = { n: 1 };
+  current = { left: laterShared, right: laterShared };
+  assert.throws(() => D.codec.parse(undefined), /semantic identity collision/);
+
+  const a = { n: 1 };
+  const b = { n: 1 };
+  assert(sameParts({ left: a, right: b }, { left: b, right: a }));
+  assert(!sameParts({ left: a, right: a }, { left: { n: 1 }, right: a }));
+  assert(!sameParts({ left: { n: 1 }, right: a }, { left: a, right: a }));
 });
 
 test('mint failures pass through but invalid successful Parts throw misuse errors', () => {
