@@ -1,4 +1,3 @@
-const LIBRARY_DIR = normalizeFile(new URL('./', import.meta.url).href);
 const SOURCE_EXTENSIONS = new Set([
   '.ts',
   '.tsx',
@@ -46,13 +45,24 @@ function parseFrame(line: string): { file: string; line: string } | undefined {
   return undefined;
 }
 
+let libraryDir: string | undefined;
+let libraryDirAttempted = false;
+
 function isFallbackNoise(file: string): boolean {
   const path = normalizeFile(file);
   if (path.startsWith('node:') || path === 'native' || path.startsWith('eval'))
     return true;
   if (path.includes('/node_modules/tsx/') || path.includes('/node_modules/typescript/'))
     return true;
-  return path.startsWith(LIBRARY_DIR);
+  if (!libraryDirAttempted) {
+    libraryDirAttempted = true;
+    try {
+      libraryDir = normalizeFile(new URL('./', import.meta.url).href);
+    } catch {
+      return false;
+    }
+  }
+  return libraryDir !== undefined && path.startsWith(libraryDir);
 }
 
 function formatDefinedAt(file: string, line: string, cwd: string): string | undefined {
@@ -60,10 +70,12 @@ function formatDefinedAt(file: string, line: string, cwd: string): string | unde
   const root = normalizeFile(cwd).replace(/\/+$/, '');
   const extension = path.match(/\.[^./]+$/)?.[0];
   if (!extension || !SOURCE_EXTENSIONS.has(extension)) return undefined;
-  if (path.split('/').some((segment) => OUTPUT_SEGMENTS.has(segment))) return undefined;
   const prefix = `${root}/`;
   if (!path.startsWith(prefix)) return undefined;
-  return `${path.slice(prefix.length)}:${line}`;
+  const relative = path.slice(prefix.length);
+  if (relative.split('/').some((segment) => OUTPUT_SEGMENTS.has(segment)))
+    return undefined;
+  return `${relative}:${line}`;
 }
 
 /** Parse a stack into a cwd-relative `file:line`, or `undefined` when the frame is implausible. */
@@ -85,8 +97,8 @@ export function definedAtFromStack(
 export function captureDefinedAt(caller: Function): string | undefined {
   try {
     if (typeof process === 'undefined') return undefined;
-    if (process.env?.NODE_ENV === 'production') return undefined;
     if (process.env == null) return undefined;
+    if (process.env.NODE_ENV === 'production') return undefined;
     if (typeof process.cwd !== 'function') return undefined;
     const holder: { stack?: string | undefined } = {};
     const hasLimit = 'stackTraceLimit' in Error;

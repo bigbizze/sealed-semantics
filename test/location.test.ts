@@ -122,6 +122,12 @@ test('definedAtFromStack rejects output directories, foreign files, and non-sour
   );
 });
 
+test('output-directory segments are judged on the path relative to cwd', () => {
+  const frame = '    at foo (/proj/build/src/app.ts:1:1)';
+  assert.equal(definedAtFromStack(frame, '/proj/build', true), 'src/app.ts:1');
+  assert.equal(definedAtFromStack(frame, '/proj', true), undefined);
+});
+
 test('definedAtFromStack returns a relative forward-slash path for Windows file URLs', () => {
   assert.equal(
     definedAtFromStack(
