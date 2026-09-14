@@ -1,4 +1,7 @@
-const SOURCE_EXTENSIONS = new Set([
+// location.ts has no executable top-level code, only literal constants.
+// Anything that probes the environment runs inside captureDefinedAt and its try/catch.
+// The fallback library directory is resolved inside isFallbackNoise; failure is not a library frame.
+const SOURCE_EXTENSIONS = [
   '.ts',
   '.tsx',
   '.mts',
@@ -7,8 +10,8 @@ const SOURCE_EXTENSIONS = new Set([
   '.mjs',
   '.cjs',
   '.jsx',
-]);
-const OUTPUT_SEGMENTS = new Set([
+];
+const OUTPUT_SEGMENTS = [
   'dist',
   'build',
   'out',
@@ -18,7 +21,7 @@ const OUTPUT_SEGMENTS = new Set([
   '.nuxt',
   '.vercel',
   '.netlify',
-]);
+];
 
 function normalizeFile(file: string): string {
   let value = file.replaceAll('\\', '/');
@@ -45,35 +48,28 @@ function parseFrame(line: string): { file: string; line: string } | undefined {
   return undefined;
 }
 
-let libraryDir: string | undefined;
-let libraryDirAttempted = false;
-
 function isFallbackNoise(file: string): boolean {
   const path = normalizeFile(file);
   if (path.startsWith('node:') || path === 'native' || path.startsWith('eval'))
     return true;
   if (path.includes('/node_modules/tsx/') || path.includes('/node_modules/typescript/'))
     return true;
-  if (!libraryDirAttempted) {
-    libraryDirAttempted = true;
-    try {
-      libraryDir = normalizeFile(new URL('./', import.meta.url).href);
-    } catch {
-      return false;
-    }
+  try {
+    return path.startsWith(normalizeFile(new URL('./', import.meta.url).href));
+  } catch {
+    return false;
   }
-  return libraryDir !== undefined && path.startsWith(libraryDir);
 }
 
 function formatDefinedAt(file: string, line: string, cwd: string): string | undefined {
   const path = normalizeFile(file);
   const root = normalizeFile(cwd).replace(/\/+$/, '');
   const extension = path.match(/\.[^./]+$/)?.[0];
-  if (!extension || !SOURCE_EXTENSIONS.has(extension)) return undefined;
+  if (!extension || !SOURCE_EXTENSIONS.includes(extension)) return undefined;
   const prefix = `${root}/`;
   if (!path.startsWith(prefix)) return undefined;
   const relative = path.slice(prefix.length);
-  if (relative.split('/').some((segment) => OUTPUT_SEGMENTS.has(segment)))
+  if (relative.split('/').some((segment) => OUTPUT_SEGMENTS.includes(segment)))
     return undefined;
   return `${relative}:${line}`;
 }
