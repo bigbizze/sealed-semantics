@@ -5,20 +5,26 @@ const arrayIndex = /^(0|[1-9][0-9]*)$/;
 const ownedSnapshots = new WeakSet<object>();
 
 function isArrayIndexKey(key: string): boolean {
+  const first = key.charCodeAt(0);
+  if (!(first >= 48 && first <= 57)) return false;
   if (!arrayIndex.test(key)) return false;
-  const value = Number(key);
-  return value >= 0 && value < 2 ** 32 - 1 && String(value) === key;
+  return Number(key) < 2 ** 32 - 1;
 }
 
 function canonicalKeys(keys: readonly string[]): string[] {
-  return [...keys].sort((a, b) => {
-    const aIndex = isArrayIndexKey(a);
-    const bIndex = isArrayIndexKey(b);
-    if (aIndex && bIndex) return Number(a) - Number(b);
-    if (aIndex) return -1;
-    if (bIndex) return 1;
-    return a < b ? -1 : a > b ? 1 : 0;
-  });
+  let indexKeys: string[] | undefined;
+  let stringKeys: string[] | undefined;
+  for (const key of keys) {
+    if (isArrayIndexKey(key)) (indexKeys ??= []).push(key);
+    else (stringKeys ??= []).push(key);
+  }
+  if (indexKeys) indexKeys.sort((a, b) => Number(a) - Number(b));
+  if (stringKeys) stringKeys.sort();
+  return indexKeys
+    ? stringKeys
+      ? indexKeys.concat(stringKeys)
+      : indexKeys
+    : (stringKeys ?? []);
 }
 
 function hasDiagnosticName(value: object): boolean {

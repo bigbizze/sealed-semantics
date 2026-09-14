@@ -384,7 +384,7 @@ For primitive Parts with a constant-cost key, this extra work is constant per pa
 
 Each distinct live value retains its frozen Parts snapshot and interning bookkeeping. Finalizer cleanup is delayed, not immediate. The first view access snapshots its result, reusing already snapshotted library-owned nodes when present; later reads return the cached reference. A byte copy observation retains a private snapshot after first use and allocates/copies B bytes for each B-byte result.
 
-0.4.1 includes a measured snapshot hot-path optimization. Sorting plain-object keys was not the main cost; descriptor reads and per-property definition were the larger avoidable costs. There is still no qualified timing ratio against plain Zod for this exact implementation. Measure representative schemas, sizes, and hit/miss rates before adopting seals for a performance-sensitive path. Interning guarantees identity; it is not a claim that parsing is faster.
+0.4.1 includes measured snapshot hot-path optimizations. In the first optimization, descriptor reads and per-property definition dominated sorting. After that change, comparator-based canonical sorting became the largest avoidable `snapshotData` cost for plain objects. The final path partitions array-index keys from string keys before sorting, so array-index checks are computed once per key instead of once per comparison. There is still no qualified timing ratio against plain Zod for this exact implementation. Measure representative schemas, sizes, and hit/miss rates before adopting seals for a performance-sensitive path. Interning guarantees identity; it is not a claim that parsing is faster.
 
 ## Examples and verification
 

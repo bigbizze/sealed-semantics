@@ -1,4 +1,5 @@
 # Snapshotting benchmark interpretation
+Evidence label: `v040`.
 Measured 7 planned fresh-process repetitions per throughput case.
 Primary results are elapsed time, throughput, heap delta, and RSS delta from non-GC-observed timing workers.
 Retained-heap diagnostics are recorded separately in `gc-diagnostics.json` after explicit GC opportunities.
@@ -27,5 +28,6 @@ Retained-heap diagnostics are recorded separately in `gc-diagnostics.json` after
 Interpretation:
 - Seal parsing includes Zod validation, snapshot allocation, key computation, interning, and live-hit collision comparison.
 - Structured values cost more as descriptor access, property definition, allocation, and freezing increase with graph size.
-- 0.4.1 includes a measured snapshot hot-path optimization. Sorting alone was not the main cost; descriptor reads and per-property definition were the larger avoidable costs.
+- In the first 0.4.1 optimization, descriptor reads and per-property definition dominated sorting. After that change, comparator-based canonical sorting became the largest avoidable `snapshotData` cost for plain objects.
+- The final 0.4.1 path partitions array-index keys from string keys before sorting, so array-index checks are computed once per key instead of once per comparison.
 - No performance threshold is attached to 0.4.1.
