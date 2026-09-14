@@ -1,5 +1,5 @@
 {
-  "date": "2026-09-13T23:36:50.877Z",
+  "date": "2026-09-14T01:30:45.925Z",
   "node": "v22.23.2",
   "versions": {
     "node": "22.23.2",
@@ -36,7 +36,35 @@
   "cpus": [
     {
       "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4699
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
       "speed": 4701
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4700
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4700
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4699
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4698
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4700
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4700
     },
     {
       "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
@@ -48,11 +76,11 @@
     },
     {
       "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4704
+      "speed": 4699
     },
     {
       "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
+      "speed": 4701
     },
     {
       "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
@@ -65,46 +93,18 @@
     {
       "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
       "speed": 4701
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
     },
     {
       "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
       "speed": 4703
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4701
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4702
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4702
     }
   ],
   "totalMemory": 101151547392,
-  "freeMemory": 84046057472,
+  "freeMemory": 82522783744,
   "loadStart": [
-    1.82,
-    2.21,
-    4.05
+    6.41,
+    3.8,
+    2.91
   ],
   "sha": "5623e6aefcefbbb7e3148488051e4763ffe069ae",
   "status": "?? benchmarks/\n",
@@ -120,13 +120,13 @@
   ],
   "sourceHashes": {
     "README.md": "3b72c6e6c91ab70b34381d10a6589e3ca269203777d00800a535c87369479223",
-    "run.mjs": "dc185442d2a04faac1470759ed37771bfb9291e92de35fa63bce91e0fd47de24",
-    "summarize.mjs": "e6a235365fe601ae003cad0df094ad305a892e1ca9a71a4573b8ea8ff923fbeb",
-    "worker.mjs": "f6e217e87889927e05dd443ca4c6aa558baa688cbcd622198540ffd5c8e351b3"
+    "run.mjs": "9d53331eb04dc19fe048f2cb56b40131098296b34da142f60ea5af5b946d2a3e",
+    "summarize.mjs": "0e58fc336a34bb4f0fca64ebcec3fc6cdcb1afa7edbc0314b5a3a5344d9db252",
+    "worker.mjs": "f6ed491f21a0050853f932ceebd98f248d6e8233be0acaf3476ede2d18b0f1f5"
   },
   "loadEnd": [
-    3.52,
-    4.99,
-    3.91
+    2,
+    2.38,
+    3
   ]
 }

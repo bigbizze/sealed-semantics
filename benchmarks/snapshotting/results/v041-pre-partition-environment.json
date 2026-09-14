@@ -1,5 +1,5 @@
 {
-  "date": "2026-09-14T03:10:28.995Z",
+  "date": "2026-09-14T02:27:50.044Z",
   "node": "v22.23.2",
   "versions": {
     "node": "22.23.2",
@@ -36,59 +36,59 @@
   "cpus": [
     {
       "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4699
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4699
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4700
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4699
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4699
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4699
-    },
-    {
-      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
       "speed": 4698
     },
     {
       "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-      "speed": 4701
+      "speed": 4704
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4700
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4700
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4700
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4699
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4699
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4700
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4694
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4699
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4700
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4699
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4699
+    },
+    {
+      "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+      "speed": 4700
     },
     {
       "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
@@ -100,14 +100,14 @@
     }
   ],
   "totalMemory": 101151547392,
-  "freeMemory": 84067442688,
+  "freeMemory": 81760325632,
   "loadStart": [
-    3.06,
-    2.57,
-    2.92
+    1.41,
+    2.14,
+    2.88
   ],
-  "sha": "f12ba7922155106c2f163b1508d6b37ac0ba64ee",
-  "status": " M benchmarks/snapshotting/results/v040-environment.json\n M benchmarks/snapshotting/results/v040-gc-diagnostics.json\n M benchmarks/snapshotting/results/v040-interpretation.md\n M benchmarks/snapshotting/results/v040-raw.json\n M benchmarks/snapshotting/results/v040-summary.json\n M benchmarks/snapshotting/worker.mjs\n?? benchmarks/interning/\n?? benchmarks/snapshotting/results/environment.json\n?? benchmarks/snapshotting/results/gc-diagnostics.json\n?? benchmarks/snapshotting/results/interpretation.md\n?? benchmarks/snapshotting/results/raw.json\n?? benchmarks/snapshotting/results/summary.json\n?? benchmarks/snapshotting/results/v041-pre-partition-environment.json\n?? benchmarks/snapshotting/results/v041-pre-partition-gc-diagnostics.json\n?? benchmarks/snapshotting/results/v041-pre-partition-interpretation.md\n?? benchmarks/snapshotting/results/v041-pre-partition-raw.json\n?? benchmarks/snapshotting/results/v041-pre-partition-summary.json\n?? docs/future.md\n?? spike/api.ts.txt\n",
+  "sha": "4d325d72bca045d1e0a6cbfeb9f57492048b4b54",
+  "status": " M benchmarks/snapshotting/summarize.mjs\n M benchmarks/snapshotting/worker.mjs\n",
   "zod": "4.1.0",
   "repetitions": 7,
   "profile": "full",
@@ -125,8 +125,8 @@
     "worker.mjs": "f6ed491f21a0050853f932ceebd98f248d6e8233be0acaf3476ede2d18b0f1f5"
   },
   "loadEnd": [
-    3.14,
-    9.84,
-    8.84
+    3.33,
+    2.61,
+    2.94
   ]
 }

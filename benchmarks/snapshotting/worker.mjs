@@ -44,13 +44,24 @@ function makeValue(shape, index) {
 
 function schemaFor(shape) {
   if (shape === 'string') return z.string();
-  return z.custom(
-    (input) =>
-      input !== null &&
-      typeof input === 'object' &&
-      !Array.isArray(input) &&
-      typeof input.id === 'string',
-  );
+  if (shape.startsWith('flat')) {
+    const width = Number(shape.slice(4));
+    const fields = { id: z.string() };
+    for (let i = 0; i < width; i++)
+      fields[`p${String(i).padStart(3, '0')}`] = z.number();
+    return z.object(fields);
+  }
+  if (shape === 'nested50x10') {
+    const fields = { id: z.string() };
+    for (let i = 0; i < 50; i++) {
+      const child = { id: z.string() };
+      for (let j = 0; j < 10; j++)
+        child[`p${String(j).padStart(2, '0')}`] = z.number();
+      fields[`node${String(i).padStart(2, '0')}`] = z.object(child);
+    }
+    return z.object(fields);
+  }
+  throw new Error(`Unknown shape: ${shape}`);
 }
 
 function keyFor(shape, parts) {

@@ -4,31 +4,32 @@ Measured 7 planned fresh-process repetitions per throughput case.
 This run is partial. Completed case repetitions range from 1 to 2.
 Primary results are elapsed time, throughput, heap delta, and RSS delta from non-GC-observed timing workers.
 Retained-heap diagnostics are recorded separately in `gc-diagnostics.json` after explicit GC opportunities.
-| shape | live-hit ratio | seal ops/s | plain Zod ops/s | seal/Zod elapsed |
-| --- | ---: | ---: | ---: | ---: |
-| flat100 | 100% | 10193 | 10426335 | 1023.12x |
-| flat100 | 90% | 10197 | 8739219 | 857.53x |
-| flat100 | 50% | 11538 | 5643464 | 487.42x |
-| flat100 | 0% | 12443 | 3419062 | 274.77x |
-| flat50 | 100% | 23431 | 11573252 | 494.43x |
-| flat50 | 90% | 23949 | 8906097 | 367.63x |
-| flat50 | 50% | 23662 | 5460568 | 231.96x |
-| flat50 | 0% | 26320 | 3890838 | 146.67x |
-| flat500 | 100% | 1675 | 9552100 | 5703.15x |
-| flat500 | 90% | 1673 | 8278413 | 4947.18x |
-| flat500 | 50% | 1652 | 4977013 | 3012.94x |
-| flat500 | 0% | 1655 | 3354572 | 2026.86x |
-| nested50x10 | 100% | 2069 | 8692985 | 4201.41x |
-| nested50x10 | 90% | 2048 | 7021504 | 3427.93x |
-| nested50x10 | 50% | 2055 | 3888308 | 1892.57x |
-| nested50x10 | 0% | 1662 | 2595523 | 1562.06x |
-| string | 100% | 3028901 | 71211336 | 23.51x |
-| string | 90% | 2687593 | 49109068 | 18.27x |
-| string | 50% | 1321383 | 54210215 | 41.03x |
-| string | 0% | 703160 | 48843558 | 69.67x |
+| shape | live-hit ratio | seal ops/s | seal us/op | plain Zod ops/s | plain Zod us/op |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| flat100 | 100% | 10193 | 98.10 | 10426335 | 0.10 |
+| flat100 | 90% | 10197 | 98.07 | 8739219 | 0.11 |
+| flat100 | 50% | 11538 | 86.67 | 5643464 | 0.18 |
+| flat100 | 0% | 12443 | 80.36 | 3419062 | 0.29 |
+| flat50 | 100% | 23431 | 42.68 | 11573252 | 0.09 |
+| flat50 | 90% | 23949 | 41.76 | 8906097 | 0.11 |
+| flat50 | 50% | 23662 | 42.26 | 5460568 | 0.18 |
+| flat50 | 0% | 26320 | 37.99 | 3890838 | 0.26 |
+| flat500 | 100% | 1675 | 597.06 | 9552100 | 0.10 |
+| flat500 | 90% | 1673 | 597.60 | 8278413 | 0.12 |
+| flat500 | 50% | 1652 | 605.37 | 4977013 | 0.20 |
+| flat500 | 0% | 1655 | 604.21 | 3354572 | 0.30 |
+| nested50x10 | 100% | 2069 | 483.31 | 8692985 | 0.12 |
+| nested50x10 | 90% | 2048 | 488.20 | 7021504 | 0.14 |
+| nested50x10 | 50% | 2055 | 486.73 | 3888308 | 0.26 |
+| nested50x10 | 0% | 1662 | 601.83 | 2595523 | 0.39 |
+| string | 100% | 3028901 | 0.33 | 71211336 | 0.01 |
+| string | 90% | 2687593 | 0.37 | 49109068 | 0.02 |
+| string | 50% | 1321383 | 0.76 | 54210215 | 0.02 |
+| string | 0% | 703160 | 1.42 | 48843558 | 0.02 |
 Interpretation:
 - Seal parsing includes Zod validation, snapshot allocation, key computation, interning, and live-hit collision comparison.
 - Structured values cost more as descriptor access, property definition, allocation, and freezing increase with graph size.
+- This preserved partial run used the earlier plain Zod shape-check baseline. Its Zod timings are not comparable with the corrected field-level Zod evidence.
 - In the first 0.4.1 optimization, descriptor reads and per-property definition dominated sorting. After that change, comparator-based canonical sorting became the largest avoidable `snapshotData` cost for plain objects.
 - The final 0.4.1 path partitions array-index keys from string keys before sorting, so array-index checks are computed once per key instead of once per comparison.
 - No performance threshold is attached to 0.4.1.

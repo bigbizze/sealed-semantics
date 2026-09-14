@@ -1,6 +1,6 @@
 {
   "environment": {
-    "date": "2026-09-14T01:30:45.925Z",
+    "date": "2026-09-14T02:27:50.044Z",
     "node": "v22.23.2",
     "versions": {
       "node": "22.23.2",
@@ -37,35 +37,7 @@
     "cpus": [
       {
         "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-        "speed": 4699
-      },
-      {
-        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-        "speed": 4701
-      },
-      {
-        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-        "speed": 4700
-      },
-      {
-        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-        "speed": 4700
-      },
-      {
-        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-        "speed": 4699
-      },
-      {
-        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
         "speed": 4698
-      },
-      {
-        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-        "speed": 4700
-      },
-      {
-        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-        "speed": 4700
       },
       {
         "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
@@ -77,11 +49,43 @@
       },
       {
         "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+        "speed": 4700
+      },
+      {
+        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+        "speed": 4700
+      },
+      {
+        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
         "speed": 4699
       },
       {
         "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-        "speed": 4701
+        "speed": 4699
+      },
+      {
+        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+        "speed": 4700
+      },
+      {
+        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+        "speed": 4694
+      },
+      {
+        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+        "speed": 4699
+      },
+      {
+        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+        "speed": 4700
+      },
+      {
+        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+        "speed": 4699
+      },
+      {
+        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
+        "speed": 4699
       },
       {
         "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
@@ -93,22 +97,18 @@
       },
       {
         "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-        "speed": 4701
-      },
-      {
-        "model": "Intel(R) Core(TM) i9-9900K CPU @ 3.60GHz",
-        "speed": 4703
+        "speed": 4698
       }
     ],
     "totalMemory": 101151547392,
-    "freeMemory": 82522783744,
+    "freeMemory": 81760325632,
     "loadStart": [
-      6.41,
-      3.8,
-      2.91
+      1.41,
+      2.14,
+      2.88
     ],
-    "sha": "5623e6aefcefbbb7e3148488051e4763ffe069ae",
-    "status": "?? benchmarks/\n",
+    "sha": "4d325d72bca045d1e0a6cbfeb9f57492048b4b54",
+    "status": " M benchmarks/snapshotting/summarize.mjs\n M benchmarks/snapshotting/worker.mjs\n",
     "zod": "4.1.0",
     "repetitions": 7,
     "profile": "full",
@@ -126,9 +126,9 @@
       "worker.mjs": "f6ed491f21a0050853f932ceebd98f248d6e8233be0acaf3476ede2d18b0f1f5"
     },
     "loadEnd": [
-      2,
-      2.38,
-      3
+      3.33,
+      2.61,
+      2.94
     ]
   },
   "results": [
@@ -139,8 +139,8 @@
       "ops": 500000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 4069072,
-      "retainedRss": 33685504,
+      "retainedHeap": 4071440,
+      "retainedRss": 34340864,
       "anchors": 1000
     },
     {
@@ -151,7 +151,7 @@
       "variant": "zod",
       "rep": 0,
       "retainedHeap": 4017032,
-      "retainedRss": 4718592,
+      "retainedRss": 4980736,
       "anchors": 1000
     },
     {
@@ -161,36 +161,14 @@
       "ops": 500000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 15888376,
-      "retainedRss": 40222720,
+      "retainedHeap": 15884016,
+      "retainedRss": 41050112,
       "anchors": 1000
     },
     {
       "experiment": "retainedHeap",
       "shape": "string",
       "liveHitRatio": 0.9,
-      "ops": 500000,
-      "variant": "zod",
-      "rep": 0,
-      "retainedHeap": 4017032,
-      "retainedRss": 4456448,
-      "anchors": 1000
-    },
-    {
-      "experiment": "retainedHeap",
-      "shape": "string",
-      "liveHitRatio": 0.5,
-      "ops": 500000,
-      "variant": "seal",
-      "rep": 0,
-      "retainedHeap": 61386048,
-      "retainedRss": 77406208,
-      "anchors": 1000
-    },
-    {
-      "experiment": "retainedHeap",
-      "shape": "string",
-      "liveHitRatio": 0.5,
       "ops": 500000,
       "variant": "zod",
       "rep": 0,
@@ -201,12 +179,34 @@
     {
       "experiment": "retainedHeap",
       "shape": "string",
+      "liveHitRatio": 0.5,
+      "ops": 500000,
+      "variant": "seal",
+      "rep": 0,
+      "retainedHeap": 61386664,
+      "retainedRss": 77201408,
+      "anchors": 1000
+    },
+    {
+      "experiment": "retainedHeap",
+      "shape": "string",
+      "liveHitRatio": 0.5,
+      "ops": 500000,
+      "variant": "zod",
+      "rep": 0,
+      "retainedHeap": 4015952,
+      "retainedRss": 5898240,
+      "anchors": 1000
+    },
+    {
+      "experiment": "retainedHeap",
+      "shape": "string",
       "liveHitRatio": 0,
       "ops": 500000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 118798072,
-      "retainedRss": 130920448,
+      "retainedHeap": 118804512,
+      "retainedRss": 130969600,
       "anchors": 0
     },
     {
@@ -217,7 +217,7 @@
       "variant": "zod",
       "rep": 0,
       "retainedHeap": 4017032,
-      "retainedRss": 5943296,
+      "retainedRss": 6160384,
       "anchors": 0
     },
     {
@@ -227,8 +227,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 600904,
-      "retainedRss": 1658880,
+      "retainedHeap": 600440,
+      "retainedRss": 4702208,
       "anchors": 1000
     },
     {
@@ -239,7 +239,7 @@
       "variant": "zod",
       "rep": 0,
       "retainedHeap": 23505688,
-      "retainedRss": 49156096,
+      "retainedRss": 49451008,
       "anchors": 1000
     },
     {
@@ -249,8 +249,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 4087712,
-      "retainedRss": 3989504,
+      "retainedHeap": 4321032,
+      "retainedRss": 4792320,
       "anchors": 1000
     },
     {
@@ -261,7 +261,7 @@
       "variant": "zod",
       "rep": 0,
       "retainedHeap": 23505688,
-      "retainedRss": 33013760,
+      "retainedRss": 35356672,
       "anchors": 1000
     },
     {
@@ -271,8 +271,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 17895328,
-      "retainedRss": 18178048,
+      "retainedHeap": 18915712,
+      "retainedRss": 19820544,
       "anchors": 1000
     },
     {
@@ -283,7 +283,7 @@
       "variant": "zod",
       "rep": 0,
       "retainedHeap": 23505592,
-      "retainedRss": 27320320,
+      "retainedRss": 27127808,
       "anchors": 1000
     },
     {
@@ -293,8 +293,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 35433360,
-      "retainedRss": 38862848,
+      "retainedHeap": 37538352,
+      "retainedRss": 41623552,
       "anchors": 0
     },
     {
@@ -305,7 +305,7 @@
       "variant": "zod",
       "rep": 0,
       "retainedHeap": 23506592,
-      "retainedRss": 27934720,
+      "retainedRss": 26345472,
       "anchors": 0
     },
     {
@@ -315,8 +315,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 755120,
-      "retainedRss": 3006464,
+      "retainedHeap": 763416,
+      "retainedRss": 3272704,
       "anchors": 1000
     },
     {
@@ -327,7 +327,7 @@
       "variant": "zod",
       "rep": 0,
       "retainedHeap": 44182984,
-      "retainedRss": 68730880,
+      "retainedRss": 68276224,
       "anchors": 1000
     },
     {
@@ -337,8 +337,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 6283632,
-      "retainedRss": 9363456,
+      "retainedHeap": 6521608,
+      "retainedRss": 9093120,
       "anchors": 1000
     },
     {
@@ -348,8 +348,8 @@
       "ops": 50000,
       "variant": "zod",
       "rep": 0,
-      "retainedHeap": 44182920,
-      "retainedRss": 47378432,
+      "retainedHeap": 44182984,
+      "retainedRss": 49164288,
       "anchors": 1000
     },
     {
@@ -359,8 +359,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 28249320,
-      "retainedRss": 29458432,
+      "retainedHeap": 29275728,
+      "retainedRss": 30212096,
       "anchors": 1000
     },
     {
@@ -370,8 +370,8 @@
       "ops": 50000,
       "variant": "zod",
       "rep": 0,
-      "retainedHeap": 44182888,
-      "retainedRss": 46804992,
+      "retainedHeap": 44182824,
+      "retainedRss": 46682112,
       "anchors": 1000
     },
     {
@@ -381,8 +381,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 56125736,
-      "retainedRss": 58707968,
+      "retainedHeap": 58210240,
+      "retainedRss": 60334080,
       "anchors": 0
     },
     {
@@ -393,7 +393,7 @@
       "variant": "zod",
       "rep": 0,
       "retainedHeap": 44182872,
-      "retainedRss": 46751744,
+      "retainedRss": 47857664,
       "anchors": 0
     },
     {
@@ -403,8 +403,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 488384,
-      "retainedRss": 3276800,
+      "retainedHeap": 491464,
+      "retainedRss": 4849664,
       "anchors": 1000
     },
     {
@@ -415,7 +415,7 @@
       "variant": "zod",
       "rep": 0,
       "retainedHeap": 204480672,
-      "retainedRss": 220618752,
+      "retainedRss": 221605888,
       "anchors": 1000
     },
     {
@@ -425,8 +425,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 21976840,
-      "retainedRss": 24117248,
+      "retainedHeap": 22203504,
+      "retainedRss": 25718784,
       "anchors": 1000
     },
     {
@@ -436,8 +436,8 @@
       "ops": 50000,
       "variant": "zod",
       "rep": 0,
-      "retainedHeap": 204480768,
-      "retainedRss": 215568384,
+      "retainedHeap": 204480720,
+      "retainedRss": 215740416,
       "anchors": 1000
     },
     {
@@ -447,8 +447,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 107784912,
-      "retainedRss": 115740672,
+      "retainedHeap": 108807136,
+      "retainedRss": 115658752,
       "anchors": 1000
     },
     {
@@ -459,7 +459,7 @@
       "variant": "zod",
       "rep": 0,
       "retainedHeap": 204480584,
-      "retainedRss": 213475328,
+      "retainedRss": 214519808,
       "anchors": 1000
     },
     {
@@ -469,8 +469,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 216434216,
-      "retainedRss": 214827008,
+      "retainedHeap": 218522672,
+      "retainedRss": 217882624,
       "anchors": 0
     },
     {
@@ -480,8 +480,8 @@
       "ops": 50000,
       "variant": "zod",
       "rep": 0,
-      "retainedHeap": 204480680,
-      "retainedRss": 213438464,
+      "retainedHeap": 204480632,
+      "retainedRss": 213032960,
       "anchors": 0
     },
     {
@@ -491,41 +491,41 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 625984,
-      "retainedRss": 1695744,
+      "retainedHeap": 628864,
+      "retainedRss": 3026944,
       "anchors": 1000
     },
     {
       "experiment": "retainedHeap",
       "shape": "nested50x10",
       "liveHitRatio": 1,
-      "ops": 50000,
-      "variant": "zod",
-      "rep": 0,
-      "retainedHeap": 383677160,
-      "retainedRss": 401747968,
-      "anchors": 1000
-    },
-    {
-      "experiment": "retainedHeap",
-      "shape": "nested50x10",
-      "liveHitRatio": 0.9,
-      "ops": 50000,
-      "variant": "seal",
-      "rep": 0,
-      "retainedHeap": 40114168,
-      "retainedRss": 45498368,
-      "anchors": 1000
-    },
-    {
-      "experiment": "retainedHeap",
-      "shape": "nested50x10",
-      "liveHitRatio": 0.9,
       "ops": 50000,
       "variant": "zod",
       "rep": 0,
       "retainedHeap": 383677168,
-      "retainedRss": 394481664,
+      "retainedRss": 401432576,
+      "anchors": 1000
+    },
+    {
+      "experiment": "retainedHeap",
+      "shape": "nested50x10",
+      "liveHitRatio": 0.9,
+      "ops": 50000,
+      "variant": "seal",
+      "rep": 0,
+      "retainedHeap": 46408960,
+      "retainedRss": 47382528,
+      "anchors": 1000
+    },
+    {
+      "experiment": "retainedHeap",
+      "shape": "nested50x10",
+      "liveHitRatio": 0.9,
+      "ops": 50000,
+      "variant": "zod",
+      "rep": 0,
+      "retainedHeap": 383677184,
+      "retainedRss": 394285056,
       "anchors": 1000
     },
     {
@@ -535,8 +535,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 197920864,
-      "retainedRss": 204435456,
+      "retainedHeap": 229381688,
+      "retainedRss": 233926656,
       "anchors": 1000
     },
     {
@@ -546,8 +546,8 @@
       "ops": 50000,
       "variant": "zod",
       "rep": 0,
-      "retainedHeap": 383676920,
-      "retainedRss": 395190272,
+      "retainedHeap": 383676872,
+      "retainedRss": 394702848,
       "anchors": 1000
     },
     {
@@ -557,8 +557,8 @@
       "ops": 50000,
       "variant": "seal",
       "rep": 0,
-      "retainedHeap": 395621184,
-      "retainedRss": 407351296,
+      "retainedHeap": 462737584,
+      "retainedRss": 474378240,
       "anchors": 0
     },
     {
@@ -568,8 +568,8 @@
       "ops": 50000,
       "variant": "zod",
       "rep": 0,
-      "retainedHeap": 383676976,
-      "retainedRss": 392486912,
+      "retainedHeap": 383677208,
+      "retainedRss": 392867840,
       "anchors": 0
     }
   ]

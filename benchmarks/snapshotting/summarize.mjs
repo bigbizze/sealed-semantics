@@ -69,6 +69,11 @@ const comparisons = [...byCase.entries()]
     sealVsZodTimeRatio: pair.seal.medianElapsedMs / pair.zod.medianElapsedMs,
   }));
 
+const zodSchemaNote =
+  sourceLabel === 'v041-sort-only-partial'
+    ? '- This preserved partial run used the earlier plain Zod shape-check baseline. Its Zod timings are not comparable with the corrected field-level Zod evidence.'
+    : '- Plain Zod structured cases use field-level `z.object` schemas that match the generated benchmark object layouts.';
+
 const summary = {
   environment: raw.environment,
   rows,
@@ -92,17 +97,18 @@ const lines = [
   'Primary results are elapsed time, throughput, heap delta, and RSS delta from non-GC-observed timing workers.',
   'Retained-heap diagnostics are recorded separately in `gc-diagnostics.json` after explicit GC opportunities.',
   '',
-  '| shape | live-hit ratio | seal ops/s | plain Zod ops/s | seal/Zod elapsed |',
-  '| --- | ---: | ---: | ---: | ---: |',
+  '| shape | live-hit ratio | seal ops/s | seal us/op | plain Zod ops/s | plain Zod us/op |',
+  '| --- | ---: | ---: | ---: | ---: | ---: |',
   ...comparisons.map(
     (row) =>
-      `| ${row.shape} | ${(row.liveHitRatio * 100).toFixed(0)}% | ${row.sealOpsPerSecond.toFixed(0)} | ${row.zodOpsPerSecond.toFixed(0)} | ${row.sealVsZodTimeRatio.toFixed(2)}x |`,
+      `| ${row.shape} | ${(row.liveHitRatio * 100).toFixed(0)}% | ${row.sealOpsPerSecond.toFixed(0)} | ${((1_000_000 / row.sealOpsPerSecond)).toFixed(2)} | ${row.zodOpsPerSecond.toFixed(0)} | ${((1_000_000 / row.zodOpsPerSecond)).toFixed(2)} |`,
   ),
   '',
   'Interpretation:',
   '',
   '- Seal parsing includes Zod validation, snapshot allocation, key computation, interning, and live-hit collision comparison.',
   '- Structured values cost more as descriptor access, property definition, allocation, and freezing increase with graph size.',
+  zodSchemaNote,
   '- In the first 0.4.1 optimization, descriptor reads and per-property definition dominated sorting. After that change, comparator-based canonical sorting became the largest avoidable `snapshotData` cost for plain objects.',
   '- The final 0.4.1 path partitions array-index keys from string keys before sorting, so array-index checks are computed once per key instead of once per comparison.',
   '- No performance threshold is attached to 0.4.1.',
