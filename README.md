@@ -335,7 +335,7 @@ Equivalent decodes from one definition return the same live object. Semantic val
 
 Object identity does not cross workers, processes, server/client, network, or storage boundaries. Encode through Zod, transfer plain data, then decode with the receiving definition.
 
-Console inspection shows `Sealed<app/user-id> defined at file:line` without encoding, revealing Parts, or calling `debug()`. `JSON.stringify(value)` still throws. Structured/JSON logging requires explicit Zod encoding. Minted values are local construction attestations in the current API. Crossing a serialization boundary requires establishing the claim again on the receiving side.
+Console inspection shows `Sealed<app/user-id>` without encoding, revealing Parts, or calling `debug()`. In development it also includes a relative `defined at file:line`. `JSON.stringify(value)` still throws. Structured/JSON logging requires explicit Zod encoding. Minted values are local construction attestations in the current API. Crossing a serialization boundary requires establishing the claim again on the receiving side.
 
 In Jest and Vitest, use `toBe` to test identity. Two distinct minted values can pass `toEqual` because their private state is not enumerable.
 

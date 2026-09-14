@@ -101,7 +101,7 @@ export function defineSeal<
   z.output<W>,
   [A] extends [never] ? {} : { allocate: (...args: A) => unknown }
 > {
-  const definedAt = captureDefinedAt();
+  const definedAt = captureDefinedAt(defineSeal);
   validateDefinition(spec, true);
   const { name, schema, debug, allocate, key } = spec;
   return builder((view, metadata, copy) => {
@@ -166,7 +166,7 @@ export function defineMint<
       >;
     },
 ): MintedBuilder<K, I, MintParts<R>, MintError<R>> {
-  const definedAt = captureDefinedAt();
+  const definedAt = captureDefinedAt(defineMint);
   validateDefinition(spec, false);
   const { name, mint, debug } = spec;
   return builder((view, metadata, copy) => {

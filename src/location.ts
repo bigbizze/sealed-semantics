@@ -1,4 +1,25 @@
 const LIBRARY_DIR = normalizeFile(new URL('./', import.meta.url).href);
+const SOURCE_EXTENSIONS = new Set([
+  '.ts',
+  '.tsx',
+  '.mts',
+  '.cts',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.jsx',
+]);
+const OUTPUT_SEGMENTS = new Set([
+  'dist',
+  'build',
+  'out',
+  '.next',
+  '.output',
+  '.svelte-kit',
+  '.nuxt',
+  '.vercel',
+  '.netlify',
+]);
 
 function normalizeFile(file: string): string {
   let value = file.replaceAll('\\', '/');
@@ -25,7 +46,7 @@ function parseFrame(line: string): { file: string; line: string } | undefined {
   return undefined;
 }
 
-function isLibraryFile(file: string): boolean {
+function isFallbackNoise(file: string): boolean {
   const path = normalizeFile(file);
   if (path.startsWith('node:') || path === 'native' || path.startsWith('eval'))
     return true;
@@ -34,16 +55,59 @@ function isLibraryFile(file: string): boolean {
   return path.startsWith(LIBRARY_DIR);
 }
 
-/** One stack capture per definition. The first non-library frame is the caller. */
-export function captureDefinedAt(): string | undefined {
-  const stack = new Error().stack;
-  if (!stack) return undefined;
+function formatDefinedAt(file: string, line: string, cwd: string): string | undefined {
+  const path = normalizeFile(file);
+  const root = normalizeFile(cwd).replace(/\/+$/, '');
+  const extension = path.match(/\.[^./]+$/)?.[0];
+  if (!extension || !SOURCE_EXTENSIONS.has(extension)) return undefined;
+  if (path.split('/').some((segment) => OUTPUT_SEGMENTS.has(segment))) return undefined;
+  const prefix = `${root}/`;
+  if (!path.startsWith(prefix)) return undefined;
+  return `${path.slice(prefix.length)}:${line}`;
+}
+
+/** Parse a stack into a cwd-relative `file:line`, or `undefined` when the frame is implausible. */
+export function definedAtFromStack(
+  stack: string,
+  cwd: string,
+  firstFrameIsCaller: boolean,
+): string | undefined {
   for (const raw of stack.split('\n')) {
     const parsed = parseFrame(raw);
-    if (!parsed || isLibraryFile(parsed.file)) continue;
-    return `${normalizeFile(parsed.file)}:${parsed.line}`;
+    if (!parsed) continue;
+    if (!firstFrameIsCaller && isFallbackNoise(parsed.file)) continue;
+    return formatDefinedAt(parsed.file, parsed.line, cwd);
   }
   return undefined;
+}
+
+/** One best-effort stack capture per definition. Production, browsers, and implausible frames yield nothing. */
+export function captureDefinedAt(caller: Function): string | undefined {
+  try {
+    if (typeof process === 'undefined') return undefined;
+    if (process.env?.NODE_ENV === 'production') return undefined;
+    if (process.env == null) return undefined;
+    if (typeof process.cwd !== 'function') return undefined;
+    const holder: { stack?: string | undefined } = {};
+    const hasLimit = 'stackTraceLimit' in Error;
+    const previous = hasLimit ? Error.stackTraceLimit : undefined;
+    try {
+      if (hasLimit) Error.stackTraceLimit = 5;
+      if (typeof Error.captureStackTrace === 'function')
+        Error.captureStackTrace(holder, caller);
+      else holder.stack = new Error().stack;
+    } finally {
+      if (hasLimit) Error.stackTraceLimit = previous!;
+    }
+    if (!holder.stack) return undefined;
+    return definedAtFromStack(
+      holder.stack,
+      process.cwd(),
+      typeof Error.captureStackTrace === 'function',
+    );
+  } catch {
+    return undefined;
+  }
 }
 
 export function definitionSuffix(name: string, definedAt: string | undefined): string {
