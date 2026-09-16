@@ -1,6 +1,6 @@
 # Guarantees and obligations
 
-Zod controls representation boundaries. `defineSeal` creates semantic values whose value identity is JavaScript reference identity within one definition instance. `defineMint` creates values whose identity is the successful mint event. `view` exposes stable immutable observations. The package holds no global state.
+Zod controls representation boundaries. `defineSeal` creates semantic values whose value identity is JavaScript reference identity within one definition instance. `defineMint` creates values whose identity is the successful mint event. Observation is kind-side: `Kind.read(value)` and `Kind.<projection>(value)` unseal, then return cached immutable snapshots. The package holds no global state.
 
 ## Construction and identity
 
@@ -8,7 +8,7 @@ A sealed value belongs to exactly one completed definition instance. `Kind.is(va
 
 Semantic decoding validates and normalizes input, snapshots the decoded Parts, then computes identity from that frozen snapshot. Plain-object snapshot properties are canonicalized before callbacks receive them, with JavaScript array-index keys first in numeric order and other string keys next in UTF-16 lexical order. Equivalent live values are the same object. Native `Map` and `Set` therefore work. An existing live value cannot be displaced by another parse. Minting never interns; every success snapshots Parts and creates a new event.
 
-Forged prototypes, recovered constructors, proxies, casts, and structured clones do not acquire the definition's private brand. A cast, `any`, or suppressed error can bypass TypeScript. A fake object can also supply its own view or copy members without invoking library code; property access is not authentication. Use a codec for external data, or the intended definition's `is` predicate for existing objects whose origin is uncertain. This applies at internal trust boundaries as well as JavaScript-facing APIs. Typed internal code may trust parameters when callers preserve those types.
+Forged prototypes, recovered constructors, proxies, casts, and structured clones do not acquire the definition's private brand. A cast, `any`, or suppressed error can bypass TypeScript. After a cast, the next kind-side observation or encode throws. A fake object can still supply own properties named `view` or `suffix`; those names are not the public observation API. Use `Kind.suffix(value)`, `Kind.read(value)`, a codec, or `Kind.is` / `Kind.assert`. This applies at internal trust boundaries as well as JavaScript-facing APIs. Typed internal code may trust parameters when callers preserve those types.
 
 TypeScript cannot mint a fresh nominal type for each factory call. The declaration brand uses the literal label to distinguish ordinary definitions statically. Same-label definitions can have compatible static types. The runtime private brand, not the label, establishes membership.
 
@@ -52,4 +52,4 @@ Only the laws entry imports Node facilities and fast-check. The core uses browse
 
 Every semantic definition declares `key(parts)`. Key identity follows `Object.is`: zero and negative zero are distinct, while NaN interns with itself when the schema permits it. Different Parts that share a live key are rejected as collisions. Normalize Parts in the schema first. Producer rejection values are domain-owned; the library preserves them unchanged and infers their exact type.
 
-`copy` methods expose stable byte observations as fresh owned Uint8Arrays. Each producer runs once on its first successful access; the library copies the producer result into a private snapshot and copies that snapshot for every caller. Writes through a consumer array or a retained producer array cannot affect later results. Shared backing memory is rejected. These are storage guarantees, not proof of purity or semantic equivalence. See [copying restrictions](bytes.md).
+`Kind.bytes(value)` (or another configured copy name) exposes stable byte observations as fresh owned Uint8Arrays. Each producer runs once on its first successful access; the library copies the producer result into a private snapshot and copies that snapshot for every caller. Writes through a consumer array or a retained producer array cannot affect later results. Shared backing memory is rejected. These are storage guarantees, not proof of purity or semantic equivalence. See [copying restrictions](bytes.md).

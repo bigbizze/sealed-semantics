@@ -141,6 +141,10 @@ export function immutableView<T>(value: T, label: string): DeepReadonly<T> {
   return snapshotValue(value, label, true);
 }
 
+export function registerOwnedSnapshot<T extends object>(snapshot: T): T {
+  return freezeSnapshot(snapshot);
+}
+
 // Collision assertion only. Callers pass snapshotted graphs. Property order and
 // frozen descriptors do not affect comparison. Sealed leaves are atomic.
 export function sameParts(a: unknown, b: unknown): boolean {

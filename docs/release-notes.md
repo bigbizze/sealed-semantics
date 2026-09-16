@@ -1,5 +1,14 @@
 # Release notes
 
+## 0.5.0
+
+- Breaking: observation is kind-side. `user.view.suffix`, `digest.copy.bytes()`, and `value.debug()` are removed from the public instance surface. Use `UserId.suffix(user)`, `UserId.read(user)`, `Digest.bytes(digest)`, and `UserId.debug(user)`. Each call unseals first.
+- `Kind.assert(value)` unseals and returns the same instance. `is` and `assert` accept `unknown`. `read`, `debug`, projections, and copies require that kind's instance type.
+- Projection and copy names are reserved against `assert`, `read`, `debug`, and `name`. Overlapping view/copy names fail at `.seal()`.
+- A duck-typed `{ view }` object plus `as UserId` no longer yields forged data through a typed sink that observes via the kind.
+- Whole-read snapshots are library-owned nodes, so later projections that return them reuse the same object.
+- README must not use instance `.view.` access. `Kind.documentation.view` and builder `.view({` remain.
+
 ## 0.4.2
 
 - `Proof<Name>` now prints a default type argument in compiler errors: do not cast, grep the definition name, and construct through `.codec.parse()` or `.mint()`. `ValueOf<typeof Kind>` still displays as `Proof<...>` for ordinary seals.

@@ -100,8 +100,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     project_id: ProjectId.codec.parse(responseBody.project_id),
   };
   console.log('\nDecoded response:', parsed);
-  console.log('User suffix:', parsed.user_id.view.suffix);
-  console.log('Project suffix:', parsed.project_id.view.suffix);
+  console.log('User suffix:', UserId.suffix(parsed.user_id));
+  console.log('Project suffix:', ProjectId.suffix(parsed.project_id));
   console.log('Same user object:', parsed.user_id === manuallyParsed.user_id);
   console.log('Same project object:', parsed.project_id === manuallyParsed.project_id);
   console.log('Encoded response:', z.encode(MembershipRequest, parsed));

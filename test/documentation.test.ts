@@ -65,7 +65,7 @@ test('docs round trips use the codec, including nested kinds', () => {
     .seal();
   const Parent = defineSeal({
     name: 'docs/parent',
-    key: (p) => p.child.view.text,
+    key: (p) => Child.text(p.child),
     schema: z.object({ child: Child.codec }),
   })
     .docs({ examples: [{ input: { child: 'x' }, encoded: { child: 'x' } }] })

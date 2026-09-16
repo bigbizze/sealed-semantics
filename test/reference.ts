@@ -56,15 +56,16 @@ export const NamespaceId = defineSeal({
   name: 'example/namespace-id',
   schema: z.string().regex(/^ns:[a-z]+$/),
 })
-  .view({ name: (p) => p })
+  .view({ label: (p) => p })
   .docs({
     examples: [{ input: 'ns:example', encoded: 'ns:example' }],
-    view: { name: { description: 'Namespace name.' } },
+    view: { label: { description: 'Namespace name.' } },
   })
   .seal();
 export const ContentAddress = defineSeal({
   name: 'example/content-address',
-  key: (p) => `${p.namespace_id.view.name}:${p.content_class}:${p.digest.view.hex}`,
+  key: (p) =>
+    `${NamespaceId.label(p.namespace_id)}:${p.content_class}:${Sha256Digest.hex(p.digest)}`,
   schema: z.object({
     namespace_id: NamespaceId.codec,
     content_class: z.enum(['primary', 'attachment']),

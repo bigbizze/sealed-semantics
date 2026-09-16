@@ -4,4 +4,10 @@ Paste this block into the consuming repository's `AGENTS.md` or `CLAUDE.md`.
 
 ## sealed-semantics
 
-On `Proof<"x">`/`SealedValue` errors: casts, `any`, and fake brands won't help. Grep `"x"` → its `defineSeal`/`defineMint`. Build via `.codec.parse()`/`z.decode`/`.mint()`; read via `.view`/`.copy`. `{ ok: false }` from `.mint()` is a real rejection; fix input or report, don't bypass. Runtime errors always name `"x"`; `Defined at file:line` is a development-only relative pointer. Name definitions after their module path so grep is an address.
+On `Proof<"x">` errors: do not cast. Grep `"x"` → `defineSeal`/`defineMint`.
+Construct via `.codec.parse()` / `z.decode` / `.mint()`.
+`Kind.is` / `Kind.assert` accept `unknown` and authenticate.
+Observe via `Kind.read(value)` / `Kind.<name>(value)` — those require that kind's instance, not `unknown` or another kind.
+Copy bytes via `Kind.<copyName>(value)`.
+Nested sealed inputs: `OtherKind.assert(input.child)` in a mint or key; do not trust structure.
+`{ ok: false }` from `.mint()` is a real rejection; do not bypass.

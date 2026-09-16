@@ -34,7 +34,9 @@ type Id = ValueOf<typeof Id>;
 const id = Id.codec.parse('x');
 type In = Assert<Equal<z.input<typeof Id.codec>, string>>;
 type Out = Assert<Equal<z.output<typeof Id.codec>, Id>>;
-type Projection = Assert<Equal<typeof id.view.length, number>>;
+type Projection = Assert<Equal<ReturnType<typeof Id.length>, number>>;
+// @ts-expect-error Observation lives on the kind, not the instance.
+id.view;
 // @ts-expect-error Different kinds cannot be substituted.
 const wrong: ValueOf<typeof Other> = id;
 // @ts-expect-error Raw strings are not sealed values.
@@ -67,7 +69,7 @@ const converted = defineSeal({
   })
   .seal();
 type ConvertedInput = Assert<Equal<z.input<typeof converted.codec>, string>>;
-type Count = Assert<Equal<ValueOf<typeof converted>['view']['count'], number>>;
+type Count = Assert<Equal<ReturnType<typeof converted.count>, number>>;
 const ReadonlyCallbacks = defineSeal({
   name: 'types/readonly-callbacks',
   schema: z.object({
@@ -83,13 +85,13 @@ const ReadonlyCallbacks = defineSeal({
     p.rows.push('x');
     // @ts-expect-error Nested Parts are readonly.
     p.record.x = 1;
-    return `${p.id.debug()}:${p.rows.join(',')}`;
+    return `${Id.debug(p.id)}:${p.rows.join(',')}`;
   },
   debug: (p) => {
     type Child = Assert<Equal<typeof p.id, Id>>;
     // @ts-expect-error Debug callbacks receive readonly Parts.
     p.id = Id.codec.parse('y');
-    return p.id.debug();
+    return Id.debug(p.id);
   },
 })
   .view({
@@ -110,15 +112,17 @@ const readonlyValue = ReadonlyCallbacks.codec.parse({
   record: { a: 1 },
   id: 'x',
 });
-type ReadonlyRows = Assert<Equal<typeof readonlyValue.view.rows, readonly string[]>>;
-type ReadonlyRecord = Assert<
-  Equal<typeof readonlyValue.view.record, { readonly [x: string]: number }>
+type ReadonlyRows = Assert<
+  Equal<ReturnType<typeof ReadonlyCallbacks.rows>, readonly string[]>
 >;
-type ReadonlyChild = Assert<Equal<typeof readonlyValue.view.id, Id>>;
+type ReadonlyRecord = Assert<
+  Equal<ReturnType<typeof ReadonlyCallbacks.record>, { readonly [x: string]: number }>
+>;
+type ReadonlyChild = Assert<Equal<ReturnType<typeof ReadonlyCallbacks.id>, Id>>;
 // @ts-expect-error View array observations are readonly.
-readonlyValue.view.rows.push('b');
+ReadonlyCallbacks.rows(readonlyValue).push('b');
 // @ts-expect-error View index-signature observations are readonly.
-readonlyValue.view.record.a = 2;
+ReadonlyCallbacks.record(readonlyValue).a = 2;
 const IndexedMint = defineMint({
   name: 'types/index-signature',
   mint: (input: Record<string, string[]>) => ({ ok: true as const, value: input }),
@@ -127,7 +131,7 @@ const IndexedMint = defineMint({
   .seal();
 const indexed = IndexedMint.mint({ main: ['x'] });
 if (indexed.ok) {
-  type First = Assert<Equal<typeof indexed.value.view.first, string | undefined>>;
+  type First = Assert<Equal<ReturnType<typeof IndexedMint.first>, string | undefined>>;
 }
 const allocated = defineSeal({
   key: (parts) => parts,
@@ -154,7 +158,7 @@ const Minted = defineMint({
   .seal();
 const minted = Minted.mint({ id, other: Other.codec.parse('x') });
 if (minted.ok) {
-  type Child = Assert<Equal<typeof minted.value.view.id, Id>>;
+  type Child = Assert<Equal<ReturnType<typeof Minted.id>, Id>>;
   // @ts-expect-error Minted values have no boundary codec.
   z.encode(Minted.codec, minted.value);
 }
@@ -249,6 +253,12 @@ V.docs({
 });
 // @ts-expect-error Standard operations cannot be projections.
 B.view({ debug: (s: string) => s });
+// @ts-expect-error Kind-side observation names cannot be projections.
+B.view({ read: (s: string) => s });
+// @ts-expect-error Kind-side observation names cannot be projections.
+B.view({ assert: (s: string) => s });
+// @ts-expect-error Kind-side observation names cannot be projections.
+B.view({ name: (s: string) => s });
 // @ts-expect-error Symbol projections are forbidden.
 B.view({ [Symbol.iterator]: (s: string) => s });
 defineMint({
@@ -301,11 +311,11 @@ const Structured = defineMint({
   .seal();
 const r = Structured.mint(undefined);
 if (r.ok) {
-  type Exact = Assert<Equal<typeof r.value.view.users, readonly Id[]>>;
+  type Exact = Assert<Equal<ReturnType<typeof Structured.users>, readonly Id[]>>;
   // @ts-expect-error Array observations are readonly.
-  r.value.view.users.push(id);
+  Structured.users(r.value).push(id);
   // @ts-expect-error Nested observations are readonly.
-  r.value.view.nested.list[0] = 2;
+  Structured.nested(r.value).list[0] = 2;
 }
 // @ts-expect-error Date observations are unsupported.
 B.view({ date: () => new Date() });
@@ -372,7 +382,7 @@ const infallible = Infallible.mint('');
 if (!infallible.ok) {
   type NoError = Assert<Equal<typeof infallible.error, never>>;
 }
-type SuccessfulParts = Assert<Equal<ValueOf<typeof Payment>['view']['input'], string>>;
+type SuccessfulParts = Assert<Equal<ReturnType<typeof Payment.input>, string>>;
 
 const unionProducer = (input: number) => {
   if (input < 0)
@@ -414,7 +424,7 @@ const docsFirst = defineSeal({
   })
   .view({ text: (s) => s })
   .seal();
-const textFromDocsFirst: string = docsFirst.codec.parse('x').view.text;
+const textFromDocsFirst: string = docsFirst.text(docsFirst.codec.parse('x'));
 const mintDocsFirst = defineMint({
   name: 'types/mint-docs-first',
   mint: (s: string) => ({ ok: true as const, value: s }),
@@ -457,12 +467,12 @@ const CopyExample = defineSeal({
   })
   .seal();
 const copies = CopyExample.codec.parse('x');
-const bytes: Uint8Array = copies.copy.bytes();
-const signatureBytes: Uint8Array = copies.copy.signatureBytes();
+const bytes: Uint8Array = CopyExample.bytes(copies);
+const signatureBytes: Uint8Array = CopyExample.signatureBytes(copies);
 // @ts-expect-error Buffer producer output is exposed only as Uint8Array.
-const nodeBuffer: Buffer = copies.copy.signatureBytes();
+const nodeBuffer: Buffer = CopyExample.signatureBytes(copies);
 // @ts-expect-error Undeclared copy observations are absent.
-copies.copy.missing();
+CopyExample.missing(copies);
 defineSeal({ name: 'copy/string', schema: z.string(), key: (s) => s }).copy({
   // @ts-expect-error Text belongs in view.
   string: (s) => s,
@@ -500,4 +510,45 @@ const NoCopies = defineSeal({
   key: (s) => s,
 }).seal();
 // @ts-expect-error No copy observations were declared.
-NoCopies.codec.parse('x').copy;
+NoCopies.bytes(NoCopies.codec.parse('x'));
+declare const unknownCandidate: unknown;
+Id.is(unknownCandidate);
+const asserted = Id.assert(unknownCandidate);
+type Asserted = Assert<Equal<typeof asserted, Id>>;
+// @ts-expect-error Ordinary observation requires this kind's instance.
+Id.length(Other.codec.parse('x'));
+// @ts-expect-error Ordinary observation does not accept raw wire data.
+Id.length('x');
+// @ts-expect-error Ordinary observation does not accept a Promise.
+Id.length(Promise.resolve(id));
+// @ts-expect-error read requires a genuine instance, not unknown.
+Id.read(unknownCandidate);
+// @ts-expect-error debug requires a genuine instance.
+Id.debug(Other.codec.parse('x'));
+// @ts-expect-error copy requires this kind's instance.
+CopyExample.bytes(id);
+// @ts-expect-error read does not accept a mint result wrapper.
+Payment.read(Payment.mint('x'));
+// @ts-expect-error A view projection and a copy observation cannot share a name.
+defineSeal({ name: 'types/view-copy-clash', schema: z.string(), key: (s) => s })
+  .view({ bytes: (s) => s })
+  .copy({ bytes: (s) => new TextEncoder().encode(s) })
+  .seal();
+// @ts-expect-error A view projection and a copy observation cannot share a name.
+defineMint({
+  name: 'types/view-copy-clash-mint',
+  mint: (s: string) => ({ ok: true as const, value: s }),
+})
+  .copy({ bytes: (s) => new TextEncoder().encode(s) })
+  .view({ bytes: (s) => s })
+  .seal();
+const resolvedClash = defineSeal({
+  name: 'types/view-copy-resolved',
+  schema: z.string(),
+  key: (s) => s,
+})
+  .view({ bytes: (s) => s })
+  .copy({ bytes: (s) => new TextEncoder().encode(s) })
+  .view({ text: (s) => s })
+  .seal();
+const resolvedText: string = resolvedClash.text(resolvedClash.codec.parse('x'));

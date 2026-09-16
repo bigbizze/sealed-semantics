@@ -4,14 +4,25 @@ import * as fc from 'fast-check';
 import type { z } from 'zod';
 import { encodeWire, parseCodec } from './zod-codec.js';
 import { foreignValue, isSealed } from './sealed-leaf.js';
+import { kindObservation, type KindObservation } from './documentation.js';
 import type { AnyKind, ProducerResult, Proof, ConfigurationError } from './types.js';
 
-type Semantic = AnyKind & { codec: z.ZodType<Proof<string>, any> };
-type Minted = AnyKind & { mint(input: any): ProducerResult<any, unknown> };
+type Semantic = AnyKind & {
+  codec: z.ZodType<Proof<string>, any>;
+  assert(value: unknown): Proof<string>;
+  read(value: unknown): object;
+  debug(value: unknown): string;
+};
+type Minted = AnyKind & {
+  mint(input: any): ProducerResult<any, unknown>;
+  assert(value: unknown): Proof<string>;
+  read(value: unknown): object;
+  debug(value: unknown): string;
+};
 type ValueLawOptions<K extends Semantic> = {
   validWire: fc.Arbitrary<z.input<K['codec']>>;
   equivalentAliases?: fc.Arbitrary<[z.input<K['codec']>, z.input<K['codec']>]>;
-} & (K extends { allocate(...args: infer A): unknown }
+} & (K extends { allocate: (...args: infer A) => unknown }
   ? { allocateArgs?: fc.Arbitrary<A> }
   : {});
 type MintedLawOptions<K extends Minted> = {
@@ -25,38 +36,42 @@ type Checked<P, A> = P & {
   >;
 };
 
-function copies(value: any, equivalent: any): void {
-  if ('copy' in value) {
-    assert.equal(value.copy, value.copy);
-    assert(Object.isFrozen(value.copy));
-    assert.equal(Object.getPrototypeOf(value.copy), null);
-    for (const name of Object.keys(value.copy)) {
-      const first = value.copy[name]();
-      const second = value.copy[name]();
-      assert.deepEqual(first, second, `copy.${name} must produce equivalent data`);
-      assert(first instanceof Uint8Array);
-      assert(second instanceof Uint8Array);
-      assert.notEqual(first, second);
-      assert.notEqual(first.buffer, second.buffer);
-      const original = new Uint8Array(second);
-      for (let i = 0; i < first.length; i++) first[i] = first[i]! ^ 255;
-      assert.deepEqual(second, original, `copy.${name} must isolate existing copies`);
-      assert.deepEqual(
-        value.copy[name](),
-        original,
-        `copy.${name} mutations must not affect later copies`,
-      );
-      const throughEquivalent = equivalent.copy[name]();
-      assert.notEqual(throughEquivalent, first);
-      assert.notEqual(throughEquivalent, second);
-      assert.notEqual(throughEquivalent.buffer, first.buffer);
-      assert.notEqual(throughEquivalent.buffer, second.buffer);
-      assert.deepEqual(
-        throughEquivalent,
-        original,
-        `copy.${name} mutations must not affect copies through an equivalent decode`,
-      );
-    }
+function observationOf(kind: AnyKind): KindObservation {
+  const meta = kindObservation(kind);
+  if (meta) return meta;
+  throw new TypeError(
+    `${kind.name}: law harness requires observation metadata from this installed package copy. The kind may come from another sealed-semantics installation, or is not a completed kind.`,
+  );
+}
+
+function copies(kind: AnyKind, value: any, equivalent: any): void {
+  for (const name of observationOf(kind).copy) {
+    const observe = (kind as any)[name] as (x: unknown) => Uint8Array;
+    const first = observe(value);
+    const second = observe(value);
+    assert.deepEqual(first, second, `${name} must produce equivalent data`);
+    assert(first instanceof Uint8Array);
+    assert(second instanceof Uint8Array);
+    assert.notEqual(first, second);
+    assert.notEqual(first.buffer, second.buffer);
+    const original = new Uint8Array(second);
+    for (let i = 0; i < first.length; i++) first[i] = first[i]! ^ 255;
+    assert.deepEqual(second, original, `${name} must isolate existing copies`);
+    assert.deepEqual(
+      observe(value),
+      original,
+      `${name} mutations must not affect later copies`,
+    );
+    const throughEquivalent = observe(equivalent);
+    assert.notEqual(throughEquivalent, first);
+    assert.notEqual(throughEquivalent, second);
+    assert.notEqual(throughEquivalent.buffer, first.buffer);
+    assert.notEqual(throughEquivalent.buffer, second.buffer);
+    assert.deepEqual(
+      throughEquivalent,
+      original,
+      `${name} mutations must not affect copies through an equivalent decode`,
+    );
   }
 }
 
@@ -82,7 +97,22 @@ function assertFrozenGraph(value: unknown, label: string): void {
   visit(value);
 }
 
-function shared(kind: AnyKind, value: any, equivalent: any = value): void {
+function observations(kind: Semantic | Minted, value: any): void {
+  assert.equal(kind.assert(value), value);
+  const snapshot = kind.read(value);
+  assert.equal(kind.read(value), snapshot);
+  assert(Object.isFrozen(snapshot));
+  assert.equal(Object.getPrototypeOf(snapshot), null);
+  assertFrozenGraph(snapshot, `${kind.name}.read`);
+  for (const name of observationOf(kind).view) {
+    const project = (kind as any)[name] as (x: unknown) => unknown;
+    assert.equal(project(value), (snapshot as any)[name], `${name} must match read`);
+    assert.equal(project(value), project(value), `${name} must be stable`);
+    assert.throws(() => project({ view: snapshot }), TypeError);
+  }
+}
+
+function shared(kind: Semantic | Minted, value: any, equivalent: any = value): void {
   assert(Boolean(kind.is(value)), foreignValue(kind.name, value, 'laws'));
   for (const x of [kind, value, Object.getPrototypeOf(value)])
     assert(Object.isFrozen(x));
@@ -92,23 +122,18 @@ function shared(kind: AnyKind, value: any, equivalent: any = value): void {
   assert.throws(() => String(value), TypeError);
   assert.throws(() => value.valueOf(), TypeError);
   assert.deepEqual(Object.keys(value), []);
+  assert(!('view' in value));
+  assert(!('copy' in value));
+  assert(!('debug' in value));
   assert(!kind.is(structuredClone(value)));
-  copies(value, equivalent);
-  if ('view' in value) {
-    assert.equal(value.view, value.view);
-    assert(Object.isFrozen(value.view));
-    assert.equal(Object.getPrototypeOf(value.view), null);
-    for (const name of Object.keys(value.view)) {
-      const first = value.view[name];
-      assert.equal(first, value.view[name], `view.${name} must be stable`);
-      assertFrozenGraph(first, `view.${name}`);
-    }
-  }
+  observations(kind, value);
+  copies(kind, value, equivalent);
 }
 export function assertValueLaws<
   K extends Semantic,
   const O extends ValueLawOptions<NoInfer<K>> & Record<keyof O, unknown>,
 >(kind: K, options: Checked<O, ValueLawOptions<K>>): void {
+  observationOf(kind);
   const check = (raw: z.input<K['codec']>) => {
     const a = parseCodec(kind.codec, raw);
     const repeated = parseCodec(kind.codec, raw);
@@ -128,7 +153,7 @@ export function assertValueLaws<
         const first = parseCodec(kind.codec, a);
         const alias = parseCodec(kind.codec, b);
         assert.equal(first, alias, 'normalized alias identity');
-        copies(first, alias);
+        copies(kind, first, alias);
       }),
     );
   const allocation = options as ValueLawOptions<K> & {
@@ -147,12 +172,15 @@ export function assertMintedLaws<
   K extends Minted,
   const O extends MintedLawOptions<NoInfer<K>> & Record<keyof O, unknown>,
 >(kind: K, options: Checked<O, MintedLawOptions<K>>): void {
+  observationOf(kind);
   fc.assert(
     fc.property(options.validInput, (input) => {
       const a = kind.mint(input),
         b = kind.mint(input);
       assert(a.ok && b.ok, 'generator must produce accepted inputs');
+      assert.throws(() => kind.read(a), TypeError);
       shared(kind, a.value);
+      observations(kind, b.value);
       assert.notEqual(a.value, b.value, 'each success is a distinct mint event');
       assert.equal(new Set([a.value, b.value]).size, 2);
     }),

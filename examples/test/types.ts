@@ -29,14 +29,14 @@ test('mint accepts both sealed identifiers and preserves their types and identit
   const { userId, projectId } = identifiers();
   const result = PreparedMembership.mint({ userId, projectId });
   assert.ok(result.ok);
-  const user: UserId = result.value.view.userId;
-  const project: ProjectId = result.value.view.projectId;
+  const user: UserId = PreparedMembership.userId(result.value);
+  const project: ProjectId = PreparedMembership.projectId(result.value);
   assert.equal(user, userId);
   assert.equal(project, projectId);
   assert.ok(UserId.is(user));
   assert.ok(ProjectId.is(project));
   // @ts-expect-error The projected identifier keeps its specific kind.
-  const wrong: ProjectId = result.value.view.userId;
+  const wrong: ProjectId = PreparedMembership.userId(result.value);
   assert.equal(ProjectId.is(wrong), false);
 });
 
@@ -98,7 +98,7 @@ const Binary = defineSeal({
   .copy({ bytes: (s) => new TextEncoder().encode(s) })
   .seal();
 const binary = Binary.codec.parse('abc');
-const firstBytes = binary.copy.bytes();
+const firstBytes = Binary.bytes(binary);
 firstBytes[0] = 0;
-assert.equal(binary.copy.bytes()[0], 97);
-assert.equal(binary.view.text, 'abc');
+assert.equal(Binary.bytes(binary)[0], 97);
+assert.equal(Binary.text(binary), 'abc');

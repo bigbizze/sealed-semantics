@@ -105,14 +105,14 @@ test('batch validation rejects mixed projects and preserves its private list', (
   const input = [first, duplicate];
   const batch = MembershipBatch.mint(input);
   assert(batch.ok);
-  assert.equal(batch.value.view.count, 1);
-  assert.equal(batch.value.view.plans[0], first);
+  assert.equal(MembershipBatch.count(batch.value), 1);
+  assert.equal(MembershipBatch.plans(batch.value)[0], first);
   input.length = 0;
   assert.throws(() => {
     // @ts-expect-error Cached view arrays are readonly.
-    batch.value.view.plans.pop();
+    MembershipBatch.plans(batch.value).pop();
   }, TypeError);
-  assert.equal(batch.value.view.plans.length, 1);
+  assert.equal(MembershipBatch.plans(batch.value).length, 1);
   assert.equal(MembershipBatch.mint(new Array<PreparedMembership>(1)).ok, false);
   const mixed = MembershipBatch.mint([first, plan(current, 'prj_0123456789abcdef')]);
   assert(!mixed.ok);
@@ -122,7 +122,9 @@ test('batch validation rejects mixed projects and preserves its private list', (
 // Compile-only: typed internal functions trust their input. Casts are not validation.
 function invalidBatchType(
   lookalike: {
-    view: { projectId: ProjectId; plans: PreparedMembership[]; count: number };
+    projectId: ProjectId;
+    plans: PreparedMembership[];
+    count: number;
   },
   database: MembershipDatabase,
 ) {
@@ -135,9 +137,11 @@ type Equal<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false;
 type Expect<T extends true> = T;
 type BatchPlans = Expect<
-  Equal<MembershipBatch['view']['plans'], readonly PreparedMembership[]>
+  Equal<ReturnType<(typeof MembershipBatch)['plans']>, readonly PreparedMembership[]>
 >;
-type BatchProject = Expect<Equal<MembershipBatch['view']['projectId'], ProjectId>>;
+type BatchProject = Expect<
+  Equal<ReturnType<(typeof MembershipBatch)['projectId']>, ProjectId>
+>;
 
 test('fake server decodes a request and returns normalized JSON', async () => {
   const response = await fakeServer.POST(

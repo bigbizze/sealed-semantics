@@ -51,7 +51,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     const profile = await findProfile(user);
     console.log('  Source:', reads === readsBefore ? 'cache' : 'database');
     console.log('  Profile:', profile?.displayName);
-    console.log('  User suffix:', user.view.suffix);
+    console.log('  User suffix:', UserId.suffix(user));
   }
   console.log('\nDatabase reads for four lookups:', reads);
   assert.equal(reads, 2);

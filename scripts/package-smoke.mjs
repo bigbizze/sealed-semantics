@@ -139,7 +139,7 @@ mint:i=>({ok:true,value:i})}).view({text:p=>p}).docs({view:{}}).seal();
       `
 const payment = PaymentReady.mint({ recipientId: userId, amountCents: 100, currency: 'USD' });
 assert(payment.ok);
-assert.equal(payment.value.view.amountCents, 100);
+assert.equal(PaymentReady.amountCents(payment.value), 100);
 assert(!PaymentReady.mint({ recipientId: userId, amountCents: 0, currency: 'USD' }).ok);
 assert.equal(outgoing, 'usr_0123456789abcdef');
 assert.equal(JSON.parse(jsonBody), outgoing);
@@ -272,20 +272,20 @@ mint:i=>({ok:true,value:i})}).seal();
  const OtherD=b.defineMint({name:'consumer/proof',mint:i=>({ok:true,value:i})}).seal();
  const foreignEvent=OtherD.mint(1).value;
  assert(!OtherD.is(p));
- assert.throws(()=>foreignEvent.debug.call(p),/debug.*different definition instance.*two copies/);
+ assert.throws(()=>OtherD.debug(p),/debug.*different definition instance.*two copies/);
  const EventHolder=b.defineMint({name:'consumer/event-holder',mint:i=>({ok:true,value:i})}).view({event:p=>p}).seal();
  assert.throws(()=>EventHolder.mint(p),/sealed-looking object.*another installed package copy.*imitations/);
- assert.equal(EventHolder.mint(foreignEvent).value.view.event,foreignEvent);
+ assert.equal(EventHolder.event(EventHolder.mint(foreignEvent).value),foreignEvent);
 
  assert.notEqual(p,q); assert.equal(new Set([p,q]).size,2);
- const ForeignComposite=b.defineSeal({name:'consumer/foreign-composite',schema:z.object({id:A.codec}),key:p=>p.id.view.text}).seal();
+ const ForeignComposite=b.defineSeal({name:'consumer/foreign-composite',schema:z.object({id:A.codec}),key:p=>A.text(p.id)}).seal();
  assert.throws(()=>ForeignComposite.codec.parse({id:'x'}),/keyed Parts.*sealed-looking object.*another installed package copy.*imitations/);
  const Composite=a.defineSeal({name:'consumer/composite',
-schema:z.object({id:A.codec}),key:p=>p.id.view.text,
+schema:z.object({id:A.codec}),key:p=>A.text(p.id),
 }).view({id:p=>p.id}).seal();
  const c=Composite.codec.parse({id:'x'}),d=Composite.codec.parse({id:'x'});
- assert(A.is(c.view.id));assert.equal(c,d); assert.equal(new Map([[c,1]]).get(d),1);
- assert(Object.isFrozen(c.view));assert.equal(Object.getPrototypeOf(c.view),null);
+ assert(A.is(Composite.id(c)));assert.equal(c,d); assert.equal(new Map([[c,1]]).get(d),1);
+ assert(Object.isFrozen(Composite.read(c)));assert.equal(Object.getPrototypeOf(Composite.read(c)),null);
  assert.deepEqual(Object.keys(a).sort(),['defineMint','defineSeal']);
  assert.notEqual(ABuilder.seal(),A);
  assert.throws(()=>ABuilder.docs({examples:[{input:'x',encoded:'bad'}]}).seal(), /encoded does not match/);

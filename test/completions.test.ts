@@ -27,7 +27,8 @@ const Viewed=ViewedBuilder.seal();
     const rejected=Domain.mint(undefined);
     if(!rejected.ok) { rejected.error./*domainError*/; }
     const WithCopies=BasicBuilder.copy({bytes:s=>new TextEncoder().encode(s),signatureBytes:()=>new Uint8Array(0)});
-    WithCopies.seal().codec.parse("x").copy./*copies*/;
+    WithCopies.seal()./*copyKind*/;
+    Full./*fullKind*/;
     BasicBuilder.docs({ /*basic*/ }).seal();
     WithCopies.docs({copy:{ /*copyDocs*/ }});
     FullBuilder.docs({ /*full*/ }).seal();
@@ -90,16 +91,35 @@ const Viewed=ViewedBuilder.seal();
     }
     const expected: Record<string, string[]> = {
       domainError: ['code', 'detail'],
-      copies: ['bytes', 'signatureBytes'],
+      copyKind: [
+        'assert',
+        'bytes',
+        'codec',
+        'debug',
+        'is',
+        'name',
+        'read',
+        'signatureBytes',
+      ],
+      fullKind: [
+        'allocate',
+        'assert',
+        'codec',
+        'debug',
+        'is',
+        'name',
+        'read',
+        'suffix',
+      ],
       copyDocs: ['bytes', 'signatureBytes'],
       definition: ['name', 'schema', 'allocate', 'key', 'debug'],
       primitiveDefinition: ['key', 'allocate', 'debug'],
       objectDefinition: ['key', 'allocate', 'debug'],
-      instance: ['debug', 'toJSON', 'valueOf'],
-      mintedKind: ['name', 'is', 'mint'],
+      instance: ['toJSON', 'valueOf'],
+      mintedKind: ['assert', 'debug', 'is', 'mint', 'name', 'read'],
       mintedDefinition: ['name', 'mint', 'debug'],
       builder: ['view', 'copy', 'docs', 'seal'],
-      name: ['name', 'is', 'codec'],
+      name: ['assert', 'codec', 'debug', 'is', 'name', 'read'],
       documentedBuilder: ['docs', 'view', 'copy', 'seal'],
       basic: ['description', 'examples', 'view', 'copy'],
       full: ['description', 'examples', 'view', 'copy'],

@@ -21,33 +21,28 @@ test('copy observations snapshot once and isolate producer and consumer storage'
     .seal();
   const value = K.codec.parse('abc');
   assert.equal(calls, 0);
-  assert.equal(value.copy, value.copy);
-  assert(Object.isFrozen(value.copy));
-  assert.equal(Object.getPrototypeOf(value.copy), null);
-  assert.equal(calls, 0);
-  const detached = value.copy.bytes;
-  const first = detached();
+  assert(!('copy' in value));
+  assert(!('copy' in K));
+  const detached = K.bytes;
+  const first = detached(value);
   assert.notEqual(first, leaked);
   assert.notEqual(first.buffer, leaked.buffer);
   leaked[0] = 255;
   first[1] = 255;
-  const second = detached();
-  const third = value.copy.bytes();
+  const second = detached(value);
+  const third = K.bytes(value);
   assert.deepEqual(second, new Uint8Array([97, 98, 99]));
   assert.deepEqual(second, third);
   assert.notEqual(second, third);
   assert.notEqual(second.buffer, third.buffer);
   assert.equal(calls, 1);
   assert.equal(K.codec.parse('abc'), value);
-  assert.equal(value.view.text, 'abc');
+  assert.equal(K.text(value), 'abc');
   assert.equal(z.encode(K.codec, value), 'abc');
   assert.throws(() => JSON.stringify(value));
   assert.throws(
-    () =>
-      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(value), 'copy')!.get!.call(
-        {},
-      ),
-    /copy.*expected a sealed/,
+    () => (K.bytes as (value: unknown) => Uint8Array)({}),
+    /bytes.*expected a sealed/,
   );
 });
 
@@ -68,18 +63,20 @@ test('each mint event and observation has its own lazy snapshot, including empty
   const a = M.mint(undefined),
     b = M.mint(undefined);
   assert(a.ok && b.ok);
-  assert.notEqual(a.value.copy.bytes(), a.value.copy.bytes());
+  assert.notEqual(M.bytes(a.value), M.bytes(a.value));
   assert.equal(calls, 1);
-  b.value.copy.bytes();
-  a.value.copy.other();
+  M.bytes(b.value);
+  M.other(a.value);
   assert.equal(calls, 3);
-  for (const K of [
+  for (const Kind of [
     defineSeal({ name: 'copy/none', schema: z.string(), key: (s) => s }).seal(),
     defineSeal({ name: 'copy/empty', schema: z.string(), key: (s) => s })
       .copy({})
       .seal(),
-  ])
-    assert(!('copy' in K.codec.parse('x')));
+  ]) {
+    assert(!('copy' in Kind.codec.parse('x')));
+    assert(!('bytes' in Kind));
+  }
 });
 
 test('Buffer, subarrays and cross-realm bytes become plain independent Uint8Arrays', () => {
@@ -93,12 +90,12 @@ test('Buffer, subarrays and cross-realm bytes become plain independent Uint8Arra
       .seal();
     const r = M.mint(undefined);
     assert(r.ok);
-    const first = r.value.copy.bytes();
+    const first = M.bytes(r.value);
     assert.equal(Object.getPrototypeOf(first), Uint8Array.prototype);
     assert.deepEqual(first, new Uint8Array([1, 2, 3]));
     assert.notEqual(first.buffer, source.buffer);
     source[0] = 99;
-    assert.deepEqual(r.value.copy.bytes(), first);
+    assert.deepEqual(M.bytes(r.value), first);
   }
 });
 
@@ -148,10 +145,10 @@ test('invalid byte outputs fail without reading properties or exposing Parts', (
     const r = M.mint(undefined);
     assert(r.ok);
     assert.throws(
-      () => r.value.copy.bytes!(),
+      () => (M as any).bytes(r.value),
       (err) =>
         err instanceof TypeError &&
-        /copy\/invalid.copy.bytes/.test(err.message) &&
+        /copy\/invalid\.bytes/.test(err.message) &&
         /Uint8Array/.test(err.message) &&
         !err.message.includes('private-parts'),
     );
@@ -164,7 +161,7 @@ test('invalid byte outputs fail without reading properties or exposing Parts', (
     .seal();
   const r = M.mint(undefined);
   assert(r.ok);
-  assert.throws(() => r.value.copy.bytes(), /attached and readable/);
+  assert.throws(() => M.bytes(r.value), /attached and readable/);
 });
 
 test('failed producers and validation retry; recursion is rejected and can recover', () => {
@@ -182,15 +179,17 @@ test('failed producers and validation retry; recursion is rejected and can recov
     config as any,
   );
   config.bytes = () => new Uint8Array([99]);
-  const value = B.seal().codec.parse('x');
-  assert.throws(() => value.copy.bytes!(), /retry/);
+  const K = B.seal();
+  const bytes = (K as any).bytes as (value: unknown) => Uint8Array;
+  const value = K.codec.parse('x');
+  assert.throws(() => bytes(value), /retry/);
   action = () => 'invalid';
-  assert.throws(() => value.copy.bytes!(), /must return a genuine Uint8Array/);
-  action = () => value.copy.bytes!();
-  assert.throws(() => value.copy.bytes!(), /recursive copy observation/);
+  assert.throws(() => bytes(value), /must return a genuine Uint8Array/);
+  action = () => bytes(value);
+  assert.throws(() => bytes(value), /recursive copy observation/);
   action = () => new Uint8Array([1]);
-  assert.deepEqual(value.copy.bytes!(), new Uint8Array([1]));
-  value.copy.bytes!();
+  assert.deepEqual(bytes(value), new Uint8Array([1]));
+  bytes(value);
   assert.equal(calls, 4);
   for (const invalid of [
     null,
@@ -215,7 +214,7 @@ test('docs, view and copy compose in any order; laws verify byte isolation', () 
     B.copy(copies).view(view).docs(docs).seal(),
     B.view(view).docs(docs).copy(copies).seal(),
   ]) {
-    assert.deepEqual(K.codec.parse('abc').copy.bytes(), new Uint8Array([97, 98, 99]));
+    assert.deepEqual(K.bytes(K.codec.parse('abc')), new Uint8Array([97, 98, 99]));
     assertValueLaws(K, { validWire: fc.string() });
     assert(!('copy' in K));
     assert(Object.isFrozen(K.documentation.copy.bytes));

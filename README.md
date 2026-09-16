@@ -84,6 +84,7 @@ type PaymentObject = {
 const PaymentReady = defineMint({
   name: 'app/payment',
   mint: (input: PaymentObject) => {
+    const recipientId = UserId.assert(input.recipientId);
     if (
       !Number.isSafeInteger(input.amountCents) ||
       input.amountCents <= 0
@@ -100,7 +101,7 @@ const PaymentReady = defineMint({
     return {
       ok: true,
       value: {
-        recipientId: input.recipientId,
+        recipientId,
         amountCents: input.amountCents,
         currency: input.currency,
         preparedAt: Date.now(),
@@ -152,7 +153,7 @@ You supply the checks. The library prevents callers from creating a genuine inst
 
 A genuine instance can only be created through its definition. TypeScript rejects ordinary objects passed as sealed values. However, `any`, casts, and suppressed errors can bypass that static protection; a type annotation does not authenticate a reference at runtime.
 
-Reading `value.view` or calling `value.copy.bytes()` does not authenticate an untrusted object. Genuine library accessors authenticate their receiver, but a forged object can supply its own properties and methods without invoking library code. Use the definition's codec for external representations and `UserId.is(value)` to check an existing object's membership when its origin is uncertain. Codec encoding also rejects values from a foreign definition.
+Observe through the kind: `UserId.suffix(user)`, `UserId.read(user)`, or `UserId.assert(user)`. Those functions unseal first. A duck-typed `{ view: { suffix } }` plus `as UserId` throws when observed or encoded. Use the definition's codec for external representations and `UserId.is(value)` to check membership when origin is uncertain.
 
 Typed internal functions normally trust their parameters when callers preserve those types. If the input can come from untyped code, deliberate casts, plugins, or a different definition instance, validate it before relying on its observations or performing effects. This applies to internal functions too: the distinction is the trust boundary, not whether the function is exported. The package is not a sandbox against code that deliberately bypasses or replaces validation.
 
@@ -184,7 +185,7 @@ type UserId = ValueOf<typeof UserId>;
 const a = UserId.codec.parse('USR_0123456789ABCDEF');
 const b = UserId.codec.parse('usr_0123456789abcdef');
 console.log(a === b); // true
-console.log(a.view.suffix); // abcdef
+console.log(UserId.suffix(a)); // abcdef
 console.log(z.encode(UserId.codec, a)); // usr_0123456789abcdef
 const users = new Map<UserId, string>([[a, 'Alice']]);
 console.log(users.get(b)); // Alice
@@ -292,8 +293,8 @@ type MembershipBatch = ValueOf<typeof MembershipBatch>;
 
 function saveMembershipBatch(batch: MembershipBatch) {
   console.log('Save:', {
-    project: z.encode(ProjectId.codec, batch.view.projectId),
-    users: batch.view.userIds.map(id => z.encode(UserId.codec, id)),
+    project: z.encode(ProjectId.codec, MembershipBatch.projectId(batch)),
+    users: MembershipBatch.userIds(batch).map(id => z.encode(UserId.codec, id)),
   });
 }
 const input = { projectId: response.project_id, userIds: [response.user_id] };
@@ -400,6 +401,6 @@ Read the [guarantees](docs/guarantees.md), [specification](docs/specification.md
 
 ### Owned bytes belong in `.copy`
 
-Use `.view({ hex: ... })` for stable immutable observations and `.copy({ bytes: ... })` for fresh owned `Uint8Array` storage. On the first successful `digest.copy.bytes()` call, the producer runs and the library copies its bytes into a private snapshot. Every call returns a new array from that snapshot. Mutating a returned array or a retained producer result cannot change later copies.
+Use `.view({ hex: ... })` for stable immutable observations and `.copy({ bytes: ... })` for fresh owned `Uint8Array` storage. On the first successful `Digest.bytes(digest)` call, the producer runs and the library copies its bytes into a private snapshot. Every call returns a new array from that snapshot. Mutating a returned array or a retained producer result cannot change later copies. Prefer `Kind.hex(value)` on a hot path; `Kind.read(value)` evaluates every projection.
 
 Only Uint8Array is supported. Buffer producer output is accepted but returned as plain Uint8Array. Shared backing memory is rejected. The definition author is responsible for what the bytes mean; the library enforces storage isolation and stable contents, not purity or semantic correctness. Copy observations do not replace Zod encoding or give minted values a codec. See [the complete digest example and copying rules](docs/bytes.md).

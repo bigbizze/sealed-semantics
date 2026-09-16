@@ -61,8 +61,8 @@ export const MembershipBatch = defineMint({
         },
       };
     }
-    const projectId = plans[0]!.view.projectId;
-    if (plans.some((plan) => projectId !== plan.view.projectId)) {
+    const projectId = PreparedMembership.projectId(plans[0]!);
+    if (plans.some((plan) => projectId !== PreparedMembership.projectId(plan))) {
       return {
         ok: false,
         error: {
@@ -73,8 +73,8 @@ export const MembershipBatch = defineMint({
     }
     const users = new Set<UserId>();
     const unique = plans.filter((plan) => {
-      if (users.has(plan.view.userId)) return false;
-      users.add(plan.view.userId);
+      if (users.has(PreparedMembership.userId(plan))) return false;
+      users.add(PreparedMembership.userId(plan));
       return true;
     });
     return { ok: true, value: { projectId, plans: unique } };
@@ -112,10 +112,12 @@ export async function saveMembershipBatch(
   // One project and one entry per user are already established by mint.
   // Convert to database strings only when writing.
   await database.insertMembers(
-    z.encode(ProjectId.codec, batch.view.projectId),
-    batch.view.plans.map((plan) => z.encode(UserId.codec, plan.view.userId)),
+    z.encode(ProjectId.codec, MembershipBatch.projectId(batch)),
+    MembershipBatch.plans(batch).map((plan) =>
+      z.encode(UserId.codec, PreparedMembership.userId(plan)),
+    ),
   );
-  return { added: batch.view.count };
+  return { added: MembershipBatch.count(batch) };
 }
 
 const AddMembersRequest = z.object({
@@ -184,11 +186,14 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const batch = minted.value;
   const saved = await saveMembershipBatch(batch, database);
   console.log('\nPrepared plans:', plans.length);
-  console.log('Accepted distinct users:', batch.view.count);
+  console.log('Accepted distinct users:', MembershipBatch.count(batch));
   console.log('Save result:', saved);
-  console.log('Stable observation:', batch.view.plans === batch.view.plans);
-  console.log('Immutable observation:', Object.isFrozen(batch.view.plans));
-  assert.equal(batch.view.count, 2);
+  console.log(
+    'Stable observation:',
+    MembershipBatch.plans(batch) === MembershipBatch.plans(batch),
+  );
+  console.log('Immutable observation:', Object.isFrozen(MembershipBatch.plans(batch)));
+  assert.equal(MembershipBatch.count(batch), 2);
   // ############################################################
   console.log(
     '\n\u001b[1m========== Rejected batches never reach the database ==========\u001b[22m\n',
@@ -200,7 +205,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     projectId: ProjectId.codec.parse('prj_0123456789abcdef'),
   });
   if (!otherPlan.ok) throw new Error(otherPlan.error.message);
-  const mixed = MembershipBatch.mint([...batch.view.plans, otherPlan.value]);
+  const mixed = MembershipBatch.mint([
+    ...MembershipBatch.plans(batch),
+    otherPlan.value,
+  ]);
   assert(!mixed.ok);
   console.log('Mixed projects:', mixed.error.message);
   for (const user_ids of [[], ['invalid']]) {

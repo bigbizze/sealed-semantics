@@ -34,11 +34,10 @@ test('each observation is lazy, cached once, deeply frozen, and preserves sealed
   assert(result.ok);
   const value = result.value;
   assert.equal(calls, 0);
-  const facade = value.view;
-  assert.equal(calls, 0);
-  const first = facade.users;
-  assert.equal(first, facade.users);
+  const first = Batch.users(value);
+  assert.equal(first, Batch.users(value));
   assert.equal(calls, 1);
+  assert.equal(emptyCalls, 0);
   assert.equal(first.nested[0]!.users[0], id);
   assert.equal(z.encode(Id.codec, first.nested[0]!.users[0]!), 'x');
   assert.throws(() => {
@@ -49,8 +48,13 @@ test('each observation is lazy, cached once, deeply frozen, and preserves sealed
     // @ts-expect-error Nested records are deeply readonly.
     first.nested[0]!.users = [];
   }, TypeError);
-  assert.equal(facade.empty, undefined);
-  assert.equal(facade.empty, undefined);
+  const snapshot = Batch.read(value);
+  assert.equal(snapshot, Batch.read(value));
+  assert.equal(snapshot.users, first);
+  assert.equal(snapshot.empty, undefined);
+  assert.equal(calls, 1);
+  assert.equal(emptyCalls, 1);
+  assert.equal(Batch.empty(value), undefined);
   assert.equal(emptyCalls, 1);
 });
 
@@ -68,12 +72,70 @@ test('view retries after evaluation or validation failure without caching invali
     .seal();
   const r = K.mint(undefined);
   assert(r.ok);
-  const v = (r.value as any).view;
-  assert.throws(() => v.retry, /first/);
-  assert.throws(() => v.retry, /unsupported object/);
-  const accepted = v.retry;
-  assert.equal(v.retry, accepted);
+  const retry = (K as any).retry as (value: unknown) => unknown;
+  assert.throws(() => retry(r.value), /first/);
+  assert.throws(() => retry(r.value), /unsupported object/);
+  const accepted = retry(r.value);
+  assert.equal(retry(r.value), accepted);
   assert.equal(tries, 3);
+});
+
+test('read forces every projection and does not return a partial snapshot on failure', () => {
+  let goodCalls = 0;
+  let badCalls = 0;
+  const K = defineMint({
+    name: 'view/read-partial',
+    mint: () => ({ ok: true, value: 1 }),
+  })
+    .view({
+      good: () => {
+        goodCalls++;
+        return 1;
+      },
+      bad: () => {
+        badCalls++;
+        if (badCalls === 1) throw new Error('blocked');
+        return 2;
+      },
+    })
+    .seal();
+  const r = K.mint(undefined);
+  assert(r.ok);
+  assert.throws(() => K.read(r.value), /blocked/);
+  assert.equal(K.good(r.value), 1);
+  assert.equal(goodCalls, 1);
+  const snapshot = K.read(r.value);
+  assert.equal(snapshot.good, 1);
+  assert.equal(snapshot.bad, 2);
+  assert.equal(K.read(r.value), snapshot);
+  assert.equal(goodCalls, 1);
+  assert.equal(badCalls, 2);
+});
+
+test('whole-read snapshots are owned and reused across projections', () => {
+  const UserId = defineSeal({
+    name: 'view/read-reuse-id',
+    schema: z.string(),
+    key: (id) => id,
+  })
+    .view({ suffix: (id) => id.slice(-6) })
+    .seal();
+  const owner = UserId.codec.parse('usr_abcdef');
+  const Holder = defineMint({
+    name: 'view/read-reuse-holder',
+    mint: () => ({ ok: true as const, value: { owner } }),
+  })
+    .view({
+      left: (p) => UserId.read(p.owner),
+      right: (p) => UserId.read(p.owner),
+    })
+    .seal();
+  const held = Holder.mint(undefined);
+  assert(held.ok);
+  const read = UserId.read(owner);
+  assert.equal(Holder.left(held.value), read);
+  assert.equal(Holder.right(held.value), read);
+  assert.equal(Holder.left(held.value), Holder.right(held.value));
 });
 
 test('unsupported view outputs fail on first access without executing accessors or freezing partial graphs', () => {
@@ -109,7 +171,7 @@ test('unsupported view outputs fail on first access without executing accessors 
       .seal();
     const r = K.mint(undefined);
     assert(r.ok);
-    assert.throws(() => (r.value as any).view.bad, TypeError);
+    assert.throws(() => (K as any).bad(r.value), TypeError);
     assert(!Object.isFrozen(good));
     assert(!Object.isFrozen(good.nested));
   });
@@ -126,12 +188,12 @@ test('exposed Parts freeze safely, shared subgraphs work, and later codec/debug 
     .view({ rows: (p) => p.rows, shared: (p) => ({ a: p.rows, b: p.rows }) })
     .seal();
   const value = K.codec.parse({ rows: [1, 2] });
-  const rows = value.view.rows;
+  const rows = K.rows(value);
   assert(Object.isFrozen(rows));
-  assert.equal(value.view.shared.a, value.view.shared.b);
-  assert.equal(value.view.shared.a, rows);
+  assert.equal(K.shared(value).a, K.shared(value).b);
+  assert.equal(K.shared(value).a, rows);
   assert.deepEqual(z.encode(K.codec, value), { rows: [1, 2] });
-  assert.equal(value.debug(), '2');
+  assert.equal(K.debug(value), '2');
   assert.equal(K.codec.parse({ rows: [1, 2] }), value);
 });
 
@@ -161,13 +223,13 @@ test('recursive projections fail without caching and simple falsy results cache'
     name: 'view/recursive',
     mint: () => ({ ok: true, value: 1 }),
   })
-    .view({ self: (): unknown => value.view.self })
+    .view({ self: (): unknown => K.self(value) })
     .seal();
   const result = K.mint(undefined);
   assert(result.ok);
   value = result.value;
-  assert.throws(() => value.view.self, /recursive projection access/);
-  assert.throws(() => value.view.self, /recursive projection access/);
+  assert.throws(() => K.self(value), /recursive projection access/);
+  assert.throws(() => K.self(value), /recursive projection access/);
   for (const [i, observation] of [false, 0, '', null, NaN, 1n, Symbol()].entries()) {
     let calls = 0;
     const F = defineMint({
@@ -183,7 +245,7 @@ test('recursive projections fail without caching and simple falsy results cache'
       .seal();
     const r = F.mint(undefined);
     assert(r.ok);
-    assert(Object.is(r.value.view.observation, r.value.view.observation));
+    assert(Object.is(F.observation(r.value), F.observation(r.value)));
     assert.equal(calls, 1);
   }
 });
@@ -230,10 +292,34 @@ test('a frozen hostile class with the kind symbol cannot impersonate a genuine l
     .seal();
   const held = Holder.mint(undefined);
   assert(held.ok);
-  assert.equal(held.value.view.leaf, value);
+  assert.equal(Holder.leaf(held.value), value);
   assert(Object.isFrozen(value.constructor));
   assert.throws(() => Object.setPrototypeOf(value.constructor, class {}), TypeError);
   const Base = Object.getPrototypeOf(value.constructor);
   assert.throws(() => new Base(), /Cannot construct/);
   assert.throws(() => new Base(Symbol()), /Cannot construct/);
+});
+
+test('duck-typed view objects cannot be observed through the kind', () => {
+  const UserId = defineSeal({
+    name: 'view/duck',
+    schema: z.string(),
+    key: (id) => id,
+  })
+    .view({ suffix: (id) => id.slice(-6) })
+    .seal();
+  const genuine = UserId.codec.parse('usr_abcdef');
+  assert.equal(UserId.suffix(genuine), 'abcdef');
+  assert.throws(
+    () => (UserId.suffix as (value: unknown) => string)({ view: { suffix: 'abcdef' } }),
+    TypeError,
+  );
+  assert.throws(
+    () =>
+      (UserId.read as (value: unknown) => { suffix: string })({
+        view: { suffix: 'abcdef' },
+      }),
+    TypeError,
+  );
+  assert.equal(UserId.read(genuine).suffix, UserId.suffix(genuine));
 });

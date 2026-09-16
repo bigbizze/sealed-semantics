@@ -73,12 +73,17 @@ test('reserved projection names and symbols cannot create conflicting surfaces',
     'codec',
     'seal',
     'debug',
+    'assert',
+    'read',
+    'name',
     'parts',
     'constructor',
     'toJSON',
     'then',
   ])
     assert.throws(() => B.view({ [name]: () => 0 } as any), /reserved/);
+  for (const name of ['assert', 'read', 'debug', 'name', 'then'])
+    assert.throws(() => B.copy({ [name]: () => new Uint8Array() } as any), /reserved/);
   assert.throws(() => B.view({ [Symbol.toPrimitive]: () => 0 } as any), /Symbol/);
   const k = B.view({}).seal();
   const value = k.mint(undefined);
@@ -99,7 +104,7 @@ test('builders capture callbacks and each seal creates a definition', () => {
   assert.notEqual(K, configured.seal());
   const r = K.mint('original');
   assert(r.ok);
-  assert.equal(r.value.view.text, 'original');
+  assert.equal(K.text(r.value), 'original');
   assert.notEqual(B.seal(), K);
   assert(!('seal' in K));
   assert(!('docs' in K));
@@ -133,7 +138,7 @@ test('docs and view work in either order and seal completes both factories', () 
   const second = B.view(projections).docs(docs).seal();
   for (const K of [first, second]) {
     assert.equal(K.name, 'definition/order');
-    assert.equal(K.codec.parse('abc').view.text, 'abc');
+    assert.equal(K.text(K.codec.parse('abc')), 'abc');
     assert.deepEqual(K.documentation, docs);
     for (const method of ['docs', 'view', 'seal']) assert(!(method in K));
   }
@@ -144,7 +149,7 @@ test('docs and view work in either order and seal completes both factories', () 
   ]) {
     const result = K.mint('abc');
     assert(result.ok);
-    assert.equal(result.value.view.text, 'abc');
+    assert.equal(K.text(result.value), 'abc');
     for (const method of ['docs', 'view', 'seal']) assert(!(method in K));
   }
   // Editing the view preserves docs; final runtime validation uses the new view.
@@ -153,8 +158,34 @@ test('docs and view work in either order and seal completes both factories', () 
     /view/,
   );
   assert.throws(() => (B.docs(docs) as any).seal(), /view/);
-  assert.equal(
-    B.docs(docs).view(projections).docs(docs).seal().codec.parse('abc').view.text,
-    'abc',
+  const retried = B.docs(docs).view(projections).docs(docs).seal();
+  assert.equal(retried.text(retried.codec.parse('abc')), 'abc');
+  assert.throws(
+    () =>
+      (
+        defineSeal({ name: 'definition/clash', schema: z.string(), key: (s) => s })
+          .view({ bytes: (s) => s })
+          .copy({ bytes: (s) => new TextEncoder().encode(s) }) as any
+      ).seal(),
+    /kind member "bytes" cannot be both a view projection and a copy observation/,
   );
+  assert.throws(
+    () =>
+      (
+        defineMint({ name: 'definition/clash-mint', mint: (s: string) => ok(s) })
+          .copy({ bytes: (s) => new TextEncoder().encode(s) })
+          .view({ bytes: (s) => s }) as any
+      ).seal(),
+    /kind member "bytes" cannot be both a view projection and a copy observation/,
+  );
+  const resolved = defineSeal({
+    name: 'definition/clash-resolved',
+    schema: z.string(),
+    key: (s) => s,
+  })
+    .view({ bytes: (s) => s })
+    .copy({ bytes: (s) => new TextEncoder().encode(s) })
+    .view({ text: (s) => s })
+    .seal();
+  assert.equal(resolved.text(resolved.codec.parse('abc')), 'abc');
 });

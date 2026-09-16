@@ -12,10 +12,9 @@ declare const BRAND: unique symbol;
 export interface Proof<
   K extends string,
   Hint extends string =
-    'sealed value: do not cast; grep the name to find its definition; construct via .codec.parse() or .mint()',
+    'sealed value: do not cast; grep the name to find its definition; construct via .codec.parse() or .mint(); observe via the kind, not the instance',
 > {
   readonly [BRAND]: K;
-  debug(): string;
   toJSON(): never;
   valueOf(): never;
   [Symbol.toPrimitive](): never;
@@ -31,17 +30,6 @@ export type ValueOf<
         readonly 'ValueOf requires a completed kind. Call .seal() on the definition first.': never;
       },
 > = Kd extends { is(x: unknown): x is infer V } ? V : never;
-type Views<O> = O extends { view: infer F }
-  ? keyof F extends never
-    ? {}
-    : {
-        readonly view: {
-          readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R
-            ? DeepReadonly<R>
-            : never;
-        };
-      }
-  : {};
 export type CheckedCopies<F> = F & {
   [N in keyof F]: F[N] extends (...args: any[]) => infer R
     ? [R] extends [Uint8Array]
@@ -50,45 +38,63 @@ export type CheckedCopies<F> = F & {
     : unknown;
 } & {
   [
-    N in Extract<keyof F, 'then' | '__proto__' | 'constructor' | 'prototype' | 'toJSON'>
+    N in Extract<keyof F, ReservedField>
   ]: ConfigurationError<'This copy observation name is reserved.'>;
 } & {
   [
     N in Extract<keyof F, symbol>
   ]: ConfigurationError<'Symbol-named copy observations are not supported.'>;
 };
-type Copies<O> = O extends { copy: infer F }
+type ViewFns<O, V> = O extends { view: infer F }
   ? keyof F extends never
     ? {}
     : {
-        readonly copy: {
-          readonly [N in keyof F]: F[N] extends (...args: any[]) => infer R
-            ? () => Uint8Array
-            : never;
-        };
+        readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R
+          ? (value: V) => DeepReadonly<R>
+          : never;
       }
   : {};
-export type SemanticValue<K extends string, W extends z.ZodType, O> = Proof<K> &
-  Views<O> &
-  Copies<O>;
-export type MintedValue<K extends string, O> = Proof<K> & Views<O> & Copies<O>;
+type CopyFns<O, V> = O extends { copy: infer F }
+  ? keyof F extends never
+    ? {}
+    : { readonly [N in keyof F]: (value: V) => Uint8Array }
+  : {};
+export type ViewSnapshot<O> = O extends { view: infer F }
+  ? keyof F extends never
+    ? {}
+    : {
+        readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R
+          ? DeepReadonly<R>
+          : never;
+      }
+  : {};
+export type SemanticValue<K extends string, W extends z.ZodType, O> = Proof<K>;
+export type MintedValue<K extends string, O> = Proof<K>;
 export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
   {
     readonly name: K;
-    is(x: unknown): x is SemanticValue<K, W, O>;
-    readonly codec: z.ZodCodec<
-      W,
-      z.ZodType<SemanticValue<K, W, O>, SemanticValue<K, W, O>>
-    >;
-  } & (O extends { allocate: (...args: infer A) => unknown }
-    ? { allocate(...args: A): SemanticValue<K, W, O> }
-    : {})
+    is(x: unknown): x is Proof<K>;
+    readonly codec: z.ZodCodec<W, z.ZodType<Proof<K>, Proof<K>>>;
+    assert(value: unknown): Proof<K>;
+    read(value: Proof<K>): ViewSnapshot<O>;
+    debug(value: Proof<K>): string;
+  } & ViewFns<O, Proof<K>> &
+    CopyFns<O, Proof<K>> &
+    (O extends { allocate: (...args: infer A) => unknown }
+      ? { allocate(...args: A): Proof<K> }
+      : {})
 >;
-export type MintedKind<K extends string, I, E, O> = Readonly<{
-  readonly name: K;
-  is(x: unknown): x is MintedValue<K, O>;
-  mint(input: I): ProducerResult<MintedValue<K, O>, E>;
-}>;
+export type MintedKind<K extends string, I, E, O> = Readonly<
+  {
+    readonly name: K;
+    is(x: unknown): x is Proof<K>;
+    mint(input: I): ProducerResult<Proof<K>, E>;
+    assert(value: unknown): Proof<K>;
+    read(value: Proof<K>): ViewSnapshot<O>;
+    debug(value: Proof<K>): string;
+  } & ViewFns<O, Proof<K>> &
+    CopyFns<O, Proof<K>>
+>;
 export type JsonSchema<W extends z.ZodType> = 0 extends 1 & z.input<W>
   ? ConfigurationError<'Wire schema input must not be any. Use a schema with a specific JSON input type.'>
   : [z.input<W>] extends [JsonValue]
@@ -113,6 +119,9 @@ export type ReservedField =
   | 'seal'
   | 'allocate'
   | 'debug'
+  | 'assert'
+  | 'read'
+  | 'name'
   | 'parts'
   | '__proto__'
   | 'constructor'
@@ -279,6 +288,12 @@ type SealDocumentation<D, A> = [D] extends [undefined]
     : InvalidFinalDocumentation;
 type InvalidFinalDocumentation =
   ConfigurationError<'Documentation must match the final view and copies. Document every member, remove unknown names, and use examples with its output type before calling .seal().'>;
+type ViewCopyClash<O> = O extends { view: infer V; copy: infer C }
+  ? Extract<keyof V, keyof C> extends never
+    ? unknown
+    : ConfigurationError<'A view projection and a copy observation cannot share a name. Replace one of the maps before calling .seal().'>
+  : unknown;
+type SealThis<D, A, O> = SealDocumentation<D, A> & ViewCopyClash<O>;
 
 type Documented<T, D> = D extends undefined ? T : T & { readonly documentation: D };
 /** Configuration only. Call .seal() to create the completed kind. */
@@ -308,7 +323,7 @@ export interface ValueBuilder<
     >,
   ) => ValueBuilder<K, W, P, O, M>;
   readonly seal: (
-    this: SealDocumentation<D, ValueDocumentation<W, O>>,
+    this: SealThis<D, ValueDocumentation<W, O>, O>,
   ) => Documented<ValueKind<K, W, O>, D>;
 }
 /** Configuration only. Call .seal() to create the completed kind. */
@@ -329,6 +344,6 @@ export interface MintedBuilder<K extends string, I, P, E, O = {}, D = undefined>
     metadata: CheckedDocumentation<M, BuilderDocumentation<O, MintedDocumentation<O>>>,
   ) => MintedBuilder<K, I, P, E, O, M>;
   readonly seal: (
-    this: SealDocumentation<D, MintedDocumentation<O>>,
+    this: SealThis<D, MintedDocumentation<O>, O>,
   ) => Documented<MintedKind<K, I, E, O>, D>;
 }

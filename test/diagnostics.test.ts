@@ -174,6 +174,32 @@ B.copy({unknown:():unknown=>"x"});
   assert.equal((output.match(/error TS\d+:/g) ?? []).length, 8, output);
 });
 
+test('ordinary observers require the instance type and seal rejects view/copy clashes', () => {
+  const output = compile(`
+const UserId=defineSeal({key:s=>s,name:'diagnostic/user',schema:z.string()}).view({suffix:s=>s.slice(-6)}).copy({bytes:s=>new TextEncoder().encode(s)}).seal();
+const ProjectId=defineSeal({key:s=>s,name:'diagnostic/project',schema:z.string()}).seal();
+const user=UserId.codec.parse('usr_abcdef');
+const project=ProjectId.codec.parse('prj_abcdef');
+declare const unknownCandidate: unknown;
+UserId.suffix(project);
+UserId.suffix('raw-wire-value');
+UserId.suffix(Promise.resolve(user));
+UserId.read(unknownCandidate);
+UserId.bytes(project);
+UserId.debug(project);
+const PaymentReady=defineMint({name:'diagnostic/pay',mint:(s:string)=>({ok:true as const,value:s})}).view({input:s=>s}).seal();
+PaymentReady.read(PaymentReady.mint('x'));
+defineSeal({name:'diagnostic/clash',schema:z.string(),key:s=>s}).view({bytes:s=>s}).copy({bytes:s=>new TextEncoder().encode(s)}).seal();
+defineMint({name:'diagnostic/clash-mint',mint:(s:string)=>({ok:true as const,value:s})}).copy({bytes:s=>new TextEncoder().encode(s)}).view({bytes:s=>s}).seal();
+`);
+  assert(output.includes('Argument of type'), output);
+  assert(
+    output.includes('A view projection and a copy observation cannot share a name.'),
+    output,
+  );
+  assert.equal((output.match(/error TS\d+:/g) ?? []).length, 9, output);
+});
+
 test('assignability failures print Proof with a construction hint rather than ValueOf', () => {
   const output = compile(`
 const DeviceId=defineSeal({key:parts=>parts,name:'kwa/semantic/NormalizedDeviceId',schema:z.string()}).seal();
@@ -185,7 +211,7 @@ const Other=defineSeal({key:parts=>parts,name:'other/id',schema:z.string()}).sea
 takesDevice(Other.codec.parse('x'));
 `);
   const printed =
-    'Proof<"kwa/semantic/NormalizedDeviceId", "sealed value: do not cast; grep the name to find its definition; construct via .codec.parse() or .mint()">';
+    'Proof<"kwa/semantic/NormalizedDeviceId", "sealed value: do not cast; grep the name to find its definition; construct via .codec.parse() or .mint(); observe via the kind, not the instance">';
   assert(output.includes(printed), output);
   assert(
     output.includes("Argument of type 'string' is not assignable to parameter of type"),
