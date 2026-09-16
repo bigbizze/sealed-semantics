@@ -185,7 +185,7 @@ const Other=defineSeal({key:parts=>parts,name:'other/id',schema:z.string()}).sea
 takesDevice(Other.codec.parse('x'));
 `);
   const printed =
-    'Proof<"kwa/semantic/NormalizedDeviceId", "sealed value: do not cast; grep the name to find its definition; construct via .codec.parse() or .mint()">';
+    'Proof<"kwa/semantic/NormalizedDeviceId", "sealed value: do not cast; grep the name to find its definition; construct via .codec.parse() or .mint(); observe via the kind, not the instance">';
   assert(output.includes(printed), output);
   assert(
     output.includes("Argument of type 'string' is not assignable to parameter of type"),

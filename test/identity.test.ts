@@ -148,7 +148,7 @@ test('semantic Parts snapshots isolate retained aliases and keep caller containe
   assert(!Object.isFrozen(retained));
   assert(!Object.isFrozen(retained.rows));
   retained.rows[0] = 99;
-  assert.equal(value.debug(), '1,2');
+  assert.equal(K.debug(value), '1,2');
   assert.throws(() => K.codec.parse('x'), /semantic identity collision/);
   retained.rows[0] = 1;
   assert.equal(K.codec.parse('x'), value);
@@ -283,8 +283,8 @@ test('plain-object snapshots use canonical string property order', () => {
   });
   const value = S.codec.parse(source);
   assert.equal(semanticOrder, '2|10|4294967294|4294967295|__proto__|a|z');
-  assert.equal(value.debug(), semanticOrder);
-  assert.equal(Object.getPrototypeOf(S.codec.parse(source).debug), Function.prototype);
+  assert.equal(S.debug(value), semanticOrder);
+  assert.equal(Object.getPrototypeOf(S.debug), Function.prototype);
 
   const M = defineMint({
     name: 'identity/canonical-mint',
@@ -295,10 +295,10 @@ test('plain-object snapshots use canonical string property order', () => {
     .seal();
   const minted = M.mint(undefined);
   assert(minted.ok);
-  assert.equal(minted.value.debug(), `true:${semanticOrder}`);
-  assert.equal(order(minted.value.view.snapshot as object), semanticOrder);
+  assert.equal(M.debug(minted.value), `true:${semanticOrder}`);
+  assert.equal(order(M.snapshot(minted.value) as object), semanticOrder);
   assert.equal(
-    Object.getOwnPropertyDescriptor(minted.value.view.snapshot as object, '__proto__')!
+    Object.getOwnPropertyDescriptor(M.snapshot(minted.value) as object, '__proto__')!
       .value,
     'data',
   );
@@ -329,14 +329,14 @@ test('mint snapshots preserve shared children, null prototypes, __proto__ data, 
   assert(!Object.isFrozen(parts));
   assert(!Object.isFrozen(child));
   child.count = 2;
-  const view = result.value.view.snapshot as any;
+  const view = M.snapshot(result.value) as any;
   assert.equal(Object.getPrototypeOf(view), null);
   assert.equal(Object.getOwnPropertyDescriptor(view, '__proto__')!.value, 'data');
   assert.equal(view.child, view.again);
   assert.equal(view.child.count, 1);
   assert.equal(view.leaf, id);
-  assert.equal(result.value.view.leaf, id);
-  assert.equal(result.value.debug(), '1:data');
+  assert.equal(M.leaf(result.value), id);
+  assert.equal(M.debug(result.value), '1:data');
 });
 
 test('snapshot validation preserves prototypes and rejects unsupported properties without getter reads', () => {
@@ -393,8 +393,8 @@ test('snapshot validation preserves prototypes and rejects unsupported propertie
       return `${Object.getPrototypeOf(parts) === null}:${Object.getOwnPropertyDescriptor(parts, '__proto__')?.value ?? ''}:${snapshot.child?.n ?? ''}`;
     },
   }).seal();
-  assert.equal(P.codec.parse('plain').debug(), 'false:data:');
-  assert.equal(P.codec.parse('null').debug(), 'true::1');
+  assert.equal(P.debug(P.codec.parse('plain')), 'false:data:');
+  assert.equal(P.debug(P.codec.parse('null')), 'true::1');
 });
 
 test('collision comparison treats one-to-one alias topology as semantic', () => {
@@ -488,7 +488,7 @@ test('mint success is an event and inspection does not expose Parts or call debu
   );
   assert.equal(debugCalls, 0);
   assert.throws(() => JSON.stringify(a.value), /no external representation/);
-  assert.equal(a.value.debug(), 'SECRET');
+  assert.equal(M.debug(a.value), 'SECRET');
   assert.equal(debugCalls, 1);
 });
 
@@ -536,12 +536,8 @@ test('same-name definitions are independent and foreign diagnostics explain the 
     () => z.encode(C.codec, a as any),
     /other\/id.*different definition \(dup\/id\)/,
   );
-  const get = Object.getOwnPropertyDescriptor(
-    Object.getPrototypeOf(B.codec.parse('x')),
-    'view',
-  )!.get!;
-  assert.throws(() => get.call(a), /view.*dup\/id.*different definition/);
-  assert.equal(a.view.text, 'x');
+  assert.throws(() => B.text(a), /text.*dup\/id.*different definition/);
+  assert.equal(A.text(a), 'x');
   const M = defineMint({
     name: 'dup/mint',
     mint: () => ({ ok: true, value: 1 }),
@@ -554,11 +550,8 @@ test('same-name definitions are independent and foreign diagnostics explain the 
     n = N.mint(undefined);
   assert(m.ok && n.ok);
   assert(!Boolean(N.is(m.value)));
-  assert.throws(
-    () => n.value.debug.call(m.value),
-    /debug.*dup\/mint.*different definition/,
-  );
-  assert.equal(m.value.debug(), 'dup/mint');
+  assert.throws(() => N.debug(m.value), /debug.*dup\/mint.*different definition/);
+  assert.equal(M.debug(m.value), 'dup/mint');
   const symbol = Symbol.for('sealed-semantics.name');
   assert.equal((a as any)[symbol], 'dup/id');
   const descriptor = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(a), symbol)!;

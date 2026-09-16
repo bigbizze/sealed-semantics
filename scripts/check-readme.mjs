@@ -14,6 +14,10 @@ for (const [, target] of readme.matchAll(/\]\(([^)]+)\)/g)) {
     `README link does not exist: ${target}`,
   );
 }
+assert(
+  !/\.view\./.test(readme),
+  'README must not contain instance .view. access; use kind-side observation. Builder .view({ remains allowed.',
+);
 console.log(
   'README links and code fences checked. Package smoke compiles and runs the current walkthrough.',
 );

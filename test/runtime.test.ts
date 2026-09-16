@@ -37,7 +37,7 @@ test('only Zod exposes boundary operations; private brands reject forgery and co
   }
   assert.throws(() => new (value.constructor as any)(), TypeError);
   assert.throws(() => new (value.constructor as any)(Symbol(), {}), TypeError);
-  assert.throws(() => value.debug.call(fake), TypeError);
+  assert.throws(() => UserId.debug(fake), TypeError);
 });
 
 test('primitive kinds infer Parts and validate through all Zod boundary paths', async () => {
@@ -49,7 +49,7 @@ test('primitive kinds infer Parts and validate through all Zod boundary paths', 
     .view({ length: (text) => text.length })
     .seal();
   const a = Id.codec.parse('ab');
-  assert.equal(a.view.length, 2);
+  assert.equal(Id.length(a), 2);
   assert.equal(z.decode(Id.codec, 'ab'), a);
   assert.equal(await Id.codec.parseAsync('ab'), a);
   assert.equal(z.encode(Id.codec, a), 'ab');
@@ -78,8 +78,8 @@ test('schema codecs normalize inputs, validate decoded Parts, and encode nested 
   });
   const decoded = Contract.parse({ user: legacy, addresses: [raw] });
   assert(ContentAddress.is(decoded.addresses[0]));
-  assert(NamespaceId.is(decoded.addresses[0]!.view.namespace));
-  assert(Sha256Digest.is(decoded.addresses[0]!.view.digest));
+  assert(NamespaceId.is(ContentAddress.namespace(decoded.addresses[0]!)));
+  assert(Sha256Digest.is(ContentAddress.digest(decoded.addresses[0]!)));
   assert.deepEqual(z.encode(Contract, decoded), { user: current, addresses: [raw] });
 });
 
@@ -114,7 +114,7 @@ test('Zod refinements and codec issues remain Zod errors in both directions', ()
   assert.equal(z.encode(Positive, Positive.parse('2')), '2');
 });
 
-test('instances, kinds, prototypes, and lazy view facades have frozen surfaces', () => {
+test('instances, kinds, prototypes, and read snapshots have frozen surfaces', () => {
   const Parts = defineSeal({
     name: 'runtime/view',
     key: (p) => p.rows.join(','),
@@ -125,28 +125,23 @@ test('instances, kinds, prototypes, and lazy view facades have frozen surfaces',
   const input = { rows: [1, 2] };
   const value = Parts.codec.parse(input);
   input.rows.push(3);
-  assert.deepEqual(value.view.rows, [1, 2]);
+  assert.deepEqual(Parts.rows(value), [1, 2]);
   assert.throws(() => {
     // @ts-expect-error Views are deeply readonly.
-    value.view.rows.push(4);
+    Parts.rows(value).push(4);
   }, TypeError);
-  assert.deepEqual(value.view.rows, [1, 2]);
-  for (const target of [Parts, value, Object.getPrototypeOf(value), value.view]) {
+  assert.deepEqual(Parts.rows(value), [1, 2]);
+  const snapshot = Parts.read(value);
+  for (const target of [Parts, value, Object.getPrototypeOf(value), snapshot]) {
     assert(Object.isFrozen(target));
     assert(!Reflect.set(target, 'extra', 1));
     assert.throws(() => Object.setPrototypeOf(target, {}), TypeError);
   }
-  assert.equal(value.view, value.view);
-  assert.equal(Object.getPrototypeOf(value.view), null);
-  assert.deepEqual(Object.keys(value.view), ['rows']);
+  assert.equal(Parts.read(value), snapshot);
+  assert.equal(Object.getPrototypeOf(snapshot), null);
+  assert.deepEqual(Object.keys(snapshot), ['rows']);
   assert.deepEqual({ ...value }, {});
-  assert.throws(
-    () =>
-      Object.getOwnPropertyDescriptor(Object.getPrototypeOf(value), 'view')!.get!.call(
-        {},
-      ),
-    TypeError,
-  );
+  assert.throws(() => Parts.rows({}), TypeError);
   for (const attempt of [
     () => JSON.stringify(value),
     () => String(value),
@@ -155,6 +150,8 @@ test('instances, kinds, prototypes, and lazy view facades have frozen surfaces',
   ])
     assert.throws(attempt, /z.encode/);
   assert(!('view' in UserId.codec.parse('usr_0123456789abcdef')));
+  assert(!('view' in value));
+  assert(!('debug' in value));
 });
 
 test('minted construction preserves errors, identity, and producer-owned copies', () => {
@@ -167,7 +164,7 @@ test('minted construction preserves errors, identity, and producer-owned copies'
   assert(!('codec' in PreparedWrite));
   assert(!('encode' in a.value));
   assert.throws(() => JSON.stringify(a.value), /no external representation/);
-  assert.deepEqual(a.value.view.rows, []);
+  assert.deepEqual(PreparedWrite.rows(a.value), []);
   const error = {
     name: 'runtime/rejection',
     reason: 'invalid_input' as const,
@@ -249,6 +246,67 @@ test('one-way transforms require a codec for encoding; async schemas use Zod asy
     .seal();
   const asynchronous = await Async.codec.parseAsync('3');
   assert(Async.is(asynchronous));
-  assert.equal(asynchronous.view.count, 1);
+  assert.equal(Async.count(asynchronous), 1);
   assert.equal(await z.encodeAsync(Async.codec, asynchronous), '3');
+});
+
+test('kind-side observation rejects the forgery matrix and authenticates genuine instances', () => {
+  const K = defineSeal({
+    name: 'runtime/forged',
+    schema: z.string().regex(/^usr_[a-f0-9]{16,}$/),
+    key: (id) => id,
+  })
+    .view({ suffix: (id) => id.slice(-6) })
+    .seal();
+  const G = K.codec.parse('usr_0123456789abcdef');
+  const Other = defineSeal({
+    name: 'runtime/forged',
+    schema: z.string().regex(/^usr_[a-f0-9]{16,}$/),
+    key: (id) => id,
+  })
+    .view({ suffix: (id) => id.slice(-6) })
+    .seal();
+  const observe = (x: unknown) => {
+    assert.throws(() => K.suffix(x), TypeError);
+    assert.throws(() => K.read(x), TypeError);
+    assert.throws(() => K.assert(x), TypeError);
+  };
+  assert(K.is(G));
+  assert.equal(K.suffix(G), 'abcdef');
+  assert.equal(K.read(G).suffix, 'abcdef');
+  assert.equal(K.assert(G), G);
+  assert.equal(z.encode(K.codec, G), 'usr_0123456789abcdef');
+  for (const bad of [
+    {},
+    { view: { suffix: 'x' } },
+    { suffix: 'x' },
+    Object.create(Object.getPrototypeOf(G)),
+    new Proxy(G, {}),
+    structuredClone(G),
+    Other.codec.parse('usr_0123456789abcdef'),
+    null,
+    undefined,
+    1,
+    'usr_0123456789abcdef',
+  ]) {
+    assert(!K.is(bad));
+    observe(bad);
+    if (
+      bad !== null &&
+      bad !== undefined &&
+      typeof bad !== 'string' &&
+      typeof bad !== 'number'
+    )
+      assert(!z.safeEncode(K.codec, bad as any).success);
+  }
+  const Minted = defineMint({
+    name: 'runtime/forged-mint',
+    mint: () => ({ ok: true as const, value: { n: 1 } }),
+  })
+    .view({ n: (p) => p.n })
+    .seal();
+  const minted = Minted.mint(undefined);
+  assert(minted.ok);
+  assert.throws(() => Minted.read(minted), TypeError);
+  assert.equal(Minted.read(minted.value).n, 1);
 });

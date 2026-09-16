@@ -26,14 +26,14 @@ const b = Digest.codec.parse('ab'.repeat(32));
 console.log(a === b); // true: same live semantic value in this definition
 console.log(new Map<Digest, string>([[a, 'stored']]).get(b)); // stored
 
-const x = a.copy.bytes();
-const y = a.copy.bytes();
+const x = Digest.bytes(a);
+const y = Digest.bytes(a);
 console.log(x === y); // false: separate buffers with equal contents
 x[0] = 0;
 console.log(y[0]); // 171: changing x does not change y or the digest
 ```
 
-`copy.bytes()` returns independently owned mutable bytes. Use the seal or its canonical string as a native `Map`/`Set` key. A second copy has a different reference and does not retrieve an entry keyed by the first array.
+`Digest.bytes(digest)` returns independently owned mutable bytes. Use the seal or its canonical string as a native `Map`/`Set` key. A second copy has a different reference and does not retrieve an entry keyed by the first array.
 
 ## Stable byte observations
 
@@ -43,7 +43,7 @@ Changing a returned array cannot affect the snapshot, another caller, or future 
 
 Only genuine `Uint8Array` output is accepted. Buffer output is accepted as byte input because it is a Uint8Array, but Buffer methods and type are not preserved. Subarrays copy only their visible bytes. Shared-memory-backed arrays are rejected, even if their public `buffer` property is overridden. Detached storage is rejected. Ordinary objects, ArrayBuffer, DataView, other typed arrays, dates, maps, sets, strings, functions, and promises are not copy outputs. No generic cloning facility is provided.
 
-The facade is stable, frozen, and bound to the value; a detached method still works. An absent or empty copy declaration exposes no `copy` member. `.docs()`, `.view()`, and `.copy()` may be used in any order before `.seal()`.
+There is no `Kind.copy` namespace and no instance `copy` member. An absent or empty copy declaration exposes no copy functions. `.docs()`, `.view()`, and `.copy()` may be used in any order before `.seal()`. A name cannot be both a view projection and a copy observation.
 
 ## Meaning and ownership
 
@@ -57,4 +57,4 @@ Zod codecs remain the external representation boundary. Views remain stable immu
 
 The first call runs the producer and allocates a private byte snapshot. Every call allocates and fills a fresh Uint8Array. The snapshot remains in memory while its sealed value remains reachable. This storage and copying cost is intentional.
 
-In React, `[digest]` and `[digest.view.hex]` are stable dependencies for an unchanged semantic value. `[digest.copy.bytes()]` creates a different dependency on every render. If a component needs a stable local buffer, it can use `useMemo(() => digest.copy.bytes(), [digest])`; that buffer still belongs to the component and remains mutable. See [framework guidance](frameworks.md).
+In React, `[digest]` and `[Digest.hex(digest)]` are stable dependencies for an unchanged semantic value. `[Digest.bytes(digest)]` creates a different dependency on every render. If a component needs a stable local buffer, it can use `useMemo(() => Digest.bytes(digest), [digest])`; that buffer still belongs to the component and remains mutable. Identity of the seal is `digest`, not the snapshot. See [framework guidance](frameworks.md).

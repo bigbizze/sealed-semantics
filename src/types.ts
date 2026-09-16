@@ -12,10 +12,9 @@ declare const BRAND: unique symbol;
 export interface Proof<
   K extends string,
   Hint extends string =
-    'sealed value: do not cast; grep the name to find its definition; construct via .codec.parse() or .mint()',
+    'sealed value: do not cast; grep the name to find its definition; construct via .codec.parse() or .mint(); observe via the kind, not the instance',
 > {
   readonly [BRAND]: K;
-  debug(): string;
   toJSON(): never;
   valueOf(): never;
   [Symbol.toPrimitive](): never;
@@ -31,17 +30,6 @@ export type ValueOf<
         readonly 'ValueOf requires a completed kind. Call .seal() on the definition first.': never;
       },
 > = Kd extends { is(x: unknown): x is infer V } ? V : never;
-type Views<O> = O extends { view: infer F }
-  ? keyof F extends never
-    ? {}
-    : {
-        readonly view: {
-          readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R
-            ? DeepReadonly<R>
-            : never;
-        };
-      }
-  : {};
 export type CheckedCopies<F> = F & {
   [N in keyof F]: F[N] extends (...args: any[]) => infer R
     ? [R] extends [Uint8Array]
@@ -50,45 +38,63 @@ export type CheckedCopies<F> = F & {
     : unknown;
 } & {
   [
-    N in Extract<keyof F, 'then' | '__proto__' | 'constructor' | 'prototype' | 'toJSON'>
+    N in Extract<keyof F, ReservedField>
   ]: ConfigurationError<'This copy observation name is reserved.'>;
 } & {
   [
     N in Extract<keyof F, symbol>
   ]: ConfigurationError<'Symbol-named copy observations are not supported.'>;
 };
-type Copies<O> = O extends { copy: infer F }
+type ViewFns<O> = O extends { view: infer F }
   ? keyof F extends never
     ? {}
     : {
-        readonly copy: {
-          readonly [N in keyof F]: F[N] extends (...args: any[]) => infer R
-            ? () => Uint8Array
-            : never;
-        };
+        readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R
+          ? (value: unknown) => DeepReadonly<R>
+          : never;
       }
   : {};
-export type SemanticValue<K extends string, W extends z.ZodType, O> = Proof<K> &
-  Views<O> &
-  Copies<O>;
-export type MintedValue<K extends string, O> = Proof<K> & Views<O> & Copies<O>;
+type CopyFns<O> = O extends { copy: infer F }
+  ? keyof F extends never
+    ? {}
+    : { readonly [N in keyof F]: (value: unknown) => Uint8Array }
+  : {};
+export type ViewSnapshot<O> = O extends { view: infer F }
+  ? keyof F extends never
+    ? {}
+    : {
+        readonly [N in keyof F]: F[N] extends (...a: any[]) => infer R
+          ? DeepReadonly<R>
+          : never;
+      }
+  : {};
+export type SemanticValue<K extends string, W extends z.ZodType, O> = Proof<K>;
+export type MintedValue<K extends string, O> = Proof<K>;
 export type ValueKind<K extends string, W extends z.ZodType, O> = Readonly<
   {
     readonly name: K;
-    is(x: unknown): x is SemanticValue<K, W, O>;
-    readonly codec: z.ZodCodec<
-      W,
-      z.ZodType<SemanticValue<K, W, O>, SemanticValue<K, W, O>>
-    >;
-  } & (O extends { allocate: (...args: infer A) => unknown }
-    ? { allocate(...args: A): SemanticValue<K, W, O> }
-    : {})
+    is(x: unknown): x is Proof<K>;
+    readonly codec: z.ZodCodec<W, z.ZodType<Proof<K>, Proof<K>>>;
+    assert(value: unknown): Proof<K>;
+    read(value: unknown): ViewSnapshot<O>;
+    debug(value: unknown): string;
+  } & ViewFns<O> &
+    CopyFns<O> &
+    (O extends { allocate: (...args: infer A) => unknown }
+      ? { allocate(...args: A): Proof<K> }
+      : {})
 >;
-export type MintedKind<K extends string, I, E, O> = Readonly<{
-  readonly name: K;
-  is(x: unknown): x is MintedValue<K, O>;
-  mint(input: I): ProducerResult<MintedValue<K, O>, E>;
-}>;
+export type MintedKind<K extends string, I, E, O> = Readonly<
+  {
+    readonly name: K;
+    is(x: unknown): x is Proof<K>;
+    mint(input: I): ProducerResult<Proof<K>, E>;
+    assert(value: unknown): Proof<K>;
+    read(value: unknown): ViewSnapshot<O>;
+    debug(value: unknown): string;
+  } & ViewFns<O> &
+    CopyFns<O>
+>;
 export type JsonSchema<W extends z.ZodType> = 0 extends 1 & z.input<W>
   ? ConfigurationError<'Wire schema input must not be any. Use a schema with a specific JSON input type.'>
   : [z.input<W>] extends [JsonValue]
@@ -113,6 +119,9 @@ export type ReservedField =
   | 'seal'
   | 'allocate'
   | 'debug'
+  | 'assert'
+  | 'read'
+  | 'name'
   | 'parts'
   | '__proto__'
   | 'constructor'

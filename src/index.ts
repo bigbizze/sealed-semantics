@@ -2,7 +2,7 @@ import type { z } from 'zod';
 import { validateDefinition, validateView, validateCopies } from './definition.js';
 import { documentedKind, type Metadata } from './documentation.js';
 import { captureDefinedAt } from './location.js';
-import { makeSemanticSeal, makeMintedSeal } from './seal.js';
+import { makeSemanticSeal, makeMintedSeal, type SealBridge } from './seal.js';
 import { makeWireCodec, parseCodec } from './zod-codec.js';
 import type {
   ProducerResult,
@@ -31,6 +31,37 @@ export type {
   MintedDocumentation,
 } from './types.js';
 const ok = <T>(value: T): ProducerResult<T, never> => ({ ok: true, value });
+function clashKindMembers(
+  name: string,
+  view: Record<string, unknown>,
+  copy: Record<string, unknown>,
+): void {
+  for (const key of Object.keys(copy)) {
+    if (Object.hasOwn(view, key)) {
+      throw new TypeError(
+        `${name}: kind member "${key}" cannot be both a view projection and a copy observation`,
+      );
+    }
+  }
+}
+function attachKindObservation(
+  result: Record<string, unknown>,
+  name: string,
+  view: Record<string, (parts: any) => unknown>,
+  copy: Record<string, (parts: any) => unknown>,
+  bridge: SealBridge<any>,
+): void {
+  clashKindMembers(name, view, copy);
+  result.assert = (value: unknown) => bridge.assert(value);
+  result.read = (value: unknown) => bridge.readView(value);
+  result.debug = (value: unknown) => bridge.debug(value);
+  for (const key of Object.keys(view)) {
+    result[key] = (value: unknown) => bridge.project(value, key);
+  }
+  for (const key of Object.keys(copy)) {
+    result[key] = (value: unknown) => bridge.copyBytes(value, key);
+  }
+}
 // Each builder captures its configuration. Sealing creates a definition instance.
 function builder(
   complete: (
@@ -120,11 +151,12 @@ export function defineSeal<
       (value) => bridge.read(value) as z.output<W>,
       definedAt,
     );
-    const result = { name, is: bridge.is, codec };
+    const result = { name, is: bridge.is, codec } as Record<string, unknown>;
     if (allocate)
       Object.assign(result, {
         allocate: (...args: A) => parseCodec(codec, allocate(...args)),
       });
+    attachKindObservation(result, name, view, copy, bridge);
     const completed = documentedKind(
       result,
       { semantic: true, view: Object.keys(view), copy: Object.keys(copy) },
@@ -178,7 +210,8 @@ export function defineMint<
         const produced = mint(input);
         return produced.ok ? ok(bridge.seal(produced.value as MintParts<R>)) : produced;
       },
-    };
+    } as Record<string, unknown>;
+    attachKindObservation(result, name, view, copy, bridge);
     const completed = documentedKind(
       result,
       {

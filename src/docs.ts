@@ -93,8 +93,8 @@ export function validateDocumentation(kind: AnyKind, shape: DocumentationShape):
     if (!decoded.success) continue;
     const value: any = decoded.data;
     assert(kind.is(value), foreignValue(kind.name, value, `${label}: docs`));
-    for (const name of shape.view) void (value as any).view[name];
-    for (const name of shape.copy) (value as any).copy[name]();
+    for (const name of shape.view) (kind as any)[name](value);
+    for (const name of shape.copy) (kind as any)[name](value);
     const raw = encodeWire(semantic.codec, value);
     assert.deepEqual(
       raw,

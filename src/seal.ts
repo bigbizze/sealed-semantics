@@ -12,22 +12,34 @@ type SealOps<P> = {
   debug?: ((parts: DeepReadonly<P>) => string) | undefined;
   definedAt?: string | undefined;
 };
-function makeSeal<P>(
-  definitionName: string,
-  ops: SealOps<P>,
-): {
+type ViewSlot = { ready: boolean; cached: unknown; computing: boolean };
+type CopySlot = { snapshot?: Uint8Array; computing: boolean };
+export type SealBridge<P> = {
   is: (x: unknown) => boolean;
   read: (x: unknown) => DeepReadonly<P>;
   seal: (parts: DeepReadonly<P>) => object;
-} {
+  assert: (x: unknown) => object;
+  readView: (x: unknown) => object;
+  debug: (x: unknown) => string;
+  project: (x: unknown, name: string) => unknown;
+  copyBytes: (x: unknown, name: string) => Uint8Array;
+};
+function makeSeal<P>(definitionName: string, ops: SealOps<P>): SealBridge<P> {
   const view = Object.entries(ops.view ?? {});
   const copies = Object.entries(ops.copy ?? {});
+  const projects = new Map(view);
+  const observers = new Map(copies);
   const definedAt = ops.definedAt;
   const fail = (message: string): never => {
     throw new TypeError(locateMessage(message, definitionName, definedAt));
   };
   let hasBrand!: (x: unknown) => x is Sealed;
   let unseal!: (x: unknown, operation?: string) => DeepReadonly<P>;
+  let assertFn!: (x: unknown) => object;
+  let readViewFn!: (x: unknown) => object;
+  let debugFn!: (x: unknown) => string;
+  let projectFn!: (x: unknown, name: string) => unknown;
+  let copyBytesFn!: (x: unknown, name: string) => Uint8Array;
   const trap = (): never => {
     return fail(
       ops.semantic
@@ -37,8 +49,9 @@ function makeSeal<P>(
   };
   class Sealed extends SealedLeaf {
     #parts: DeepReadonly<P>;
-    #view?: Readonly<Record<string, unknown>>;
-    #copy?: Readonly<Record<string, () => unknown>>;
+    #viewSlots?: Record<string, ViewSlot>;
+    #viewSnapshot?: object;
+    #copySlots?: Record<string, CopySlot>;
     constructor(token: typeof CONSTRUCT, parts: DeepReadonly<P>) {
       if (token !== CONSTRUCT) fail(`${definitionName} cannot be constructed directly`);
       super(LEAF_TOKEN);
@@ -46,94 +59,99 @@ function makeSeal<P>(
       Object.freeze(this);
     }
     static {
-      if (copies.length)
-        Object.defineProperty(this.prototype, 'copy', {
-          get: function (this: Sealed) {
-            unseal(this, 'copy');
-            if (!this.#copy) {
-              const facade = Object.create(null) as Record<string, () => unknown>;
-              for (const [name, observe] of copies) {
-                let computing = false;
-                let snapshot: Uint8Array | undefined;
-                Object.defineProperty(facade, name, {
-                  enumerable: true,
-                  value: () => {
-                    if (snapshot !== undefined) return new Uint8Array(snapshot);
-                    if (computing)
-                      fail(
-                        `${definitionName}.copy.${name}: recursive copy observation access`,
-                      );
-                    computing = true;
-                    try {
-                      const produced = observe(unseal(this, `copy.${name}`));
-                      try {
-                        snapshot = snapshotBytes(
-                          produced,
-                          `${definitionName}.copy.${name}`,
-                        );
-                      } catch (error) {
-                        return locateError(error, definitionName, definedAt);
-                      }
-                      return new Uint8Array(snapshot);
-                    } finally {
-                      computing = false;
-                    }
-                  },
-                });
-              }
-              this.#copy = Object.freeze(facade);
-            }
-            return this.#copy;
-          },
-        });
-      if (view.length)
-        Object.defineProperty(this.prototype, 'view', {
-          get: function (this: Sealed) {
-            unseal(this, 'view');
-            if (!this.#view) {
-              const facade = Object.create(null) as Record<string, unknown>;
-              for (const [name, project] of view) {
-                let ready = false;
-                let cached: unknown;
-                let computing = false;
-                Object.defineProperty(facade, name, {
-                  enumerable: true,
-                  get: () => {
-                    if (ready) return cached;
-                    if (computing)
-                      fail(
-                        `${definitionName}.view.${name}: recursive projection access`,
-                      );
-                    computing = true;
-                    try {
-                      const produced = project(unseal(this, `view.${name}`));
-                      try {
-                        cached = immutableView(
-                          produced,
-                          `${definitionName}.view.${name}`,
-                        );
-                      } catch (error) {
-                        return locateError(error, definitionName, definedAt);
-                      }
-                      ready = true;
-                      return cached;
-                    } finally {
-                      computing = false;
-                    }
-                  },
-                });
-              }
-              this.#view = Object.freeze(facade);
-            }
-            return this.#view;
-          },
-        });
       hasBrand = (x: unknown): x is Sealed =>
         typeof x === 'object' && x !== null && #parts in x;
       unseal = (x: unknown, operation = 'unseal'): DeepReadonly<P> => {
         if (!hasBrand(x))
           throw new TypeError(foreignValue(definitionName, x, operation, definedAt));
         return x.#parts;
+      };
+      const viewSlots = (instance: Sealed): Record<string, ViewSlot> => {
+        if (!instance.#viewSlots) {
+          const slots = Object.create(null) as Record<string, ViewSlot>;
+          for (const [name] of view)
+            slots[name] = { ready: false, cached: undefined, computing: false };
+          instance.#viewSlots = slots;
+        }
+        return instance.#viewSlots;
+      };
+      const cachedViewGet = (instance: Sealed, name: string): unknown => {
+        const slot = viewSlots(instance)[name]!;
+        if (slot.ready) return slot.cached;
+        if (slot.computing)
+          fail(`${definitionName}.${name}: recursive projection access`);
+        const project = projects.get(name);
+        if (!project) return fail(`${definitionName}: unknown projection "${name}"`);
+        slot.computing = true;
+        try {
+          const produced = project(instance.#parts);
+          try {
+            slot.cached = immutableView(produced, `${definitionName}.${name}`);
+          } catch (error) {
+            return locateError(error, definitionName, definedAt);
+          }
+          slot.ready = true;
+          return slot.cached;
+        } finally {
+          slot.computing = false;
+        }
+      };
+      const copySlots = (instance: Sealed): Record<string, CopySlot> => {
+        if (!instance.#copySlots) {
+          const slots = Object.create(null) as Record<string, CopySlot>;
+          for (const [name] of copies) slots[name] = { computing: false };
+          instance.#copySlots = slots;
+        }
+        return instance.#copySlots;
+      };
+      const cachedCopyGet = (instance: Sealed, name: string): Uint8Array => {
+        const slot = copySlots(instance)[name]!;
+        if (slot.snapshot !== undefined) return new Uint8Array(slot.snapshot);
+        if (slot.computing)
+          fail(`${definitionName}.${name}: recursive copy observation access`);
+        const observe = observers.get(name);
+        if (!observe)
+          return fail(`${definitionName}: unknown copy observation "${name}"`);
+        slot.computing = true;
+        try {
+          const produced = observe(instance.#parts);
+          try {
+            slot.snapshot = snapshotBytes(produced, `${definitionName}.${name}`);
+          } catch (error) {
+            return locateError(error, definitionName, definedAt);
+          }
+          return new Uint8Array(slot.snapshot);
+        } finally {
+          slot.computing = false;
+        }
+      };
+      assertFn = (x: unknown) => {
+        unseal(x, 'assert');
+        return x as object;
+      };
+      readViewFn = (x: unknown) => {
+        unseal(x, 'read');
+        const instance = x as Sealed;
+        if (instance.#viewSnapshot) return instance.#viewSnapshot;
+        for (const [name] of view) cachedViewGet(instance, name);
+        const snapshot = Object.create(null) as Record<string, unknown>;
+        const slots = viewSlots(instance);
+        for (const [name] of view) snapshot[name] = slots[name]!.cached;
+        Object.freeze(snapshot);
+        instance.#viewSnapshot = snapshot;
+        return snapshot;
+      };
+      debugFn = (x: unknown) => {
+        const parts = unseal(x, 'debug');
+        return ops.debug ? ops.debug(parts) : definitionName;
+      };
+      projectFn = (x: unknown, name: string) => {
+        unseal(x, name);
+        return cachedViewGet(x as Sealed, name);
+      };
+      copyBytesFn = (x: unknown, name: string) => {
+        unseal(x, name);
+        return cachedCopyGet(x as Sealed, name);
       };
     }
     get [NAME_LABEL](): string {
@@ -149,10 +167,6 @@ function makeSeal<P>(
     get [Symbol.toStringTag](): string {
       unseal(this, 'inspection');
       return `Sealed<${definitionName}>`;
-    }
-    debug(): string {
-      const p = unseal(this, 'debug');
-      return ops.debug ? ops.debug(p) : definitionName;
     }
     toJSON(): never {
       return trap();
@@ -170,6 +184,11 @@ function makeSeal<P>(
     is: hasBrand,
     read: unseal,
     seal: (parts: DeepReadonly<P>) => new Sealed(CONSTRUCT, parts),
+    assert: assertFn,
+    readView: readViewFn,
+    debug: debugFn,
+    project: projectFn,
+    copyBytes: copyBytesFn,
   };
 }
 

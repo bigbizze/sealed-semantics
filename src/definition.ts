@@ -12,6 +12,9 @@ const reservedFields = new Set([
   'seal',
   'allocate',
   'debug',
+  'assert',
+  'read',
+  'name',
   'parts',
   '__proto__',
   'constructor',
@@ -108,7 +111,7 @@ export function validateView(projections: unknown): void {
 export function validateCopies(copies: unknown): void {
   const value = record(copies, 'copy');
   for (const name of Object.keys(value)) {
-    if (['then', '__proto__', 'constructor', 'prototype', 'toJSON'].includes(name))
+    if (reservedFields.has(name))
       throw new TypeError(`Copy observation name "${name}" is reserved.`);
     callback(value, name, 'copy');
   }

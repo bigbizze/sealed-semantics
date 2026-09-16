@@ -10,7 +10,7 @@ assertValueLaws(UserId, {
 assertMintedLaws(Plan, { validInput: acceptedPlanInputs });
 ```
 
-Semantic laws check repeated-decode identity, codec round-trip identity, stable encoding, native Map/Set lookup, private brands, frozen surfaces, serialization traps, and stable deeply immutable views over frozen private Parts snapshots. `allocateArgs` is available only when the kind has an allocator.
+Semantic laws check repeated-decode identity, codec round-trip identity, stable encoding, native Map/Set lookup, private brands, frozen surfaces, serialization traps, `Kind.assert(instance) === instance`, `Kind.read` identity, and `Kind[k](instance) === Kind.read(instance)[k]` for each view key. A duck-typed `{ view: snapshot }` throws when passed to a projection. `allocateArgs` is available only when the kind has an allocator.
 
 Minted laws check distinct successful events and the same construction and observation invariants. Genuine local sealed leaves require no extra configuration. Forged and foreign-package leaves are rejected. Mint errors can have any producer-owned type; the generic harness checks success without inspecting domain error properties.
 
@@ -18,7 +18,7 @@ A sealed value belongs to exactly one completed definition instance. Same-label 
 
 The harness samples behavior. It does not prove that a key captures the intended domain semantics, that producers normalize correctly, or that checks establish external facts. Production collision assertions protect against different supported Parts snapshots sharing a live key. Add domain-specific examples for normalization and intended identity.
 
-For configured copy observations, laws check the stable bound facade, equal bytes across calls, independent arrays and backing buffers, and isolation after mutating every byte of one result. Semantic laws also read a fresh copy through a second decode of the same input and through configured normalized aliases, after confirming reference identity. No consumer-supplied copy checks or mutators are needed. Focused runtime tests also verify compute-once behavior and isolation from retained producer arrays. These checks do not prove semantic equivalence or producer purity.
+For configured copy observations, laws check `Kind.bytes(value)` (or the configured name): equal bytes across calls, independent arrays and backing buffers, and isolation after mutating every byte of one result. Semantic laws also read a fresh copy through a second decode of the same input and through configured normalized aliases, after confirming reference identity. No consumer-supplied copy checks or mutators are needed. Focused runtime tests also verify compute-once behavior and isolation from retained producer arrays. These checks do not prove semantic equivalence or producer purity.
 
 ## Testing key collisions
 
