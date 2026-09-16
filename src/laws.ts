@@ -4,7 +4,7 @@ import * as fc from 'fast-check';
 import type { z } from 'zod';
 import { encodeWire, parseCodec } from './zod-codec.js';
 import { foreignValue, isSealed } from './sealed-leaf.js';
-import { kindObservation } from './documentation.js';
+import { kindObservation, type KindObservation } from './documentation.js';
 import type { AnyKind, ProducerResult, Proof, ConfigurationError } from './types.js';
 
 type Semantic = AnyKind & {
@@ -36,8 +36,16 @@ type Checked<P, A> = P & {
   >;
 };
 
+function observationOf(kind: AnyKind): KindObservation {
+  const meta = kindObservation(kind);
+  if (meta) return meta;
+  throw new TypeError(
+    `${kind.name}: law harness requires observation metadata from this installed package copy. The kind may come from another sealed-semantics installation, or is not a completed kind.`,
+  );
+}
+
 function copies(kind: AnyKind, value: any, equivalent: any): void {
-  for (const name of kindObservation(kind)?.copy ?? []) {
+  for (const name of observationOf(kind).copy) {
     const observe = (kind as any)[name] as (x: unknown) => Uint8Array;
     const first = observe(value);
     const second = observe(value);
@@ -96,7 +104,7 @@ function observations(kind: Semantic | Minted, value: any): void {
   assert(Object.isFrozen(snapshot));
   assert.equal(Object.getPrototypeOf(snapshot), null);
   assertFrozenGraph(snapshot, `${kind.name}.read`);
-  for (const name of kindObservation(kind)?.view ?? Object.keys(snapshot)) {
+  for (const name of observationOf(kind).view) {
     const project = (kind as any)[name] as (x: unknown) => unknown;
     assert.equal(project(value), (snapshot as any)[name], `${name} must match read`);
     assert.equal(project(value), project(value), `${name} must be stable`);
@@ -125,6 +133,7 @@ export function assertValueLaws<
   K extends Semantic,
   const O extends ValueLawOptions<NoInfer<K>> & Record<keyof O, unknown>,
 >(kind: K, options: Checked<O, ValueLawOptions<K>>): void {
+  observationOf(kind);
   const check = (raw: z.input<K['codec']>) => {
     const a = parseCodec(kind.codec, raw);
     const repeated = parseCodec(kind.codec, raw);
@@ -163,6 +172,7 @@ export function assertMintedLaws<
   K extends Minted,
   const O extends MintedLawOptions<NoInfer<K>> & Record<keyof O, unknown>,
 >(kind: K, options: Checked<O, MintedLawOptions<K>>): void {
+  observationOf(kind);
   fc.assert(
     fc.property(options.validInput, (input) => {
       const a = kind.mint(input),

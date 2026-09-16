@@ -123,3 +123,73 @@ test('copy laws reject invalid runtime output from a producer', () => {
       /copy.bytes.*must return a genuine Uint8Array/.test(String(error.cause)),
   );
 });
+
+test('law harness rejects missing observation metadata instead of skipping copy checks', async () => {
+  let localCalls = 0;
+  const Local = defineSeal({
+    name: 'law/missing-metadata',
+    schema: z.string(),
+    key: (s) => s,
+  })
+    .copy({
+      bytes: () => {
+        localCalls++;
+        return new Uint32Array([1, 2]);
+      },
+    } as any)
+    .seal();
+  const stripped = { ...Local };
+  assert.throws(
+    () => assertValueLaws(stripped as any, { validWire: fc.constant('x') }),
+    /observation metadata from this installed package copy/,
+  );
+  assert.throws(
+    () =>
+      assertMintedLaws(
+        {
+          ...defineMint({ name: 'law/missing-mint', mint: () => ok(1) }).seal(),
+        } as any,
+        {
+          validInput: fc.constant(undefined),
+        },
+      ),
+    /observation metadata from this installed package copy/,
+  );
+  assert.equal(localCalls, 0);
+
+  const { cpSync, mkdtempSync, rmSync, symlinkSync } = await import('node:fs');
+  const { tmpdir } = await import('node:os');
+  const { join, resolve } = await import('node:path');
+  const { pathToFileURL } = await import('node:url');
+  const dir = mkdtempSync(join(tmpdir(), 'sealed-laws-copy-'));
+  try {
+    cpSync(join(process.cwd(), 'src'), join(dir, 'src'), { recursive: true });
+    symlinkSync(resolve('node_modules'), join(dir, 'node_modules'), 'dir');
+    const foreign = await import(pathToFileURL(join(dir, 'src', 'index.ts')).href);
+    let foreignCalls = 0;
+    const Foreign = foreign
+      .defineSeal({
+        name: 'law/foreign-copy',
+        schema: z.string(),
+        key: (s: string) => s,
+      })
+      .copy({
+        bytes: () => {
+          foreignCalls++;
+          return new Uint32Array([1, 2]);
+        },
+      })
+      .seal();
+    assert.throws(
+      () => assertValueLaws(Foreign, { validWire: fc.constant('x') }),
+      /observation metadata from this installed package copy/,
+    );
+    assert.equal(foreignCalls, 0);
+    assert.throws(
+      () => Foreign.bytes(Foreign.codec.parse('x')),
+      /must return a genuine Uint8Array/,
+    );
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

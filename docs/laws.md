@@ -18,6 +18,8 @@ A sealed value belongs to exactly one completed definition instance. Same-label 
 
 The harness samples behavior. It does not prove that a key captures the intended domain semantics, that producers normalize correctly, or that checks establish external facts. Production collision assertions protect against different supported Parts snapshots sharing a live key. Add domain-specific examples for normalization and intended identity.
 
+The harness requires observation metadata from the same installed package copy as the imported `sealed-semantics/laws` entry. A kind from another installation, or any value that is not a completed kind, throws instead of skipping configured copy and view checks.
+
 For configured copy observations, laws check `Kind.bytes(value)` (or the configured name): equal bytes across calls, independent arrays and backing buffers, and isolation after mutating every byte of one result. Semantic laws also read a fresh copy through a second decode of the same input and through configured normalized aliases, after confirming reference identity. No consumer-supplied copy checks or mutators are needed. Focused runtime tests also verify compute-once behavior and isolation from retained producer arrays. These checks do not prove semantic equivalence or producer purity.
 
 ## Testing key collisions
@@ -35,17 +37,20 @@ import { defineSeal } from 'sealed-semantics';
 const Coordinate = defineSeal({
   name: 'test/coordinate',
   schema: z.object({ lat: z.number(), lng: z.number() }),
-  key: p => `${p.lat}:${p.lng}`,
+  key: (p) => `${p.lat}:${p.lng}`,
 }).seal();
 const coordinates = fc.record({
   lat: fc.integer({ min: -90, max: 90 }),
   lng: fc.integer({ min: -180, max: 180 }),
 });
-fc.assert(fc.property(coordinates, coordinates, (left, right) => {
-  const a = Coordinate.codec.parse(left);
-  const b = Coordinate.codec.parse(right);
-  assert(Coordinate.is(a) && Coordinate.is(b));
-}), { numRuns: 1_000 });
+fc.assert(
+  fc.property(coordinates, coordinates, (left, right) => {
+    const a = Coordinate.codec.parse(left);
+    const b = Coordinate.codec.parse(right);
+    assert(Coordinate.is(a) && Coordinate.is(b));
+  }),
+  { numRuns: 1_000 },
+);
 ```
 
 In an application test, import the real definition instead of redefining it. This recipe fails when a sampled pair triggers the guard; fast-check reports and shrinks the failing inputs. Keep explicit regression pairs for known collisions. Random sampling can miss rare cases and does not prove mathematical injectivity. Normalized aliases that produce the same canonical Parts are valid, not collisions.
