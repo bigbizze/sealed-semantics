@@ -5,6 +5,17 @@ export type DocumentationShape = Readonly<{
   view: readonly string[];
   copy: readonly string[];
 }>;
+export const KIND_OBSERVATION = Symbol('sealed-semantics.observation');
+export type KindObservation = Readonly<{
+  view: readonly string[];
+  copy: readonly string[];
+}>;
+export function kindObservation(kind: object): KindObservation | undefined {
+  const meta = (kind as Record<typeof KIND_OBSERVATION, KindObservation | undefined>)[
+    KIND_OBSERVATION
+  ];
+  return meta;
+}
 type MemberDocs = Readonly<
   Record<string, { readonly description: string; readonly example?: unknown }>
 >;
@@ -60,5 +71,12 @@ export function documentedKind<T extends object>(
       enumerable: true,
     });
   }
+  Object.defineProperty(result, KIND_OBSERVATION, {
+    value: Object.freeze({
+      view: Object.freeze(shape.view.slice()),
+      copy: Object.freeze(shape.copy.slice()),
+    }),
+    enumerable: false,
+  });
   return Object.freeze(result);
 }

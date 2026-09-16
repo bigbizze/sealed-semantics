@@ -162,10 +162,30 @@ test('docs and view work in either order and seal completes both factories', () 
   assert.equal(retried.text(retried.codec.parse('abc')), 'abc');
   assert.throws(
     () =>
-      defineSeal({ name: 'definition/clash', schema: z.string(), key: (s) => s })
-        .view({ bytes: (s) => s })
-        .copy({ bytes: (s) => new TextEncoder().encode(s) })
-        .seal(),
+      (
+        defineSeal({ name: 'definition/clash', schema: z.string(), key: (s) => s })
+          .view({ bytes: (s) => s })
+          .copy({ bytes: (s) => new TextEncoder().encode(s) }) as any
+      ).seal(),
     /kind member "bytes" cannot be both a view projection and a copy observation/,
   );
+  assert.throws(
+    () =>
+      (
+        defineMint({ name: 'definition/clash-mint', mint: (s: string) => ok(s) })
+          .copy({ bytes: (s) => new TextEncoder().encode(s) })
+          .view({ bytes: (s) => s }) as any
+      ).seal(),
+    /kind member "bytes" cannot be both a view projection and a copy observation/,
+  );
+  const resolved = defineSeal({
+    name: 'definition/clash-resolved',
+    schema: z.string(),
+    key: (s) => s,
+  })
+    .view({ bytes: (s) => s })
+    .copy({ bytes: (s) => new TextEncoder().encode(s) })
+    .view({ text: (s) => s })
+    .seal();
+  assert.equal(resolved.text(resolved.codec.parse('abc')), 'abc');
 });

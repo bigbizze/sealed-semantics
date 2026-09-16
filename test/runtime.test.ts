@@ -141,7 +141,10 @@ test('instances, kinds, prototypes, and read snapshots have frozen surfaces', ()
   assert.equal(Object.getPrototypeOf(snapshot), null);
   assert.deepEqual(Object.keys(snapshot), ['rows']);
   assert.deepEqual({ ...value }, {});
-  assert.throws(() => Parts.rows({}), TypeError);
+  assert.throws(
+    () => (Parts.rows as (value: unknown) => readonly number[])({}),
+    TypeError,
+  );
   for (const attempt of [
     () => JSON.stringify(value),
     () => String(value),
@@ -266,15 +269,31 @@ test('kind-side observation rejects the forgery matrix and authenticates genuine
   })
     .view({ suffix: (id) => id.slice(-6) })
     .seal();
-  const observe = (x: unknown) => {
-    assert.throws(() => K.suffix(x), TypeError);
-    assert.throws(() => K.read(x), TypeError);
-    assert.throws(() => K.assert(x), TypeError);
+  const observe = (kind: { assert(x: unknown): unknown }, x: unknown) => {
+    assert.throws(() => (kind as any).read(x), TypeError);
+    assert.throws(() => (kind as any).debug(x), TypeError);
+    assert.throws(() => kind.assert(x), TypeError);
+    if ('suffix' in kind) assert.throws(() => (kind as any).suffix(x), TypeError);
+    if ('n' in kind) assert.throws(() => (kind as any).n(x), TypeError);
+    if ('bytes' in kind) assert.throws(() => (kind as any).bytes(x), TypeError);
   };
+  const Bytes = defineSeal({
+    name: 'runtime/forged-bytes',
+    schema: z.string(),
+    key: (id) => id,
+  })
+    .copy({ bytes: (id) => new TextEncoder().encode(id) })
+    .seal();
+  const bytesValue = Bytes.codec.parse('usr_0123456789abcdef');
   assert(K.is(G));
   assert.equal(K.suffix(G), 'abcdef');
   assert.equal(K.read(G).suffix, 'abcdef');
   assert.equal(K.assert(G), G);
+  assert.equal(K.debug(G), 'runtime/forged');
+  assert.deepEqual(
+    Bytes.bytes(bytesValue),
+    new TextEncoder().encode('usr_0123456789abcdef'),
+  );
   assert.equal(z.encode(K.codec, G), 'usr_0123456789abcdef');
   for (const bad of [
     {},
@@ -290,7 +309,8 @@ test('kind-side observation rejects the forgery matrix and authenticates genuine
     'usr_0123456789abcdef',
   ]) {
     assert(!K.is(bad));
-    observe(bad);
+    observe(K, bad);
+    observe(Bytes, bad);
     if (
       bad !== null &&
       bad !== undefined &&
@@ -304,9 +324,31 @@ test('kind-side observation rejects the forgery matrix and authenticates genuine
     mint: () => ({ ok: true as const, value: { n: 1 } }),
   })
     .view({ n: (p) => p.n })
+    .copy({ bytes: () => new Uint8Array([1, 2]) })
     .seal();
   const minted = Minted.mint(undefined);
   assert(minted.ok);
-  assert.throws(() => Minted.read(minted), TypeError);
+  assert.throws(() => (Minted.read as (x: unknown) => unknown)(minted), TypeError);
+  assert.throws(() => (Minted.debug as (x: unknown) => unknown)(minted), TypeError);
+  assert.throws(() => (Minted.n as (x: unknown) => unknown)(minted), TypeError);
+  assert.throws(() => (Minted.bytes as (x: unknown) => unknown)(minted), TypeError);
   assert.equal(Minted.read(minted.value).n, 1);
+  assert.equal(Minted.n(minted.value), 1);
+  assert.equal(Minted.assert(minted.value), minted.value);
+  assert.equal(Minted.debug(minted.value), 'runtime/forged-mint');
+  assert.deepEqual(Minted.bytes(minted.value), new Uint8Array([1, 2]));
+  for (const bad of [
+    {},
+    { view: { n: 1 } },
+    minted,
+    Object.create(Object.getPrototypeOf(minted.value)),
+    new Proxy(minted.value, {}),
+    structuredClone(minted.value),
+    null,
+    undefined,
+    1,
+  ]) {
+    assert(!Minted.is(bad));
+    observe(Minted, bad);
+  }
 });

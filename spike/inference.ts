@@ -511,3 +511,44 @@ const NoCopies = defineSeal({
 }).seal();
 // @ts-expect-error No copy observations were declared.
 NoCopies.bytes(NoCopies.codec.parse('x'));
+declare const unknownCandidate: unknown;
+Id.is(unknownCandidate);
+const asserted = Id.assert(unknownCandidate);
+type Asserted = Assert<Equal<typeof asserted, Id>>;
+// @ts-expect-error Ordinary observation requires this kind's instance.
+Id.length(Other.codec.parse('x'));
+// @ts-expect-error Ordinary observation does not accept raw wire data.
+Id.length('x');
+// @ts-expect-error Ordinary observation does not accept a Promise.
+Id.length(Promise.resolve(id));
+// @ts-expect-error read requires a genuine instance, not unknown.
+Id.read(unknownCandidate);
+// @ts-expect-error debug requires a genuine instance.
+Id.debug(Other.codec.parse('x'));
+// @ts-expect-error copy requires this kind's instance.
+CopyExample.bytes(id);
+// @ts-expect-error read does not accept a mint result wrapper.
+Payment.read(Payment.mint('x'));
+// @ts-expect-error A view projection and a copy observation cannot share a name.
+defineSeal({ name: 'types/view-copy-clash', schema: z.string(), key: (s) => s })
+  .view({ bytes: (s) => s })
+  .copy({ bytes: (s) => new TextEncoder().encode(s) })
+  .seal();
+// @ts-expect-error A view projection and a copy observation cannot share a name.
+defineMint({
+  name: 'types/view-copy-clash-mint',
+  mint: (s: string) => ({ ok: true as const, value: s }),
+})
+  .copy({ bytes: (s) => new TextEncoder().encode(s) })
+  .view({ bytes: (s) => s })
+  .seal();
+const resolvedClash = defineSeal({
+  name: 'types/view-copy-resolved',
+  schema: z.string(),
+  key: (s) => s,
+})
+  .view({ bytes: (s) => s })
+  .copy({ bytes: (s) => new TextEncoder().encode(s) })
+  .view({ text: (s) => s })
+  .seal();
+const resolvedText: string = resolvedClash.text(resolvedClash.codec.parse('x'));

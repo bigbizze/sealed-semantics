@@ -10,7 +10,7 @@ assertValueLaws(UserId, {
 assertMintedLaws(Plan, { validInput: acceptedPlanInputs });
 ```
 
-Semantic laws check repeated-decode identity, codec round-trip identity, stable encoding, native Map/Set lookup, private brands, frozen surfaces, serialization traps, `Kind.assert(instance) === instance`, `Kind.read` identity, and `Kind[k](instance) === Kind.read(instance)[k]` for each view key. A duck-typed `{ view: snapshot }` throws when passed to a projection. `allocateArgs` is available only when the kind has an allocator.
+Semantic laws check repeated-decode identity, codec round-trip identity, stable encoding, native Map/Set lookup, private brands, frozen surfaces, serialization traps, `Object.is(Kind.assert(instance), instance)`, `Kind.read` identity, and `Object.is(Kind[k](instance), Kind.read(instance)[k])` for each view key. A duck-typed `{ view: snapshot }` throws when passed to a projection. `allocateArgs` is available only when the kind has an allocator.
 
 Minted laws check distinct successful events and the same construction and observation invariants. Genuine local sealed leaves require no extra configuration. Forged and foreign-package leaves are rejected. Mint errors can have any producer-owned type; the generic harness checks success without inspecting domain error properties.
 

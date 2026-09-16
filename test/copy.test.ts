@@ -40,7 +40,10 @@ test('copy observations snapshot once and isolate producer and consumer storage'
   assert.equal(K.text(value), 'abc');
   assert.equal(z.encode(K.codec, value), 'abc');
   assert.throws(() => JSON.stringify(value));
-  assert.throws(() => K.bytes({}), /bytes.*expected a sealed/);
+  assert.throws(
+    () => (K.bytes as (value: unknown) => Uint8Array)({}),
+    /bytes.*expected a sealed/,
+  );
 });
 
 test('each mint event and observation has its own lazy snapshot, including empty bytes', () => {

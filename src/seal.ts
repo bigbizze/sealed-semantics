@@ -2,7 +2,12 @@ import { snapshotBytes } from './copy.js';
 import { makeInterner } from './interner.js';
 import { locateError, locateMessage } from './location.js';
 import { NAME_LABEL, foreignValue, SealedLeaf, LEAF_TOKEN } from './sealed-leaf.js';
-import { sameParts, immutableView, snapshotData } from './structure.js';
+import {
+  sameParts,
+  immutableView,
+  snapshotData,
+  registerOwnedSnapshot,
+} from './structure.js';
 import type { DeepReadonly, SemanticKey } from './types.js';
 const CONSTRUCT: unique symbol = Symbol('sealed-semantics/construct');
 type SealOps<P> = {
@@ -137,8 +142,7 @@ function makeSeal<P>(definitionName: string, ops: SealOps<P>): SealBridge<P> {
         const snapshot = Object.create(null) as Record<string, unknown>;
         const slots = viewSlots(instance);
         for (const [name] of view) snapshot[name] = slots[name]!.cached;
-        Object.freeze(snapshot);
-        instance.#viewSnapshot = snapshot;
+        instance.#viewSnapshot = registerOwnedSnapshot(snapshot);
         return snapshot;
       };
       debugFn = (x: unknown) => {

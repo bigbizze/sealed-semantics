@@ -82,6 +82,7 @@ test('view retries after evaluation or validation failure without caching invali
 
 test('read forces every projection and does not return a partial snapshot on failure', () => {
   let goodCalls = 0;
+  let badCalls = 0;
   const K = defineMint({
     name: 'view/read-partial',
     mint: () => ({ ok: true, value: 1 }),
@@ -92,7 +93,9 @@ test('read forces every projection and does not return a partial snapshot on fai
         return 1;
       },
       bad: () => {
-        throw new Error('blocked');
+        badCalls++;
+        if (badCalls === 1) throw new Error('blocked');
+        return 2;
       },
     })
     .seal();
@@ -101,8 +104,38 @@ test('read forces every projection and does not return a partial snapshot on fai
   assert.throws(() => K.read(r.value), /blocked/);
   assert.equal(K.good(r.value), 1);
   assert.equal(goodCalls, 1);
-  assert.throws(() => K.read(r.value), /blocked/);
+  const snapshot = K.read(r.value);
+  assert.equal(snapshot.good, 1);
+  assert.equal(snapshot.bad, 2);
+  assert.equal(K.read(r.value), snapshot);
   assert.equal(goodCalls, 1);
+  assert.equal(badCalls, 2);
+});
+
+test('whole-read snapshots are owned and reused across projections', () => {
+  const UserId = defineSeal({
+    name: 'view/read-reuse-id',
+    schema: z.string(),
+    key: (id) => id,
+  })
+    .view({ suffix: (id) => id.slice(-6) })
+    .seal();
+  const owner = UserId.codec.parse('usr_abcdef');
+  const Holder = defineMint({
+    name: 'view/read-reuse-holder',
+    mint: () => ({ ok: true as const, value: { owner } }),
+  })
+    .view({
+      left: (p) => UserId.read(p.owner),
+      right: (p) => UserId.read(p.owner),
+    })
+    .seal();
+  const held = Holder.mint(undefined);
+  assert(held.ok);
+  const read = UserId.read(owner);
+  assert.equal(Holder.left(held.value), read);
+  assert.equal(Holder.right(held.value), read);
+  assert.equal(Holder.left(held.value), Holder.right(held.value));
 });
 
 test('unsupported view outputs fail on first access without executing accessors or freezing partial graphs', () => {
@@ -277,7 +310,16 @@ test('duck-typed view objects cannot be observed through the kind', () => {
     .seal();
   const genuine = UserId.codec.parse('usr_abcdef');
   assert.equal(UserId.suffix(genuine), 'abcdef');
-  assert.throws(() => UserId.suffix({ view: { suffix: 'abcdef' } }), TypeError);
-  assert.throws(() => UserId.read({ view: { suffix: 'abcdef' } }), TypeError);
+  assert.throws(
+    () => (UserId.suffix as (value: unknown) => string)({ view: { suffix: 'abcdef' } }),
+    TypeError,
+  );
+  assert.throws(
+    () =>
+      (UserId.read as (value: unknown) => { suffix: string })({
+        view: { suffix: 'abcdef' },
+      }),
+    TypeError,
+  );
   assert.equal(UserId.read(genuine).suffix, UserId.suffix(genuine));
 });

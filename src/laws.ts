@@ -4,6 +4,7 @@ import * as fc from 'fast-check';
 import type { z } from 'zod';
 import { encodeWire, parseCodec } from './zod-codec.js';
 import { foreignValue, isSealed } from './sealed-leaf.js';
+import { kindObservation } from './documentation.js';
 import type { AnyKind, ProducerResult, Proof, ConfigurationError } from './types.js';
 
 type Semantic = AnyKind & {
@@ -35,30 +36,8 @@ type Checked<P, A> = P & {
   >;
 };
 
-const KIND_SURFACE = new Set([
-  'name',
-  'is',
-  'codec',
-  'mint',
-  'allocate',
-  'documentation',
-  'assert',
-  'read',
-  'debug',
-]);
-
-function copyNames(kind: AnyKind, snapshot: object): string[] {
-  return Object.keys(kind).filter(
-    (name) =>
-      !KIND_SURFACE.has(name) &&
-      typeof (kind as any)[name] === 'function' &&
-      !Object.hasOwn(snapshot, name),
-  );
-}
-
 function copies(kind: AnyKind, value: any, equivalent: any): void {
-  const snapshot = (kind as Semantic).read(value);
-  for (const name of copyNames(kind, snapshot)) {
+  for (const name of kindObservation(kind)?.copy ?? []) {
     const observe = (kind as any)[name] as (x: unknown) => Uint8Array;
     const first = observe(value);
     const second = observe(value);
@@ -117,7 +96,7 @@ function observations(kind: Semantic | Minted, value: any): void {
   assert(Object.isFrozen(snapshot));
   assert.equal(Object.getPrototypeOf(snapshot), null);
   assertFrozenGraph(snapshot, `${kind.name}.read`);
-  for (const name of Object.keys(snapshot)) {
+  for (const name of kindObservation(kind)?.view ?? Object.keys(snapshot)) {
     const project = (kind as any)[name] as (x: unknown) => unknown;
     assert.equal(project(value), (snapshot as any)[name], `${name} must match read`);
     assert.equal(project(value), project(value), `${name} must be stable`);
