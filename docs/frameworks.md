@@ -10,6 +10,24 @@ Re-executing a module that completes a definition creates a new definition insta
 
 Next.js dev, Vite, Vitest, Jest, and Node's test runner need no package-specific configuration. The package holds no global state that could survive a module reset. No bundler plugin or HMR handler is required.
 
+Some bundlers run one module more than once in one process. For example, a Next.js production build with Turbopack has one module graph for route handlers and another for pages. Each graph executes the definition module and creates its own definition instance. A value from one graph is foreign to the other graph's definition, so its codec and observations reject it.
+
+Do not share sealed values, or objects that use definitions, through `globalThis` or another process-wide cache. Share only raw resources, such as database handles, HTTP clients, and configuration. Build the code that decodes, encodes, or observes sealed values in module scope, so that each module graph uses its own definitions:
+
+```ts
+const holder = globalThis as typeof globalThis & { appResources?: Resources };
+let cached: Runtime | undefined;
+
+export function runtime(): Runtime {
+  if (cached) return cached;
+  const resources = (holder.appResources ??= openResources());
+  cached = { store: openStore(resources.db) };
+  return cached;
+}
+```
+
+The module variable also clears after a dev reload, so the code that uses definitions is built again with the new definitions.
+
 Use `toBe` in Jest and Vitest to assert identity. Distinct minted values have no enumerable state, so `toEqual` can treat them as equal.
 
 Two installed package copies have separate private leaf brands. A foreign copy’s values can supply diagnostic labels but cannot be used as trusted atomic view or Parts leaves.

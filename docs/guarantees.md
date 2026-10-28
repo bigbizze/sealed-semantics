@@ -40,7 +40,7 @@ Use `===`, Node strict equality assertions, or Jest/Vitest `toBe` for identity. 
 
 Values do not retain object identity across Web Workers, worker_threads, iframe realms, Node vm contexts, processes, network, or storage. Transfer Zod-encoded external data and decode with the receiving definition.
 
-A module re-execution creates new definitions. Existing values still work but are foreign to the new definitions. Their codecs report whether the foreign value has the same label or a different kind. Matching labels suggest hot reload, test isolation, or multiple package copies. See [framework guidance](frameworks.md).
+A module re-execution creates new definitions. Existing values still work but are foreign to the new definitions. Their codecs report whether the foreign value has the same label or a different kind. Matching labels suggest hot reload, test isolation, a bundler that runs the module in more than one module graph, or multiple package copies. Do not share sealed values through process-wide caches such as `globalThis`. See [framework guidance](frameworks.md).
 
 ## Runtime requirements
 
