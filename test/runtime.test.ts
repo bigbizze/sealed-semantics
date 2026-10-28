@@ -14,7 +14,11 @@ import {
 import { ok } from './result.js';
 
 test('only Zod exposes boundary operations; private brands reject forgery and constructor recovery', () => {
-  assert.deepEqual(Object.keys(api).sort(), ['defineMint', 'defineSeal']);
+  assert.deepEqual(Object.keys(api).sort(), [
+    'defineMint',
+    'defineSeal',
+    'encodeParts',
+  ]);
   const value = UserId.codec.parse('usr_0123456789abcdef');
   for (const name of [
     'parse',

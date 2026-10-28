@@ -1,6 +1,11 @@
 import type { z } from 'zod';
 export type JsonValue =
-  string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+  | string
+  | number
+  | boolean
+  | null
+  | readonly JsonValue[]
+  | { readonly [key: string]: JsonValue };
 export type ProducerResult<T, E = never> =
   { readonly ok: true; readonly value: T } | { readonly ok: false; readonly error: E };
 /** An impossible requirement that explains an invalid configuration in compiler errors. */

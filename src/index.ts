@@ -4,6 +4,7 @@ import { documentedKind, type Metadata } from './documentation.js';
 import { captureDefinedAt } from './location.js';
 import { makeSemanticSeal, makeMintedSeal, type SealBridge } from './seal.js';
 import { makeWireCodec, parseCodec } from './zod-codec.js';
+export { encodeParts } from './zod-codec.js';
 import type {
   ProducerResult,
   JsonSchema,

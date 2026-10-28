@@ -1,5 +1,10 @@
 # Release notes
 
+## 0.5.1
+
+- `encodeParts(schema, parts)` encodes the `DeepReadonly<Parts>` that `key`, `view`, `copy`, and `debug` receive, or any readonly part of them with its own sub-schema. `z.encode` requires the schema's mutable output type and rejects readonly Parts in TypeScript. Encoders must still not mutate Parts; snapshots are frozen.
+- Schema input with readonly arrays or objects, for example from Zod `.readonly()`, is JSON-compatible. `JsonValue` now includes readonly arrays and objects. Dates, bigints, and other non-JSON values are still rejected.
+
 ## 0.5.0
 
 - Breaking: observation is kind-side. `user.view.suffix`, `digest.copy.bytes()`, and `value.debug()` are removed from the public instance surface. Use `UserId.suffix(user)`, `UserId.read(user)`, `Digest.bytes(digest)`, and `UserId.debug(user)`. Each call unseals first.

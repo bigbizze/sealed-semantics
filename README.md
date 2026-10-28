@@ -252,6 +252,25 @@ const c2 = Coordinate.codec.parse({ lat: 1, lng: 2 });
 console.log(c1 === c2); // true
 ```
 
+To key on the canonical wire form, encode Parts with `encodeParts(schema, parts)`. Callbacks receive `DeepReadonly<Parts>`, which `z.encode` does not accept because a Zod schema outputs mutable arrays. `encodeParts` accepts readonly Parts, or any readonly part of them with its own sub-schema. Use it in `key`, `view`, `copy`, and `debug`. The schema must be able to encode. One-way `.transform` schemas throw; use `z.codec` for a normalization that must encode.
+
+```ts
+import { encodeParts } from 'sealed-semantics';
+
+const member = z.object({ user: UserId.codec, roles: z.array(z.string()) });
+const team = z.object({ name: z.string(), members: z.array(member) });
+const Team = defineSeal({
+  name: 'app/team',
+  schema: team,
+  key: parts => JSON.stringify(encodeParts(team, parts)),
+})
+  .view({ firstMember: parts => encodeParts(member, parts.members[0]!) })
+  .seal();
+const core = Team.codec.parse({ name: 'core', members: [{ user: 'usr_1', roles: ['admin'] }] });
+console.log(core === Team.codec.parse({ name: 'core', members: [{ user: 'usr_1', roles: ['admin'] }] })); // true
+console.log(Team.firstMember(core)); // { user: 'usr_1', roles: [ 'admin' ] }
+```
+
 The key is the declared identity, not a hash hint. Parts must already be normalized for that identity. On a live hit, the library compares the Parts structurally. A key collision between different Parts throws instead of returning the wrong value. Errors include the seal and key, not private Parts. The error occurs at the conflicting parse, which can be far from the definition. Test keys beside their definitions with the [generated-pair collision test](docs/laws.md#testing-key-collisions). The law harness checks individual generated values and configured aliases; it does not exhaustively prove key injectivity.
 
 Decoded Parts are snapshotted before `key(parts)` runs. Snapshot failure happens before key evaluation and before the intern table can change. Supported Parts are primitives, dense arrays, plain data objects, and genuine sealed values from this installed package copy. Plain-object snapshot properties are canonicalized before any callback receives them: JavaScript array-index keys appear in numeric order, followed by other string keys in UTF-16 lexical order. Insertion order is non-semantic because callbacks never receive unsnapshotted plain objects. Use timestamps or strings instead of `Date` Parts. Dates, collections, array buffers/views, functions, arbitrary class instances, accessors, hidden properties, symbol-keyed structures, and cycles are rejected on the first decode. Shared acyclic children are preserved in the frozen snapshot.

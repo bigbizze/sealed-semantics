@@ -11,3 +11,4 @@ Observe via `Kind.read(value)` / `Kind.<name>(value)` — those require that kin
 Copy bytes via `Kind.<copyName>(value)`.
 Nested sealed inputs: `OtherKind.assert(input.child)` in a mint or key; do not trust structure.
 `{ ok: false }` from `.mint()` is a real rejection; do not bypass.
+Encode readonly Parts in callbacks with `encodeParts(schema, parts)`; do not cast to call `z.encode`.
