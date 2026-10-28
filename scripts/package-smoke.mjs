@@ -38,7 +38,7 @@ try {
       '--no-audit',
       '--no-fund',
       join(root, metadata.filename),
-      `zod@${process.argv[2] ?? '4.1.0'}`,
+      `zod@${process.argv[2] ?? '4.6.6'}`,
     ],
     temp,
   );
@@ -308,7 +308,7 @@ schema:z.object({id:A.codec}),key:p=>A.text(p.id),
   for (const file of ['opening.ts', 'collision-example.ts'])
     run(process.execPath, [join(root, 'node_modules/tsx/dist/cli.mjs'), file], temp);
   console.log(
-    `Package smoke passed with Zod ${process.argv[2] ?? '4.1.0'}: README, portable declaration emit (current TypeScript and 5.7), declaration constraints, cross-copy brands and native collections, test-only entry, exports, synchronous docs validation.`,
+    `Package smoke passed with Zod ${process.argv[2] ?? '4.6.6'}: README, portable declaration emit (current TypeScript and 5.7), declaration constraints, cross-copy brands and native collections, test-only entry, exports, synchronous docs validation.`,
   );
   console.log(`Tarball: ${join(root, metadata.filename)}`);
 } catch (error) {

@@ -11,7 +11,7 @@ jobs:
     strategy:
       matrix:
         node: [22, 24]
-        zod: ['4.1.0', '4']
+        zod: ['4.6.6', '4']
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.0.0

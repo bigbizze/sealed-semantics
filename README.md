@@ -159,7 +159,7 @@ Typed internal functions normally trust their parameters when callers preserve t
 
 ## Requirements
 
-Use Node 22+, TypeScript 5.7+, and Zod >=4.1 <5. The core is browser-compatible. It requires `WeakRef` and `FinalizationRegistry` and throws a clear error at import if either is unavailable. There is no fallback.
+Use Node 22+, TypeScript 5.7+, and Zod >=4.6.6 <5. The core is browser-compatible. It requires `WeakRef` and `FinalizationRegistry` and throws a clear error at import if either is unavailable. There is no fallback.
 
 For Cloudflare Workers with weak references disabled, enable `enable_weak_ref` and remove `disable_weak_ref`. See [runtime requirements](docs/guarantees.md#runtime-requirements).
 

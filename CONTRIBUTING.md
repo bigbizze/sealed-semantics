@@ -13,7 +13,7 @@ npm run typecheck:5.7
 npm run test:package
 ```
 
-`npm run check` formats nothing: it checks formatting, types, library tests, the README, and the consumer tests and demonstration. Use `npm run format` to format TypeScript and scripts. Package smoke tests compile and execute the README against an installed tarball. Use `npm run test:package -- 4` to test current Zod 4 as well as the minimum 4.1.0.
+`npm run check` formats nothing: it checks formatting, types, library tests, the README, and the consumer tests and demonstration. Use `npm run format` to format TypeScript and scripts. Package smoke tests compile and execute the README against an installed tarball. Use `npm run test:package -- 4` to test current Zod 4 as well as the minimum 4.6.6.
 
 ## Where changes belong
 

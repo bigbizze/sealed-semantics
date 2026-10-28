@@ -4,6 +4,7 @@
 
 - `encodeParts(schema, parts)` encodes the `DeepReadonly<Parts>` that `key`, `view`, `copy`, and `debug` receive, or any readonly part of them with its own sub-schema. `z.encode` requires the schema's mutable output type and rejects readonly Parts in TypeScript. Encoders must still not mutate Parts; snapshots are frozen.
 - Schema input with readonly arrays or objects, for example from Zod `.readonly()`, is JSON-compatible. `JsonValue` now includes readonly arrays and objects. Dates, bigints, and other non-JSON values are still rejected.
+- Breaking: the Zod peer range is now `>=4.6.6 <5`. Zod before 4.6.6 can exhaust memory while validating oversized constrained collections ([GHSA-mrhx-c7xc-m3w5](https://github.com/advisories/GHSA-mrhx-c7xc-m3w5)). Upgrade Zod before upgrading this package.
 
 ## 0.5.0
 

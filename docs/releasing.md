@@ -12,7 +12,7 @@ No npm publication, remote repository, or release tag is created by these checks
 
 The package smoke test installs the real tarball in a temporary consumer. It compiles and runs the opening README example and the standalone walkthrough (starting at “You can decode individual fields, or a whole response”), checks invalid consumer configurations against the emitted declarations, imports the test-only harness, tests collections across two physical package copies, confirms private subpaths cannot be imported, checks foreign-definition diagnostics and synchronous documentation validation, and verifies that no CLI or public docs checker is exported. Temporary consumer files are removed; the tarball remains in the repository directory.
 
-The checked-in CI configuration repeats checks on Node 22 and 24 with Zod 4.1.0 and current Zod 4. Local evidence does not imply that hosted CI has run. Review semantic keys and encoded examples before publishing.
+The checked-in CI configuration repeats checks on Node 22 and 24 with Zod 4.6.6 and current Zod 4. Local evidence does not imply that hosted CI has run. Review semantic keys and encoded examples before publishing.
 
 `npm run check` also installs and tests the separate package in `examples`. It imports the root library through `file:..` and its public package exports, with its own compiler configuration and lockfile. Its `install-links=true` setting installs a package copy, and its command hooks build and refresh that copy before use. The tarball smoke test remains separate and checks the published artifact. Consumer sources and dependencies are not included in the published package.
 
