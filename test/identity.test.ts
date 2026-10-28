@@ -232,6 +232,31 @@ test('encodeParts encodes readonly Parts and nested parts without casts', () => 
   assert.deepEqual(z.encode(K.codec, value), wire);
 });
 
+test('union Parts keep every variant in key and mint checks', () => {
+  const schema = z.discriminatedUnion('kind', [
+    z.object({ kind: z.literal('a'), tags: z.array(z.string()) }),
+    z.object({ kind: z.literal('b'), n: z.number() }),
+  ]);
+  const K = defineSeal({
+    name: 'identity/union-key',
+    schema,
+    key: (parts) =>
+      parts.kind === 'b' ? `b:${parts.n}` : JSON.stringify(encodeParts(schema, parts)),
+  }).seal();
+  const a = K.codec.parse({ kind: 'a', tags: ['x'] });
+  assert.equal(K.codec.parse({ kind: 'a', tags: ['x'] }), a);
+  assert.deepEqual(z.encode(K.codec, a), { kind: 'a', tags: ['x'] });
+  assert.notEqual(K.codec.parse({ kind: 'b', n: 1 }), a);
+
+  type Dated = { kind: 'a'; at: Date } | { kind: 'b'; n: number };
+  const dated = (): Dated => ({ kind: 'b', n: 1 });
+  // @ts-expect-error A Date in one union variant is not Parts.
+  defineMint({
+    name: 'identity/union-date-mint',
+    mint: () => ({ ok: true, value: dated() }),
+  });
+});
+
 test('snapshot failure precedes key evaluation and intern-table mutation', () => {
   let current: any = Object.defineProperty({ nested: { rows: [1] } }, 'hidden', {
     value: 1,

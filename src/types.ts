@@ -138,7 +138,7 @@ export type ReservedField =
 export type SemanticKey = string | number | bigint | boolean | null | undefined;
 export type IdentityOptions<P> = {
   /** Required semantic identity. Normalize Parts in the schema before key runs. */
-  key: (parts: DeepReadonly<P>) => SemanticKey;
+  key: (parts: NoInfer<DeepReadonly<P>>) => SemanticKey;
 };
 export type DeepReadonly<T> =
   T extends Proof<string>

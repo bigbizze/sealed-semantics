@@ -1,5 +1,10 @@
 # Release notes
 
+## 0.5.2
+
+- `defineSeal` `key` receives the full Parts union when the schema is a union, such as `z.discriminatedUnion`. In 0.5.1 it received only the properties that all variants share, so narrowing and `encodeParts(schema, parts)` did not compile. `debug` and views were not affected.
+- `defineMint` rejects unsupported Parts, such as a `Date`, in any variant of a union at compile time. In 0.5.1 only runtime validation rejected them.
+
 ## 0.5.1
 
 - `encodeParts(schema, parts)` encodes the `DeepReadonly<Parts>` that `key`, `view`, `copy`, and `debug` receive, or any readonly part of them with its own sub-schema. `z.encode` requires the schema's mutable output type and rejects readonly Parts in TypeScript. Encoders must still not mutate Parts; snapshots are frozen.

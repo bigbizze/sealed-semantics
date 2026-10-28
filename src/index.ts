@@ -117,7 +117,7 @@ export function defineSeal<
     schema: W & JsonSchema<W> & PartsSchema<W>;
     allocate?: (...args: A) => NoInfer<z.input<W>>;
     debug?: (parts: NoInfer<DeepReadonly<z.output<W>>>) => string;
-  } & IdentityOptions<NoInfer<z.output<W>>> &
+  } & IdentityOptions<z.output<W>> &
     Record<Keys, unknown> & {
       [
         N in Exclude<Keys, 'name' | 'schema' | 'allocate' | 'debug' | 'key'>
@@ -188,7 +188,7 @@ export function defineMint<
     name: LiteralName<K>;
     mint: (input: I) => R;
     debug?: (parts: NoInfer<DeepReadonly<MintParts<R>>>) => string;
-  } & CheckedParts<NoInfer<MintParts<R>>> &
+  } & NoInfer<CheckedParts<MintParts<R>>> &
     Record<Keys, unknown> & {
       [N in Exclude<Keys, 'name' | 'mint' | 'debug'>]: ConfigurationError<
         N extends 'allocate' | 'key' | 'schema'
