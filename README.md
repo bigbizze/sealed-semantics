@@ -252,17 +252,23 @@ const c2 = Coordinate.codec.parse({ lat: 1, lng: 2 });
 console.log(c1 === c2); // true
 ```
 
-To key on the canonical wire form, encode Parts with `encodeParts(schema, parts)`. Callbacks receive `DeepReadonly<Parts>`, which `z.encode` does not accept because a Zod schema outputs mutable arrays. `encodeParts` accepts readonly Parts, or any readonly part of them with its own sub-schema. Use it in `key`, `view`, `copy`, and `debug`.
+To key on the canonical wire form, encode Parts with `encodeParts(schema, parts)`. Callbacks receive `DeepReadonly<Parts>`, which `z.encode` does not accept because a Zod schema outputs mutable arrays. `encodeParts` accepts readonly Parts, or any readonly part of them with its own sub-schema. Use it in `key`, `view`, `copy`, and `debug`. The schema must be able to encode. One-way `.transform` schemas throw; use `z.codec` for a normalization that must encode.
 
 ```ts
 import { encodeParts } from 'sealed-semantics';
 
-const tagSet = z.object({ tags: z.array(z.string()).transform(t => [...new Set(t)].sort()) });
-const TagSet = defineSeal({
-  name: 'app/tag-set',
-  schema: tagSet,
-  key: parts => JSON.stringify(encodeParts(tagSet, parts)),
-}).seal();
+const member = z.object({ user: UserId.codec, roles: z.array(z.string()) });
+const team = z.object({ name: z.string(), members: z.array(member) });
+const Team = defineSeal({
+  name: 'app/team',
+  schema: team,
+  key: parts => JSON.stringify(encodeParts(team, parts)),
+})
+  .view({ firstMember: parts => encodeParts(member, parts.members[0]!) })
+  .seal();
+const core = Team.codec.parse({ name: 'core', members: [{ user: 'usr_1', roles: ['admin'] }] });
+console.log(core === Team.codec.parse({ name: 'core', members: [{ user: 'usr_1', roles: ['admin'] }] })); // true
+console.log(Team.firstMember(core)); // { user: 'usr_1', roles: [ 'admin' ] }
 ```
 
 The key is the declared identity, not a hash hint. Parts must already be normalized for that identity. On a live hit, the library compares the Parts structurally. A key collision between different Parts throws instead of returning the wrong value. Errors include the seal and key, not private Parts. The error occurs at the conflicting parse, which can be far from the definition. Test keys beside their definitions with the [generated-pair collision test](docs/laws.md#testing-key-collisions). The law harness checks individual generated values and configured aliases; it does not exhaustively prove key injectivity.
