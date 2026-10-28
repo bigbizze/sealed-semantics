@@ -1,10 +1,10 @@
 # Public contract
 
-The main entry exports `defineSeal` and `defineMint`, plus TypeScript types. `SealedValue<Name>` is the public opaque base type. `SemanticValue` and `MintedValue` also have root exports so inferred consumer declarations can name their types without private module paths. Use `ValueOf<typeof Definition>` for a specific completed definition. The optional Node-only `sealed-semantics/laws` entry exports `assertValueLaws` and `assertMintedLaws`.
+The main entry exports `defineSeal`, `defineMint`, and `encodeParts`, plus TypeScript types. `SealedValue<Name>` is the public opaque base type. `SemanticValue` and `MintedValue` also have root exports so inferred consumer declarations can name their types without private module paths. Use `ValueOf<typeof Definition>` for a specific completed definition. The optional Node-only `sealed-semantics/laws` entry exports `assertValueLaws` and `assertMintedLaws`.
 
 ## Semantic definitions
 
-`defineSeal({ name, schema, key, allocate?, debug? })` creates a builder. Schema output is private Parts. Schema input must be JSON-compatible and cannot be `any`. The definition name must be a non-empty string literal. Write the name verbatim in the owning module; a path-shaped label such as `app/user-id` is the search string compiler and runtime errors tell callers to grep.
+`defineSeal({ name, schema, key, allocate?, debug? })` creates a builder. Schema output is private Parts. Schema input must be JSON-compatible and cannot be `any`. Readonly arrays and objects are JSON-compatible. The definition name must be a non-empty string literal. Write the name verbatim in the owning module; a path-shaped label such as `app/user-id` is the search string compiler and runtime errors tell callers to grep.
 
 Every semantic definition requires `key(parts)`, returning `string | number | bigint | boolean | null | undefined`. Primitive Parts use an explicit callback too, for example `key: id => id`. Normalize Parts in the schema before computing the key. Different Parts sharing a live key cause a collision error, including primitive Parts.
 
@@ -14,7 +14,7 @@ Each completed definition owns a private weak table. After Zod normalization and
 
 Weak cleanup removes an entry only if it still contains the exact reference associated with the finalized object. Cleanup timing is unspecified. No public control changes interning. This is an identity guarantee, not a speed guarantee.
 
-The completed kind exposes `name`, `is`, `codec`, `assert`, `read`, `debug`, one function per view projection and copy observation, and `allocate` only when configured. `is` and `assert` accept `unknown`. `read`, `debug`, projections, and copies require that kind's instance type. Allocation sends its generated input through the same codec and intern table. Zod provides parsing, validation, composition, and encoding. Async schemas use Zod's async APIs; allocation and documentation are synchronous. During encoding, the sealed codec reads the stored frozen Parts snapshot. Zod may validate or copy that value before a schema encoder runs. Encoders must be correct without mutating Parts. TypeScript cannot express this through the external Zod codec type, so runtime freezing remains authoritative for stored Parts.
+The completed kind exposes `name`, `is`, `codec`, `assert`, `read`, `debug`, one function per view projection and copy observation, and `allocate` only when configured. `is` and `assert` accept `unknown`. `read`, `debug`, projections, and copies require that kind's instance type. Allocation sends its generated input through the same codec and intern table. Zod provides parsing, validation, composition, and encoding. Async schemas use Zod's async APIs; allocation and documentation are synchronous. During encoding, the sealed codec reads the stored frozen Parts snapshot. Zod may validate or copy that value before a schema encoder runs. Encoders must be correct without mutating Parts. TypeScript cannot express this through the external Zod codec type, so runtime freezing remains authoritative for stored Parts. Inside callbacks, `encodeParts(schema, parts)` encodes readonly Parts, or a readonly part of them, through the schema that produced them.
 
 ## Minted definitions
 

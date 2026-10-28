@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { foreignValue } from './sealed-leaf.js';
+import type { DeepReadonly } from './types.js';
 export function makeWireCodec<W extends z.ZodType, V>(
   schema: W,
   definitionName: string,
@@ -23,6 +24,16 @@ export function makeWireCodec<W extends z.ZodType, V>(
 // Runtime Zod integration. Consumers use Zod's public boundary operations.
 export function encodeWire<W extends z.ZodType>(wire: W, value: z.output<W>) {
   return z.encode(wire, value);
+}
+/**
+ * Encodes readonly Parts, or a readonly part of them, through the schema that produced them.
+ * Use inside `key`, `view`, `copy`, and `debug`. Encoders must not mutate Parts; snapshots are frozen.
+ */
+export function encodeParts<W extends z.ZodType>(
+  schema: W,
+  parts: NoInfer<DeepReadonly<z.output<W>>>,
+): z.input<W> {
+  return z.encode(schema, parts as z.output<W>);
 }
 export function decodeWire<W extends z.ZodType>(wire: W, input: z.input<W>) {
   return z.safeDecode(wire, input);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { inspect } from 'node:util';
 import { spawnSync } from 'node:child_process';
 import { z } from 'zod';
-import { defineSeal, defineMint } from '../src/index.js';
+import { defineSeal, defineMint, encodeParts } from '../src/index.js';
 import { cleanup, makeInterner } from '../src/interner.js';
 import { sameParts } from '../src/structure.js';
 import type { SemanticKey } from '../src/types.js';
@@ -204,6 +204,32 @@ test('schema encoders can receive frozen Parts snapshots', () => {
   }).seal();
   const value = K.codec.parse('1,2');
   assert.equal(z.encode(K.codec, value), '1,2');
+});
+
+test('encodeParts encodes readonly Parts and nested parts without casts', () => {
+  const Id = defineSeal({
+    key: (p) => p,
+    name: 'identity/encode-id',
+    schema: z.string(),
+  }).seal();
+  const item = z.object({ id: Id.codec, tags: z.array(z.string()) });
+  const schema = z.object({ items: z.array(item), meta: z.object({ n: z.number() }) });
+  const K = defineSeal({
+    name: 'identity/encode-parts',
+    schema,
+    key: (parts) => JSON.stringify(encodeParts(schema, parts)),
+  })
+    .view({
+      first: (parts) => parts.items.map((entry) => encodeParts(item, entry)),
+      // @ts-expect-error Parts must match the schema they are encoded through.
+      wrong: (parts) => encodeParts(item, parts),
+    })
+    .seal();
+  const wire = { items: [{ id: 'a', tags: ['x'] }], meta: { n: 1 } };
+  const value = K.codec.parse(wire);
+  assert.equal(K.codec.parse(structuredClone(wire)), value);
+  assert.deepEqual(K.first(value), wire.items);
+  assert.deepEqual(z.encode(K.codec, value), wire);
 });
 
 test('snapshot failure precedes key evaluation and intern-table mutation', () => {

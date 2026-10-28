@@ -248,7 +248,7 @@ export const Mint = defineMint({name:'emit/mint', mint:(input:string)=>({ok:true
  import * as b from 'sealed-semantics-copy';
  import { assertValueLaws } from 'sealed-semantics/laws';
  const {z: foreignZod}=await import('zod-copy');
- assert.deepEqual(Object.keys(a).sort(), ['defineMint','defineSeal']);
+ assert.deepEqual(Object.keys(a).sort(), ['defineMint','defineSeal','encodeParts']);
  const ForeignSchema=a.defineSeal({ key: parts => parts,name:'consumer/foreign-schema',
 schema:foreignZod.string(),
 }).seal();
@@ -286,7 +286,7 @@ schema:z.object({id:A.codec}),key:p=>A.text(p.id),
  const c=Composite.codec.parse({id:'x'}),d=Composite.codec.parse({id:'x'});
  assert(A.is(Composite.id(c)));assert.equal(c,d); assert.equal(new Map([[c,1]]).get(d),1);
  assert(Object.isFrozen(Composite.read(c)));assert.equal(Object.getPrototypeOf(Composite.read(c)),null);
- assert.deepEqual(Object.keys(a).sort(),['defineMint','defineSeal']);
+ assert.deepEqual(Object.keys(a).sort(),['defineMint','defineSeal','encodeParts']);
  assert.notEqual(ABuilder.seal(),A);
  assert.throws(()=>ABuilder.docs({examples:[{input:'x',encoded:'bad'}]}).seal(), /encoded does not match/);
  assertValueLaws(A,{validWire:fc.string()});
